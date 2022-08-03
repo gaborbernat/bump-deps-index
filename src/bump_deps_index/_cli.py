@@ -46,7 +46,15 @@ def _build_parser() -> ArgumentParser:
     exist = [cwd / i for i in valid if (cwd / i).exists()]
     msg = f"update Python version within a file (default: [{', '.join(i.name for i in exist)}])"
     source.add_argument(
-        "--file", "-f", dest="filenames", help=msg, default=exist, action="store", nargs="*", metavar="f"
+        "--file",
+        "-f",
+        dest="filenames",
+        help=msg,
+        default=exist,
+        action="store",
+        nargs="*",
+        metavar="f",
+        type=Path,
     )
     return parser
 

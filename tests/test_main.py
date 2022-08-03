@@ -24,7 +24,8 @@ def test_script(capfd: pytest.CaptureFixture[str]) -> None:
     assert not err
 
 
-def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PIP_INDEX_URL", raising=False)
     run = mocker.patch("bump_deps_index.run")
     main(["A"])

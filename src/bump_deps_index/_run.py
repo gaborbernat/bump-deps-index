@@ -40,8 +40,7 @@ def run(opt: Options) -> None:
             loader = mapping[filename.name]
             specs = {i.strip(): None for i in loader(filename) if i.strip()}
             changes = calculate_update(opt.index_url, list(specs))
-            if filename is not None:
-                update_file(filename, changes)
+            update_file(filename, changes)
 
 
 def load_from_pyproject_toml(filename: Path) -> Iterator[str]:

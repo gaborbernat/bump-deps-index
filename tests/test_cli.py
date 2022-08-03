@@ -8,7 +8,8 @@ import pytest
 from bump_deps_index._cli import Options, parse_cli
 
 
-def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PIP_INDEX_URL", raising=False)
     options = parse_cli([])
 
@@ -24,7 +25,7 @@ def test_cli_override_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.chdir(tmp_path)
     (tmp_path / "setup.cfg").write_text("")
     options = parse_cli(["-f", "pyproject.toml"])
-    assert options.filenames == ["pyproject.toml"]
+    assert options.filenames == [Path("pyproject.toml")]
 
 
 @pytest.mark.parametrize("files", product(["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]))
