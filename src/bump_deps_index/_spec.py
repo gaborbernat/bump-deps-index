@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from io import StringIO
 from urllib.request import urlopen
-from xml.etree import ElementTree
 
+from lxml.html import parse
 from packaging.requirements import Requirement
 from packaging.version import Version
 
@@ -38,7 +39,9 @@ def update(index_url: str, spec: str) -> str:
 def get_pkgs(index_url: str, package: str) -> list[Version]:
     with urlopen(f"{index_url}/{package}") as handler:
         text = handler.read().decode("utf-8")
-    root = ElementTree.fromstring(text)
+
+    root = parse(StringIO(text))
+
     versions: set[Version] = set()
     for element in root.iter("a"):
         if element.text:

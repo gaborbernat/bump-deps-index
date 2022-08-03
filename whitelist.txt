@@ -5,10 +5,9 @@ capsys
 cfg
 delenv
 epilog
-etree
-fromstring
 intersphinx
 isnumeric
+lxml
 nitpicky
 pkgs
 py311
