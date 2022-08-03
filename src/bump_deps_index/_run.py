@@ -24,8 +24,9 @@ def run(opt: Options) -> None:
 
     :param opt: the configuration namespace
     """
-    if opt.filename is None:
+    if opt.pkgs:
         specs: dict[str, None] = {i.strip(): None for i in opt.pkgs}
+        calculate_update(opt.index_url, list(specs))
     else:
         mapping = {
             "pyproject.toml": load_from_pyproject_toml,
@@ -33,13 +34,14 @@ def run(opt: Options) -> None:
             "tox.ini": load_from_tox_ini,
             "setup.cfg": load_from_setup_cfg,
         }
-        if opt.filename.name not in mapping:
-            raise NotImplementedError(f"we do not support {opt.filename}")
-        loader = mapping[opt.filename.name]
-        specs = {i.strip(): None for i in loader(opt.filename) if i.strip()}
-    changes = calculate_update(opt.index_url, list(specs))
-    if opt.filename is not None:
-        update_file(opt.filename, changes)
+        for filename in opt.filenames:
+            if filename.name not in mapping:
+                raise NotImplementedError(f"we do not support {filename}")
+            loader = mapping[filename.name]
+            specs = {i.strip(): None for i in loader(filename) if i.strip()}
+            changes = calculate_update(opt.index_url, list(specs))
+            if filename is not None:
+                update_file(filename, changes)
 
 
 def load_from_pyproject_toml(filename: Path) -> Iterator[str]:
