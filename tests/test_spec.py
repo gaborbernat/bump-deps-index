@@ -47,6 +47,7 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
         ("A<1", [Version("1.1")], "A<1"),
         ('A; python_version<"3.11"', [Version("1")], 'A>=1; python_version < "3.11"'),
         ('A[X]; python_version<"3.11"', [Version("1")], 'A[X]>=1; python_version < "3.11"'),
+        ("A", [Version("1.1.0+b2"), Version("1.1.0+b1"), Version("1.1.0"), Version("0.1.0")], "A>=1.1"),
     ],
 )
 def test_update(mocker: MockerFixture, spec: str, versions: list[Version], result: str) -> None:

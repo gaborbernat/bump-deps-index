@@ -1,6 +1,10 @@
 Changelog
 =========
 
+v1.0.3 (2022-08-03)
+-------------------
+* Do not pin build numbers for versions.
+
 v1.0.2 (2022-08-03)
 -------------------
 * Support ``setup.cfg`` with missing fields.
