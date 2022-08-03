@@ -16,7 +16,7 @@ def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch) -> None:
     assert options.__dict__ == {
         "index_url": "https://pypi.org/simple",
         "pkgs": [],
-        "filename": [],
+        "filenames": [],
     }
 
 

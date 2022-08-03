@@ -28,4 +28,4 @@ def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("PIP_INDEX_URL", raising=False)
     run = mocker.patch("bump_deps_index.run")
     main(["A"])
-    run.assert_called_once_with(Options(index_url="https://pypi.org/simple", pkgs=["A"], filename=[]))
+    run.assert_called_once_with(Options(index_url="https://pypi.org/simple", pkgs=["A"], filenames=[]))

@@ -15,7 +15,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
         "bump_deps_index._run.update_spec", side_effect=lambda _, spec: mapping[spec]  # noqa: U101
     )
 
-    run(Options(index_url="https://pypi.org/simple", pkgs=[" A ", "B", "C"], filename=None))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[" A ", "B", "C"], filenames=None))
 
     out, err = capsys.readouterr()
     assert err == "failed C with KeyError('C')\n"
@@ -43,7 +43,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     optional-dependencies.docs = [ "D"]
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert err == "failed D with KeyError('D')\n"
@@ -63,7 +63,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
 def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / "tox.ini"
     dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -86,7 +86,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
     deps = NO
     """
     dest.write_text(dedent(tox_ini).lstrip())
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -108,7 +108,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
 def test_tox_ini_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / "tox.ini"
     dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -131,7 +131,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
         C
     """
     dest.write_text(dedent(setup_cfg).lstrip())
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -153,7 +153,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
 def test_run_setup_cfg_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / "setup.cfg"
     dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -180,7 +180,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
             - flake8-bugbear==22.7.1
     """
     dest.write_text(dedent(setup_cfg).lstrip())
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -206,7 +206,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
 def test_run_pre_commit_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / ".pre-commit-config.yaml"
     dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[dest]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[dest]))
 
     out, err = capsys.readouterr()
     assert not err
@@ -216,7 +216,7 @@ def test_run_pre_commit_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path
 
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> None:
     mocker.patch("bump_deps_index._run.update_spec", side_effect=ValueError)
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filename=[]))
+    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[]))
 
     out, err = capsys.readouterr()
     assert not err
