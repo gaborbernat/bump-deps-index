@@ -62,7 +62,7 @@ def load_from_tox_ini(filename: Path) -> Iterator[str]:
 def load_from_pre_commit(filename: Path) -> Iterator[str]:
     with filename.open("rt") as file_handler:
         cfg = load_yaml(file_handler, Loader)
-    for repo in cfg["repos"]:
+    for repo in cfg.get("repos", []) if isinstance(cfg, dict) else []:
         for hook in repo["hooks"]:
             yield from (i for i in hook.get("additional_dependencies", []) if "@" not in i)  # JS dependency
 
@@ -70,9 +70,11 @@ def load_from_pre_commit(filename: Path) -> Iterator[str]:
 def load_from_setup_cfg(filename: Path) -> Iterator[str]:
     cfg = NoTransformConfigParser()
     cfg.read(filename)
-    yield from cfg["options"]["install_requires"]
-    for group in cfg["options.extras_require"].values():
-        yield from group.split("\n")
+    if cfg.has_section("options"):
+        yield from cfg["options"].get("install_requires", "").split("\n")
+    if cfg.has_section("options.extras_require"):
+        for group in cfg["options.extras_require"].values():
+            yield from group.split("\n")
 
 
 class NoTransformConfigParser(RawConfigParser):
