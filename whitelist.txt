@@ -3,6 +3,7 @@ autodoc
 capfd
 capsys
 cfg
+chdir
 delenv
 epilog
 intersphinx

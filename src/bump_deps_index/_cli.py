@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,7 +15,7 @@ class Options(Namespace):
     """The PyPI Index URL to query for versions."""
     pkgs: list[str]
     """Package names to get latest version for."""
-    filename: Path
+    filenames: list[Path]
     """
     The file to upload python package version from, can be one of:
 
@@ -36,18 +36,30 @@ def parse_cli(args: Sequence[str] | None) -> Options:
 def _build_parser() -> ArgumentParser:
     epilog = f"running {version} at {Path(__file__).parent}"
     parser = ArgumentParser(prog="bump-deps-index", formatter_class=_HelpFormatter, epilog=epilog)
-    index_url, msg = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple"), "PyPI index URL to target"
+    index_url = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple")
+    msg = f"PyPI index URL to target (default: {index_url})"
     parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
     source = parser.add_mutually_exclusive_group()
-    source.required = True
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
     valid = ["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]
-    msg = f"update Python version within a file - can be one of {', '.join(valid)}"
-    source.add_argument("--file", "-f", dest="filename", help=msg, type=Path)
+    cwd = Path().cwd()
+    exist = [cwd / i for i in valid if (cwd / i).exists()]
+    msg = f"update Python version within a file (default: [{', '.join(i.name for i in exist)}])"
+    source.add_argument(
+        "--file",
+        "-f",
+        dest="filenames",
+        help=msg,
+        default=exist,
+        action="store",
+        nargs="*",
+        metavar="f",
+        type=Path,
+    )
     return parser
 
 
-class _HelpFormatter(ArgumentDefaultsHelpFormatter):
+class _HelpFormatter(RawDescriptionHelpFormatter):
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=35, width=190)
 
