@@ -27,12 +27,7 @@ autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "descri
 inheritance_alias, inheritance_graph_attrs = {}, {"rankdir": "TB"}
 autodoc_default_options = {"members": True, "member-order": "bysource", "undoc-members": True, "show-inheritance": True}
 
-intersphinx_mapping = {
-    "python": (
-        "https://docs.python.org/3.10",
-        "http://artifactory.inf.bloomberg.com/artifactory/docs_python/3.10/objects.inv",
-    ),
-}
+intersphinx_mapping = {"python": ("https://docs.python.org/3.10", None)}
 nitpicky = True
 nitpick_ignore = []
 
