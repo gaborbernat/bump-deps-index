@@ -12,7 +12,9 @@ class Options(Namespace):
     """Run options."""
 
     index_url: str
-    """The PyPI Index URL to query for versions."""
+    """The PyPI Index URL to query for Python versions."""
+    npm_registry: str
+    """The NPM registry to query for JS versions."""
     pkgs: list[str]
     """Package names to get latest version for."""
     filenames: list[Path]
@@ -39,6 +41,9 @@ def _build_parser() -> ArgumentParser:
     index_url = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple")
     msg = f"PyPI index URL to target (default: {index_url})"
     parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
+    npm_registry = os.environ.get("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
+    msg = f"NPM registry (default: {npm_registry})"
+    parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=npm_registry, help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
     valid = ["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]

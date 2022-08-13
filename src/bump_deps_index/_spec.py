@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from enum import Enum, auto
 from io import StringIO
 from urllib.request import urlopen
 
@@ -8,7 +10,36 @@ from packaging.requirements import Requirement
 from packaging.version import Version
 
 
-def update(index_url: str, spec: str) -> str:
+class PkgType(Enum):
+    PYTHON = auto()
+    JS = auto()
+
+
+def update(index_url: str, npm_registry: str, spec: str, pkg_type: PkgType) -> str:
+    if pkg_type is PkgType.PYTHON:
+        return update_python(index_url, spec)
+    else:
+        return update_js(npm_registry, spec)
+
+
+def update_js(npm_registry: str, spec: str) -> str:
+    ver_at = spec.rfind("@")
+    package = spec[: len(spec) if ver_at == -1 else ver_at]
+    version = get_js_pkgs(npm_registry, package)[0]
+    ver = str(version)
+    while ver.endswith(".0"):
+        ver = ver[:-2]
+    return f"{package}@{ver}"
+
+
+def get_js_pkgs(npm_registry: str, package: str) -> list[Version]:
+    with urlopen(f"{npm_registry}/{package}") as handler:
+        text = handler.read().decode("utf-8")
+    info = json.loads(text)
+    return sorted((Version(i) for i in info["versions"].keys()), reverse=True)
+
+
+def update_python(index_url: str, spec: str) -> str:
     req = Requirement(spec)
     eq = any(s for s in req.specifier if s.operator == "==")
     for version in get_pkgs(index_url, req.name):
@@ -72,4 +103,5 @@ def get_pkgs(index_url: str, package: str) -> list[Version]:
 
 __all__ = [
     "update",
+    "PkgType",
 ]

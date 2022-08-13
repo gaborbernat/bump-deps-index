@@ -81,7 +81,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-    needs: [ test, check ]
+    needs: [test, check]
     runs-on: ubuntu-latest
     steps:
       - name: Setup python to build package

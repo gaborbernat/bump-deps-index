@@ -6,6 +6,7 @@ cfg
 chdir
 delenv
 epilog
+fillvalue
 intersphinx
 isnumeric
 lxml
@@ -16,6 +17,7 @@ pygments
 pyproject
 readouterr
 repo
+rfind
 toml
 tomli
 tomllib
