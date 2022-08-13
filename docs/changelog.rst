@@ -1,6 +1,11 @@
 Changelog
 =========
 
+v1.2.0 (2022-08-12)
+-------------------
+* Support JS dependencies from NPM registry in pre-commit configuration files if pinned via the ``@`` character.
+
+
 v1.1.0 (2022-08-03)
 -------------------
 * ``--files`` can now take multiple arguments and by default use all valid files found in the current working directory
