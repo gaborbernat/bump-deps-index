@@ -36,7 +36,7 @@ def get_js_pkgs(npm_registry: str, package: str) -> list[Version]:
     with urlopen(f"{npm_registry}/{package}") as handler:
         text = handler.read().decode("utf-8")
     info = json.loads(text)
-    return sorted((Version(i) for i in info["versions"].keys()), reverse=True)
+    return sorted((v for v in (Version(i) for i in info["versions"].keys()) if not v.is_prerelease), reverse=True)
 
 
 def update_python(index_url: str, spec: str) -> str:
@@ -98,7 +98,7 @@ def get_pkgs(index_url: str, package: str) -> list[Version]:
                 pass
             else:
                 versions.add(version)
-    return sorted(versions, reverse=True)
+    return sorted((v for v in versions if not v.is_prerelease), reverse=True)
 
 
 __all__ = [

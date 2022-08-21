@@ -20,6 +20,7 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
     raw_html = """
     <html>
     <body>
+    <a>A-B-1.0.4rc1.tar.bz2</a>
     <a>A-B-1.0.1.tar.bz2</a>
     <a>A-B-1.0.0.tar.gz</a>
     <a>A-B-1.0.3.whl</a>
@@ -63,6 +64,6 @@ def test_update(mocker: MockerFixture, spec: str, pkg_type: PkgType, versions: l
 
 def test_get_js_pkgs(mocker: MockerFixture) -> None:
     url_open = mocker.patch("bump_deps_index._spec.urlopen")
-    url_open.return_value.__enter__.return_value = BytesIO(b'{"versions":{"1.0": {}, "1.1": {}}}')
+    url_open.return_value.__enter__.return_value = BytesIO(b'{"versions":{"1.0": {}, "1.1": {}, "1.2a1": {}}}')
     result = get_js_pkgs("N", "a")
     assert result == [Version("1.1"), Version("1.0")]
