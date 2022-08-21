@@ -1,6 +1,10 @@
 Changelog
 =========
 
+v1.3.0 (2022-08-21)
+-------------------
+* Do not update to pre release versions
+
 v1.2.0 (2022-08-12)
 -------------------
 * Support JS dependencies from NPM registry in pre-commit configuration files if pinned via the ``@`` character.

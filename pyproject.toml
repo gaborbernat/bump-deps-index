@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = ["hatchling>=1.7", "hatch-vcs>=0.2"]
+requires = ["hatchling>=1.8", "hatch-vcs>=0.2"]
 
 [project]
 name = "bump-deps-index"

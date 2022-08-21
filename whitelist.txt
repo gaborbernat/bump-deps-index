@@ -12,6 +12,7 @@ isnumeric
 lxml
 nitpicky
 pkgs
+prerelease
 py311
 pygments
 pyproject
