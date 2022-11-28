@@ -248,3 +248,27 @@ def test_run_args_empty(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
     out, err = capsys.readouterr()
     assert not err
     assert not out
+
+
+def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
+    mapping = {"A": "A>=1", "B==1": "B==2"}
+    mocker.patch(
+        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+    )
+    dest = tmp_path / "requirements.txt"
+    req_txt = """
+    A
+    B==1
+    """
+    dest.write_text(dedent(req_txt).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {"B==1 -> B==2", "A -> A>=1"}
+
+    req_txt = """
+    A>=1
+    B==2
+    """
+    assert dest.read_text() == dedent(req_txt).lstrip()

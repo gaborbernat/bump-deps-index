@@ -39,13 +39,19 @@ def run(opt: Options) -> None:
             "setup.cfg": load_from_setup_cfg,
         }
         for filename in opt.filenames:
-            if filename.name not in mapping:
+            is_req_txt = filename.suffix == ".txt"
+            if filename.name not in mapping and not is_req_txt:
                 raise NotImplementedError(f"we do not support {filename}")
-            loader = mapping[filename.name]
+            loader = mapping.get(filename.name, load_from_requirements_txt)
             pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
             specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release) if i.strip()}
             changes = calculate_update(opt.index_url, opt.npm_registry, list(specs))
             update_file(filename, changes)
+
+
+def load_from_requirements_txt(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    pre = False if pre_release is None else pre_release
+    yield from _generate(filename.read_text().split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 def load_from_pyproject_toml(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
