@@ -11,7 +11,7 @@ from bump_deps_index._cli import Options, parse_cli
 def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PIP_INDEX_URL", raising=False)
-    monkeypatch.delenv("NPM_REGISTRY_CONFIG", raising=False)
+    monkeypatch.delenv("NPM_CONFIG_REGISTRY", raising=False)
     options = parse_cli([])
 
     assert isinstance(options, Options)
@@ -20,6 +20,7 @@ def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         "npm_registry": "https://registry.npmjs.org",
         "pkgs": [],
         "filenames": [],
+        "pre_release": "file-default",
     }
 
 

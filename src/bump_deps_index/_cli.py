@@ -4,6 +4,7 @@ import os
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from bump_deps_index.version import version
 
@@ -26,6 +27,8 @@ class Options(Namespace):
     - ``.pre-commit-config.yaml``
     - ``setup.cfg``
     """
+    pre_release: Literal["yes", "no", "file-default"]
+    """Accept pre-releases: yes, no or decide per file type"""
 
 
 def parse_cli(args: Sequence[str] | None) -> Options:
@@ -44,6 +47,8 @@ def _build_parser() -> ArgumentParser:
     npm_registry = os.environ.get("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
     msg = f"NPM registry (default: {npm_registry})"
     parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=npm_registry, help=msg)
+    msg = "accept pre-release versions"
+    parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
     valid = ["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]

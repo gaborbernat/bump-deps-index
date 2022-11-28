@@ -27,7 +27,7 @@ def test_script(capfd: pytest.CaptureFixture[str]) -> None:
 def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PIP_INDEX_URL", raising=False)
-    monkeypatch.delenv("NPM_REGISTRY_CONFIG", raising=False)
+    monkeypatch.delenv("NPM_CONFIG_REGISTRY", raising=False)
     run = mocker.patch("bump_deps_index.run")
     main(["A"])
     opt = Options(
@@ -35,5 +35,6 @@ def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_pat
         npm_registry="https://registry.npmjs.org",
         pkgs=["A"],
         filenames=[],
+        pre_release="file-default",
     )
     run.assert_called_once_with(opt)

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from enum import Enum, auto
+from functools import cache
 from io import StringIO
+from threading import Lock
 from urllib.request import urlopen
 
 from lxml.html import parse
@@ -15,34 +17,53 @@ class PkgType(Enum):
     JS = auto()
 
 
-def update(index_url: str, npm_registry: str, spec: str, pkg_type: PkgType) -> str:
+def update(index_url: str, npm_registry: str, spec: str, pkg_type: PkgType, pre_release: bool) -> str:
     if pkg_type is PkgType.PYTHON:
-        return update_python(index_url, spec)
+        with _py_lock:
+            print_index("Python", index_url)
+        return update_python(index_url, spec, pre_release)
     else:
-        return update_js(npm_registry, spec)
+        with _js_lock:
+            print_index("JavaScript", npm_registry)
+        return update_js(npm_registry, spec, pre_release)
 
 
-def update_js(npm_registry: str, spec: str) -> str:
+_py_lock, _js_lock = Lock(), Lock()
+
+
+@cache
+def print_index(of_type: str, registry: str) -> None:
+    print(f"Using {of_type} index: {registry}")
+
+
+def update_js(npm_registry: str, spec: str, pre_release: bool) -> str:
     ver_at = spec.rfind("@")
     package = spec[: len(spec) if ver_at == -1 else ver_at]
-    version = get_js_pkgs(npm_registry, package)[0]
+    version = get_js_pkgs(npm_registry, package, pre_release)[0]
     ver = str(version)
     while ver.endswith(".0"):
         ver = ver[:-2]
     return f"{package}@{ver}"
 
 
-def get_js_pkgs(npm_registry: str, package: str) -> list[Version]:
+def get_js_pkgs(npm_registry: str, package: str, pre_release: bool) -> list[str]:
     with urlopen(f"{npm_registry}/{package}") as handler:
         text = handler.read().decode("utf-8")
     info = json.loads(text)
-    return sorted((v for v in (Version(i) for i in info["versions"].keys()) if not v.is_prerelease), reverse=True)
+    return sorted(
+        (
+            v[1]
+            for v in ((Version(i), i) for i in info["versions"].keys())
+            if (True if pre_release else not v[0].is_prerelease)
+        ),
+        reverse=True,
+    )
 
 
-def update_python(index_url: str, spec: str) -> str:
+def update_python(index_url: str, spec: str, pre_release: bool) -> str:
     req = Requirement(spec)
     eq = any(s for s in req.specifier if s.operator == "==")
-    for version in get_pkgs(index_url, req.name):
+    for version in get_pkgs(index_url, req.name, pre_release):
         if eq or all(s.contains(str(version)) for s in req.specifier):
             break
     else:
@@ -68,7 +89,7 @@ def update_python(index_url: str, spec: str) -> str:
     return new_req
 
 
-def get_pkgs(index_url: str, package: str) -> list[Version]:
+def get_pkgs(index_url: str, package: str, pre_release: bool) -> list[Version]:
     with urlopen(f"{index_url}/{package}") as handler:
         text = handler.read().decode("utf-8")
 
@@ -98,7 +119,7 @@ def get_pkgs(index_url: str, package: str) -> list[Version]:
                 pass
             else:
                 versions.add(version)
-    return sorted((v for v in versions if not v.is_prerelease), reverse=True)
+    return sorted((v for v in versions if (True if pre_release else not v.is_prerelease)), reverse=True)
 
 
 __all__ = [

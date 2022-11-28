@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import RawConfigParser
-from itertools import zip_longest
 from pathlib import Path
+from typing import cast
 
 from yaml import Loader
 from yaml import load as load_yaml
@@ -27,10 +27,12 @@ def run(opt: Options) -> None:
     :param opt: the configuration namespace
     """
     if opt.pkgs:
-        specs: dict[tuple[str, PkgType], None] = {(i.strip(), PkgType.PYTHON): None for i in opt.pkgs}
+        specs: dict[tuple[str, PkgType, bool], None] = {
+            (i.strip(), PkgType.JS if "@" in i else PkgType.PYTHON, opt.pre_release == "yes"): None for i in opt.pkgs
+        }
         calculate_update(opt.index_url, opt.npm_registry, list(specs))
     else:
-        mapping = {
+        mapping: dict[str, Callable[[Path, bool | None], Iterator[tuple[str, PkgType, bool]]]] = {
             "pyproject.toml": load_from_pyproject_toml,
             ".pre-commit-config.yaml": load_from_pre_commit,
             "tox.ini": load_from_tox_ini,
@@ -40,45 +42,58 @@ def run(opt: Options) -> None:
             if filename.name not in mapping:
                 raise NotImplementedError(f"we do not support {filename}")
             loader = mapping[filename.name]
-            specs = {(i.strip(), t): None for i, t in loader(filename) if i.strip()}
+            pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
+            specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release) if i.strip()}
             changes = calculate_update(opt.index_url, opt.npm_registry, list(specs))
             update_file(filename, changes)
 
 
-def load_from_pyproject_toml(filename: Path) -> Iterator[tuple[str, PkgType]]:
+def load_from_pyproject_toml(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rb") as file_handler:
         cfg = load_toml(file_handler)
-    yield from zip_longest(cfg.get("build-system", {}).get("requires", []), [], fillvalue=PkgType.PYTHON)
-    yield from zip_longest(cfg.get("project", {}).get("dependencies", []), [], fillvalue=PkgType.PYTHON)
+    yield from _generate(cfg.get("build-system", {}).get("requires", []), pkg_type=PkgType.PYTHON)
+    yield from _generate(cfg.get("project", {}).get("dependencies", []), pkg_type=PkgType.PYTHON)
+    pre = False if pre_release is None else pre_release
     for entries in cfg.get("project", {}).get("optional-dependencies", {}).values():
-        yield from zip_longest(entries, [], fillvalue=PkgType.PYTHON)
+        yield from _generate(entries, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
-def load_from_tox_ini(filename: Path) -> Iterator[tuple[str, PkgType]]:
+def _generate(
+    generator: Iterable[str], pkg_type: PkgType, pre_release: bool = False
+) -> Iterator[tuple[str, PkgType, bool]]:
+    for value in generator:
+        yield value, pkg_type, pre_release
+
+
+def load_from_tox_ini(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     cfg = NoTransformConfigParser()
     cfg.read(filename)
+    pre = False if pre_release is None else pre_release
     for section in cfg.sections():
         if section.startswith("testenv"):
-            yield from zip_longest(cfg[section].get("deps", "").split("\n"), [], fillvalue=PkgType.PYTHON)
+            values = cast(list[str], cfg[section].get("deps", "").split("\n"))
+            yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
-def load_from_pre_commit(filename: Path) -> Iterator[tuple[str, PkgType]]:
+def load_from_pre_commit(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rt") as file_handler:
         cfg = load_yaml(file_handler, Loader)
+    pre = True if pre_release is None else pre_release
     for repo in cfg.get("repos", []) if isinstance(cfg, dict) else []:
         for hook in repo["hooks"]:
             for pkg in hook.get("additional_dependencies", []):
-                yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON
+                yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON, pre
 
 
-def load_from_setup_cfg(filename: Path) -> Iterator[tuple[str, PkgType]]:
+def load_from_setup_cfg(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     cfg = NoTransformConfigParser()
     cfg.read(filename)
     if cfg.has_section("options"):
-        yield from zip_longest(cfg["options"].get("install_requires", "").split("\n"), [], fillvalue=PkgType.PYTHON)
+        yield from _generate(cfg["options"].get("install_requires", "").split("\n"), pkg_type=PkgType.PYTHON)
+    pre = False if pre_release is None else pre_release
     if cfg.has_section("options.extras_require"):
         for group in cfg["options.extras_require"].values():
-            yield from zip_longest(group.split("\n"), [], fillvalue=PkgType.PYTHON)
+            yield from _generate(group.split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 class NoTransformConfigParser(RawConfigParser):
@@ -94,13 +109,16 @@ def update_file(filename: Path, changes: Mapping[str, str]) -> None:
     filename.write_text(text)
 
 
-def calculate_update(index_url: str, npm_registry: str, specs: Sequence[tuple[str, PkgType]]) -> Mapping[str, str]:
+def calculate_update(
+    index_url: str, npm_registry: str, specs: Sequence[tuple[str, PkgType, bool]]
+) -> Mapping[str, str]:
     changes: dict[str, str] = {}
     if specs:
         with ThreadPoolExecutor(max_workers=min(len(specs), 10)) as executor:
             # Start the load operations and mark each future with its URL
             future_to_url = {
-                executor.submit(update_spec, index_url, npm_registry, pkg, pkg_type): pkg for pkg, pkg_type in specs
+                executor.submit(update_spec, index_url, npm_registry, pkg, pkg_type, pre_release): pkg
+                for pkg, pkg_type, pre_release in specs
             }
             for future in as_completed(future_to_url):
                 spec = future_to_url[future]
