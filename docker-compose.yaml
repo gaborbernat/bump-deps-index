@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    init: true
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/w:z
+    working_dir: /w
+    command: ["tox"]
+
