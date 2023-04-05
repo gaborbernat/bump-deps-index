@@ -41,7 +41,7 @@ dependencies = [
   'tomli>=2.0.1; python_version < "3.11"',
 ]
 optional-dependencies.docs = [
-  "furo>=2022.12.7",
+  "furo>=2023.3.27",
   "proselint>=0.13",
   "sphinx>=6.1.3",
   "sphinx-argparse-cli>=1.11",
