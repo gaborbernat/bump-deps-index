@@ -6,8 +6,8 @@ from functools import cache
 from io import StringIO
 from threading import Lock
 from urllib.request import urlopen
+from xml.etree.ElementTree import parse
 
-from lxml.html import parse
 from packaging.requirements import Requirement
 from packaging.version import Version
 

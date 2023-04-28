@@ -6,10 +6,9 @@ cfg
 chdir
 delenv
 epilog
-fillvalue
+etree
 intersphinx
 isnumeric
-lxml
 nitpicky
 pkgs
 prerelease
