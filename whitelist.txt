@@ -5,8 +5,9 @@ capsys
 cfg
 chdir
 delenv
+deque
+endtag
 epilog
-etree
 intersphinx
 isnumeric
 nitpicky
@@ -18,6 +19,7 @@ pyproject
 readouterr
 repo
 rfind
+starttag
 toml
 tomli
 tomllib
