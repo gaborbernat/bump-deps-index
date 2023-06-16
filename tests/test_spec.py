@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from contextlib import contextmanager
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import pytest
 from packaging.version import Version
-from pytest_mock import MockerFixture
 
 from bump_deps_index._spec import PkgType, get_js_pkgs, get_pkgs, update
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from pytest_mock import MockerFixture
 
 
 def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
@@ -82,8 +86,13 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
         pytest.param("A", PkgType.JS, False, [Version("2.0")], "A@2", id="js-bare"),
     ],
 )
-def test_update(
-    mocker: MockerFixture, spec: str, pkg_type: PkgType, pre_release: bool, versions: list[Version], result: str
+def test_update(  # noqa: PLR0913
+    mocker: MockerFixture,
+    spec: str,
+    pkg_type: PkgType,
+    pre_release: bool,
+    versions: list[Version],
+    result: str,
 ) -> None:
     if pkg_type is PkgType.PYTHON:
         mocker.patch("bump_deps_index._spec.get_pkgs", return_value=versions)

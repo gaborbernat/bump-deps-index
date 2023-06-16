@@ -1,19 +1,23 @@
 from __future__ import annotations
 
-from pathlib import Path
 from textwrap import dedent
-
-import pytest
-from pytest_mock import MockerFixture
+from typing import TYPE_CHECKING
 
 from bump_deps_index import Options, run
 from bump_deps_index._spec import PkgType
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
+    from pytest_mock import MockerFixture
 
 
 def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> None:
     mapping = {"A": "A>=1", "B": "B"}
     update_spec = mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
 
     run(
@@ -23,7 +27,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
             pkgs=[" A ", "B", "C"],
             filenames=None,
             pre_release=False,
-        )
+        ),
     )
 
     out, err = capsys.readouterr()
@@ -44,7 +48,8 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
 def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=1"}
     mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / "pyproject.toml"
     toml = """
@@ -81,13 +86,14 @@ def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: 
     out, err = capsys.readouterr()
     assert not err
     assert not set(out.splitlines())
-    assert dest.read_text() == ""
+    assert not dest.read_text()
 
 
 def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"A": "A>=1", "B==2": "B==1"}
     mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / "tox.ini"
     tox_ini = """
@@ -128,13 +134,14 @@ def test_tox_ini_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> No
     out, err = capsys.readouterr()
     assert not err
     assert not set(out.splitlines())
-    assert dest.read_text() == ""
+    assert not dest.read_text()
 
 
 def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"A": "A>=1", "B": "B==1", "C": "C>=3"}
     mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / "setup.cfg"
     setup_cfg = """
@@ -175,7 +182,7 @@ def test_run_setup_cfg_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     out, err = capsys.readouterr()
     assert not err
     assert not set(out.splitlines())
-    assert dest.read_text() == ""
+    assert not dest.read_text()
 
 
 def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
@@ -185,7 +192,8 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
         "prettier@2.7.0": "prettier@2.8",
     }
     mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / ".pre-commit-config.yaml"
     setup_cfg = """
@@ -238,7 +246,7 @@ def test_run_pre_commit_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path
     out, err = capsys.readouterr()
     assert not err
     assert not set(out.splitlines())
-    assert dest.read_text() == ""
+    assert not dest.read_text()
 
 
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> None:
@@ -253,7 +261,8 @@ def test_run_args_empty(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
 def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"A": "A>=1", "B==1": "B==2"}
     mocker.patch(
-        "bump_deps_index._run.update_spec", side_effect=lambda _, __, spec, ___, ____: mapping[spec]  # noqa: U101
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / "requirements.txt"
     req_txt = """

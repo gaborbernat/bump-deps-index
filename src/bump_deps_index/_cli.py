@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from bump_deps_index.version import version
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class Options(Namespace):

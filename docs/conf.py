@@ -1,12 +1,14 @@
+"""Documentation generation configuration."""  # noqa: INP001
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import bump_deps_index
 from bump_deps_index import __version__
 
 project = name = "bumps-deps-index"
-copyright = f"2022-{datetime.today().year}"
+now = datetime.now(tz=timezone.utc)
+copyright = f"2022-{now.year}"  # noqa: A001
 version, release = __version__, __version__.split("+")[0]
 
 extensions = [
@@ -20,7 +22,7 @@ extensions = [
 master_doc, source_suffix = "index", ".rst"
 
 html_theme = "furo"
-html_title, html_last_updated_fmt = "Bump PyPI deps from index", datetime.now().isoformat()
+html_title, html_last_updated_fmt = "Bump PyPI deps from index", now.isoformat()
 pygments_style, pygments_dark_style = "sphinx", "monokai"
 
 autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "description", "short"

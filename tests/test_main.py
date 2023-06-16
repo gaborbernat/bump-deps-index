@@ -3,11 +3,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from subprocess import check_call
-
-import pytest
-from pytest_mock import MockerFixture
+from typing import TYPE_CHECKING
 
 from bump_deps_index import Options, main
+
+if TYPE_CHECKING:
+    import pytest
+    from pytest_mock import MockerFixture
 
 
 def test_main(capfd: pytest.CaptureFixture[str]) -> None:
