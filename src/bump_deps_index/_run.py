@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import RawConfigParser
-from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from yaml import Loader
-from yaml import load as load_yaml
+from yaml import safe_load as load_yaml
 
-from ._cli import Options
 from ._spec import PkgType
 from ._spec import update as update_spec
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+    from pathlib import Path
+
+    from ._cli import Options
 
 if sys.version_info >= (3, 11):  # pragma: no cover (py311+)
     from tomllib import load as load_toml
@@ -41,7 +43,8 @@ def run(opt: Options) -> None:
         for filename in opt.filenames:
             is_req_txt = filename.suffix == ".txt"
             if filename.name not in mapping and not is_req_txt:
-                raise NotImplementedError(f"we do not support {filename}")
+                msg = f"we do not support {filename}"  # pragma: no cover
+                raise NotImplementedError(msg)  # pragma: no cover
             loader = mapping.get(filename.name, load_from_requirements_txt)
             pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
             specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release) if i.strip()}
@@ -65,7 +68,9 @@ def load_from_pyproject_toml(filename: Path, pre_release: bool | None) -> Iterat
 
 
 def _generate(
-    generator: Iterable[str], pkg_type: PkgType, pre_release: bool = False
+    generator: Iterable[str],
+    pkg_type: PkgType,
+    pre_release: bool = False,  # noqa: FBT001, FBT002
 ) -> Iterator[tuple[str, PkgType, bool]]:
     for value in generator:
         yield value, pkg_type, pre_release
@@ -83,7 +88,7 @@ def load_from_tox_ini(filename: Path, pre_release: bool | None) -> Iterator[tupl
 
 def load_from_pre_commit(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rt") as file_handler:
-        cfg = load_yaml(file_handler, Loader)
+        cfg = load_yaml(file_handler)
     pre = True if pre_release is None else pre_release
     for repo in cfg.get("repos", []) if isinstance(cfg, dict) else []:
         for hook in repo["hooks"]:
@@ -104,7 +109,7 @@ def load_from_setup_cfg(filename: Path, pre_release: bool | None) -> Iterator[tu
 
 class NoTransformConfigParser(RawConfigParser):
     def optionxform(self, s: str) -> str:
-        """disable default lower-casing"""
+        """Disable default lower-casing."""
         return s
 
 
@@ -116,7 +121,9 @@ def update_file(filename: Path, changes: Mapping[str, str]) -> None:
 
 
 def calculate_update(
-    index_url: str, npm_registry: str, specs: Sequence[tuple[str, PkgType, bool]]
+    index_url: str,
+    npm_registry: str,
+    specs: Sequence[tuple[str, PkgType, bool]],
 ) -> Mapping[str, str]:
     changes: dict[str, str] = {}
     if specs:
@@ -130,11 +137,11 @@ def calculate_update(
                 spec = future_to_url[future]
                 try:
                     res = future.result()
-                except Exception as exc:
-                    print(f"failed {spec} with {exc!r}", file=sys.stderr)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"failed {spec} with {exc!r}", file=sys.stderr)  # noqa: T201
                 else:
                     changes[spec] = res
-                    print(f"{spec}{f' -> {res}' if res != spec else ''}")
+                    print(f"{spec}{f' -> {res}' if res != spec else ''}")  # noqa: T201
     return changes
 
 
