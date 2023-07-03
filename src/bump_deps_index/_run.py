@@ -137,7 +137,7 @@ def calculate_update(
                 spec = future_to_url[future]
                 try:
                     res = future.result()
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001, PERF203
                     print(f"failed {spec} with {exc!r}", file=sys.stderr)  # noqa: T201
                 else:
                     changes[spec] = res
