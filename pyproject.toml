@@ -45,13 +45,13 @@ optional-dependencies.docs = [
   "furo>=2023.5.20",
   "proselint>=0.13",
   "sphinx>=7.0.1",
-  "sphinx-argparse-cli>=1.11",
+  "sphinx-argparse-cli>=1.11.1",
 ]
 optional-dependencies.test = [
   "covdefaults>=2.3",
-  "pytest>=7.3.2",
+  "pytest>=7.4",
   "pytest-cov>=4.1",
-  "pytest-mock>=3.11",
+  "pytest-mock>=3.11.1",
 ]
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"
