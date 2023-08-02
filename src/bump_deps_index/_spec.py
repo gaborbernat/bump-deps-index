@@ -136,7 +136,7 @@ def get_pkgs(index_url: str, package: str, pre_release: bool) -> list[Version]: 
             continue
         try:
             version = Version(part)
-        except ValueError:  # noqa: PERF203
+        except ValueError:
             pass
         else:
             versions.add(version)
