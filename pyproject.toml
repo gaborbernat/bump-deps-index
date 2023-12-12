@@ -2,7 +2,7 @@
 build-backend = "hatchling.build"
 requires = [
   "hatch-vcs>=0.4",
-  "hatchling>=1.18",
+  "hatchling>=1.19.1",
 ]
 
 [project]
@@ -57,8 +57,7 @@ urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"
 urls.Source = "https://github.com/gaborbernat/bump-deps-index"
 urls.Tracker = "https://github.com/gaborbernat/bump-deps-index/issues"
-[project.entry-points.console_scripts]
-bump-deps-index = "bump_deps_index.__main__:main"
+scripts.bump-deps-index = "bump_deps_index.__main__:main"
 
 [tool.hatch]
 build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
