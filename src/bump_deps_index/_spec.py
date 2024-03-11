@@ -37,7 +37,7 @@ def print_index(of_type: str, registry: str) -> None:
 
 def update_js(npm_registry: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
     ver_at = spec.rfind("@")
-    package = spec[: len(spec) if ver_at == -1 else ver_at]
+    package = spec[: len(spec) if ver_at in (-1, 0) else ver_at]
     version = get_js_pkgs(npm_registry, package, pre_release)[0]
     ver = str(version)
     while ver.endswith(".0"):
@@ -49,15 +49,15 @@ def get_js_pkgs(npm_registry: str, package: str, pre_release: bool) -> list[str]
     with urlopen(f"{npm_registry}/{package}") as handler:  # noqa: S310
         text = handler.read().decode("utf-8")
     info = json.loads(text)
-    return sorted(
-        (
-            v[1]
-            for v in ((Version(i), i) for i in info["versions"])
-            if (True if pre_release else not v[0].is_prerelease)
-        ),
-        reverse=True,
-    )
-
+    found: list[Version] = []
+    for version_str in info["versions"]:
+        try:
+            version = Version(version_str)
+        except ValueError:
+            continue
+        if pre_release or not version.is_prerelease:
+            found.append(version)
+    return [str(i) for i in sorted(found, reverse=True)]
 
 def update_python(index_url: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
     req = Requirement(spec)
