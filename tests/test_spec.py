@@ -104,6 +104,7 @@ def test_update(  # noqa: PLR0913
 
 def test_get_js_pkgs(mocker: MockerFixture) -> None:
     url_open = mocker.patch("bump_deps_index._spec.urlopen")
-    url_open.return_value.__enter__.return_value = BytesIO(b'{"versions":{"1.0": {}, "1.1": {}, "1.2a1": {}}}')
+    content = b'{"versions":{"1.0": {}, "1.1": {}, "bad": {}, "1.2a1": {}}}'
+    url_open.return_value.__enter__.return_value = BytesIO(content)
     result = get_js_pkgs("N", "a", pre_release=False)
     assert result == ["1.1", "1.0"]
