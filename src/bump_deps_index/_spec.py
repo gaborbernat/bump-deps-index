@@ -59,6 +59,7 @@ def get_js_pkgs(npm_registry: str, package: str, pre_release: bool) -> list[str]
             found.append(version)
     return [str(i) for i in sorted(found, reverse=True)]
 
+
 def update_python(index_url: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
     req = Requirement(spec)
     eq = any(s for s in req.specifier if s.operator == "==")
