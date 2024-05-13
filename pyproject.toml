@@ -16,7 +16,9 @@ keywords = [
   "version",
 ]
 license.file = "LICENSE"
-maintainers = [{ name = "Bernát Gábor", email = "gaborjbernat@gmail.com" }]
+maintainers = [
+  { name = "Bernát Gábor", email = "gaborjbernat@gmail.com" },
+]
 requires-python = ">=3.10"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -37,7 +39,7 @@ dynamic = [
 dependencies = [
   "packaging>=23.2",
   "pyyaml>=6.0.1",
-  'tomli>=2.0.1; python_version < "3.11"',
+  "tomli>=2.0.1; python_version<'3.11'",
 ]
 optional-dependencies.docs = [
   "furo>=2024.1.29",
@@ -67,8 +69,14 @@ line-length = 120
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-lint.isort = { known-first-party = ["bump_deps_index"], required-imports = ["from __future__ import annotations"] }
-lint.select = ["ALL"]
+lint.isort = { known-first-party = [
+  "bump_deps_index",
+], required-imports = [
+  "from __future__ import annotations",
+] }
+lint.select = [
+  "ALL",
+]
 lint.ignore = [
   "ANN101", # no type annotation for self
   "ANN401", # allow Any as type annotation
@@ -92,7 +100,9 @@ count = true
 
 [tool.coverage]
 run.dynamic_context = "test_function"
-run.plugins = ["covdefaults"]
+run.plugins = [
+  "covdefaults",
+]
 run.parallel = true
 report.fail_under = 100
 html.show_contexts = true
@@ -110,4 +120,8 @@ paths.source = [
 python_version = "3.11"
 show_error_codes = true
 strict = true
-overrides = [{ module = ["lxml.*"], ignore_missing_imports = true }]
+overrides = [
+  { module = [
+    "lxml.*",
+  ], ignore_missing_imports = true },
+]
