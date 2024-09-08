@@ -16,10 +16,7 @@ if TYPE_CHECKING:
 
     from ._cli import Options
 
-if sys.version_info >= (3, 11):  # pragma: no cover (py311+)
-    from tomllib import load as load_toml
-else:  # pragma: no cover (py311+)
-    from tomli import load as load_toml
+from tomllib import load as load_toml
 
 
 def run(opt: Options) -> None:

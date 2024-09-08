@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import bump_deps_index
 from bump_deps_index import __version__
 
 project = name = "bumps-deps-index"
-now = datetime.now(tz=timezone.utc)
+now = datetime.now(tz=UTC)
 copyright = f"2022-{now.year}"  # noqa: A001
 version, release = __version__, __version__.split("+")[0]
 
