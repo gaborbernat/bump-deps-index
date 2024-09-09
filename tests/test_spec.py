@@ -19,7 +19,7 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
     @contextmanager
     def _read_url(url: str) -> Iterator[BytesIO]:
         assert url == "I/A-B"
-        yield BytesIO(raw_html.encode("utf-8"))
+        yield BytesIO(raw_html.encode())
 
     raw_html = """
     <html>
@@ -57,6 +57,14 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
             [Version("1")],
             'A>=1; python_version < "3.11"',
             id="py-ver-marker",
+        ),
+        pytest.param(
+            "A; python_version<'3.11'",
+            PkgType.PYTHON,
+            False,
+            [Version("1")],
+            "A>=1; python_version < '3.11'",
+            id="py-ver-marker-single-quote",
         ),
         pytest.param(
             'A[X]; python_version<"3.11"',

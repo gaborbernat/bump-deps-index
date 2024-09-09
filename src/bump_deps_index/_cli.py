@@ -77,6 +77,6 @@ class _HelpFormatter(RawDescriptionHelpFormatter):
 
 
 __all__ = [
-    "parse_cli",
     "Options",
+    "parse_cli",
 ]
