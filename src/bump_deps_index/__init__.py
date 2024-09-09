@@ -26,8 +26,8 @@ def main(args: Sequence[str] | None = None) -> None:
 
 
 __all__ = [
-    "__version__",
     "Options",
+    "__version__",
     "main",
     "run",
 ]

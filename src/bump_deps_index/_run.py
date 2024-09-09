@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import RawConfigParser
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from yaml import safe_load as load_yaml
 
@@ -11,12 +11,16 @@ from ._spec import PkgType
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
     from pathlib import Path
 
     from ._cli import Options
 
 from tomllib import load as load_toml
+
+
+class _Loader(Protocol):
+    def __call__(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]: ...
 
 
 def run(opt: Options) -> None:
@@ -31,7 +35,7 @@ def run(opt: Options) -> None:
         }
         calculate_update(opt.index_url, opt.npm_registry, list(specs))
     else:
-        mapping: dict[str, Callable[[Path, bool | None], Iterator[tuple[str, PkgType, bool]]]] = {
+        mapping: dict[str, _Loader] = {
             "pyproject.toml": load_from_pyproject_toml,
             ".pre-commit-config.yaml": load_from_pre_commit,
             "tox.ini": load_from_tox_ini,
@@ -44,17 +48,17 @@ def run(opt: Options) -> None:
                 raise NotImplementedError(msg)  # pragma: no cover
             loader = mapping.get(filename.name, load_from_requirements_txt)
             pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
-            specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release) if i.strip()}
+            specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release=pre_release) if i.strip()}
             changes = calculate_update(opt.index_url, opt.npm_registry, list(specs))
             update_file(filename, changes)
 
 
-def load_from_requirements_txt(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+def load_from_requirements_txt(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     pre = False if pre_release is None else pre_release
     yield from _generate(filename.read_text().split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
-def load_from_pyproject_toml(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+def load_from_pyproject_toml(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rb") as file_handler:
         cfg = load_toml(file_handler)
     yield from _generate(cfg.get("build-system", {}).get("requires", []), pkg_type=PkgType.PYTHON)
@@ -73,7 +77,7 @@ def _generate(
         yield value, pkg_type, pre_release
 
 
-def load_from_tox_ini(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     cfg = NoTransformConfigParser()
     cfg.read(filename)
     pre = False if pre_release is None else pre_release
@@ -83,7 +87,7 @@ def load_from_tox_ini(filename: Path, pre_release: bool | None) -> Iterator[tupl
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
-def load_from_pre_commit(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+def load_from_pre_commit(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rt") as file_handler:
         cfg = load_yaml(file_handler)
     pre = True if pre_release is None else pre_release
@@ -93,7 +97,7 @@ def load_from_pre_commit(filename: Path, pre_release: bool | None) -> Iterator[t
                 yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON, pre
 
 
-def load_from_setup_cfg(filename: Path, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+def load_from_setup_cfg(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     cfg = NoTransformConfigParser()
     cfg.read(filename)
     if cfg.has_section("options"):
@@ -105,7 +109,7 @@ def load_from_setup_cfg(filename: Path, pre_release: bool | None) -> Iterator[tu
 
 
 class NoTransformConfigParser(RawConfigParser):
-    def optionxform(self, s: str) -> str:
+    def optionxform(self, s: str) -> str:  # noqa: PLR6301
         """Disable default lower-casing."""
         return s
 

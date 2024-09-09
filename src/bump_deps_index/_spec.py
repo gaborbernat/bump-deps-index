@@ -37,7 +37,7 @@ def print_index(of_type: str, registry: str) -> None:
 
 def update_js(npm_registry: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
     ver_at = spec.rfind("@")
-    package = spec[: len(spec) if ver_at in (-1, 0) else ver_at]
+    package = spec[: len(spec) if ver_at in {-1, 0} else ver_at]
     version = get_js_pkgs(npm_registry, package, pre_release)[0]
     ver = str(version)
     while ver.endswith(".0"):
@@ -87,6 +87,8 @@ def update_python(index_url: str, spec: str, pre_release: bool) -> str:  # noqa:
     else:
         op = "==" if eq else ">="
         new_req = str(req).replace(f"{op}{c_ver}", f"{op}{ver}")
+    if "'" in spec:
+        new_req = new_req.replace('"', "'")
     return new_req
 
 
@@ -145,6 +147,6 @@ def get_pkgs(index_url: str, package: str, pre_release: bool) -> list[Version]: 
 
 
 __all__ = [
-    "update",
     "PkgType",
+    "update",
 ]
