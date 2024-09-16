@@ -123,14 +123,10 @@ def get_pkgs(index_url: str, package: str, pre_release: bool) -> list[Version]: 
     parser.feed(text)
     for raw_file in parser.files:
         file = raw_file
-        if file.endswith(".tar.bz2"):
-            file = file[:-8]
-        if file.endswith(".tar.gz"):
-            file = file[:-7]
-        if file.endswith(".whl"):
-            file = file[:-4]
-        if file.endswith(".zip"):
-            file = file[:-4]
+        file = file.removesuffix(".tar.bz2")
+        file = file.removesuffix(".tar.gz")
+        file = file.removesuffix(".whl")
+        file = file.removesuffix(".zip")
         parts = file.split("-")
         for part in parts[1:]:
             if part.split(".")[0].isnumeric():
