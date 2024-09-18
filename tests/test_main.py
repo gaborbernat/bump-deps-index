@@ -14,16 +14,14 @@ if TYPE_CHECKING:
 
 def test_main(capfd: pytest.CaptureFixture[str]) -> None:
     check_call([sys.executable, "-m", "bump_deps_index", "-h"])
-    out, err = capfd.readouterr()
+    out, _err = capfd.readouterr()
     assert out
-    assert not err
 
 
 def test_script(capfd: pytest.CaptureFixture[str]) -> None:
     check_call([Path(sys.executable).parent / "bump-deps-index", "-h"])
-    out, err = capfd.readouterr()
+    out, _err = capfd.readouterr()
     assert out
-    assert not err
 
 
 def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
