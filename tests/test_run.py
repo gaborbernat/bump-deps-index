@@ -46,7 +46,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
 
 
 def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=1"}
+    mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=1", "E": "E>=3", "F": "F>=4"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
         side_effect=lambda _, __, spec, ___, ____: mapping[spec],
@@ -59,13 +59,16 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     dependencies = [ "B==2"]
     optional-dependencies.test = [ "C" ]
     optional-dependencies.docs = [ "D"]
+    [dependency-groups]
+    first = ["E"]
+    second = ["F", {include-group = "first"}]
     """
     dest.write_text(dedent(toml).lstrip())
     run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
 
     out, err = capsys.readouterr()
     assert err == "failed D with KeyError('D')\n"
-    assert set(out.splitlines()) == {"C -> C>=1", "B==2 -> B==1", "A -> A>=1"}
+    assert set(out.splitlines()) == {"C -> C>=1", "F -> F>=4", "A -> A>=1", "E -> E>=3", "B==2 -> B==1"}
 
     toml = """
     [build-system]
@@ -74,6 +77,32 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     dependencies = [ "B==1"]
     optional-dependencies.test = [ "C>=1" ]
     optional-dependencies.docs = [ "D"]
+    [dependency-groups]
+    first = ["E>=3"]
+    second = ["F>=4", {include-group = "first"}]
+    """
+    assert dest.read_text() == dedent(toml).lstrip()
+
+
+def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
+    mapping = {"A": "A>=1"}
+    mocker.patch(
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+    )
+    dest = tmp_path / "tox.toml"
+    toml = """
+    requires = ["A"]
+    """
+    dest.write_text(dedent(toml).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {"A -> A>=1"}
+
+    toml = """
+    requires = ["A>=1"]
     """
     assert dest.read_text() == dedent(toml).lstrip()
 
@@ -90,13 +119,16 @@ def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: 
 
 
 def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"A": "A>=1", "B==2": "B==1"}
+    mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=3"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
         side_effect=lambda _, __, spec, ___, ____: mapping[spec],
     )
     dest = tmp_path / "tox.ini"
     tox_ini = """
+    [tox]
+    requires =
+        C
     [testenv]
     deps =
         A
@@ -111,9 +143,12 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"B==2 -> B==1", "A -> A>=1"}
+    assert set(out.splitlines()) == {"A -> A>=1", "B==2 -> B==1", "C -> C>=3"}
 
     tox_ini = """
+    [tox]
+    requires =
+        C>=3
     [testenv]
     deps =
         A>=1

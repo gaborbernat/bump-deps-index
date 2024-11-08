@@ -5,6 +5,7 @@ from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from bump_deps_index._run import LOADERS
 from bump_deps_index.version import version
 
 if TYPE_CHECKING:
@@ -53,9 +54,8 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
-    valid = ["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]
     cwd = Path().cwd()
-    exist = [cwd / i for i in valid if (cwd / i).exists()]
+    exist = [cwd / i for i in LOADERS if (cwd / i).exists()]
     msg = f"update Python version within a file (default: [{', '.join(i.name for i in exist)}])"
     source.add_argument(
         "--file",
