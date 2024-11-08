@@ -35,18 +35,12 @@ def run(opt: Options) -> None:
         }
         calculate_update(opt.index_url, opt.npm_registry, list(specs))
     else:
-        mapping: dict[str, _Loader] = {
-            "pyproject.toml": load_from_pyproject_toml,
-            ".pre-commit-config.yaml": load_from_pre_commit,
-            "tox.ini": load_from_tox_ini,
-            "setup.cfg": load_from_setup_cfg,
-        }
         for filename in opt.filenames:
             is_req_txt = filename.suffix == ".txt"
-            if filename.name not in mapping and not is_req_txt:
+            if filename.name not in LOADERS and not is_req_txt:
                 msg = f"we do not support {filename}"  # pragma: no cover
                 raise NotImplementedError(msg)  # pragma: no cover
-            loader = mapping.get(filename.name, load_from_requirements_txt)
+            loader = LOADERS.get(filename.name, load_from_requirements_txt)
             pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
             specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release=pre_release) if i.strip()}
             changes = calculate_update(opt.index_url, opt.npm_registry, list(specs))
@@ -66,6 +60,14 @@ def load_from_pyproject_toml(filename: Path, *, pre_release: bool | None) -> Ite
     pre = False if pre_release is None else pre_release
     for entries in cfg.get("project", {}).get("optional-dependencies", {}).values():
         yield from _generate(entries, pkg_type=PkgType.PYTHON, pre_release=pre)
+    for values in cfg.get("dependency-groups", {}).values():
+        yield from _generate([v for v in values if not isinstance(v, dict)], pkg_type=PkgType.PYTHON)
+
+
+def load_tox_toml(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:  # noqa: ARG001
+    with filename.open("rb") as file_handler:
+        cfg = load_toml(file_handler)
+    yield from _generate(cfg.get("requires", []), pkg_type=PkgType.PYTHON)
 
 
 def _generate(
@@ -84,6 +86,9 @@ def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[t
     for section in cfg.sections():
         if section.startswith("testenv"):
             values = cast(list[str], cfg[section].get("deps", "").split("\n"))
+            yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
+        elif section == "tox":
+            values = cast(list[str], cfg[section].get("requires", "").split("\n"))
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
@@ -146,6 +151,14 @@ def calculate_update(
     return changes
 
 
+LOADERS: Mapping[str, _Loader] = {
+    "pyproject.toml": load_from_pyproject_toml,
+    ".pre-commit-config.yaml": load_from_pre_commit,
+    "tox.ini": load_from_tox_ini,
+    "setup.cfg": load_from_setup_cfg,
+    "tox.toml": load_tox_toml,
+}
 __all__ = [
+    "LOADERS",
     "run",
 ]
