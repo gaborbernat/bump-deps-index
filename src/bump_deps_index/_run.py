@@ -85,10 +85,10 @@ def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[t
     pre = False if pre_release is None else pre_release
     for section in cfg.sections():
         if section.startswith("testenv"):
-            values = cast(list[str], cfg[section].get("deps", "").split("\n"))
+            values = cast("list[str]", cfg[section].get("deps", "").split("\n"))
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
         elif section == "tox":
-            values = cast(list[str], cfg[section].get("requires", "").split("\n"))
+            values = cast("list[str]", cfg[section].get("requires", "").split("\n"))
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
