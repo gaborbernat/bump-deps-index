@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import RawConfigParser
 from typing import TYPE_CHECKING, Protocol, cast
 
+from httpx import Client, Limits
+from truststore import SSLContext
 from yaml import safe_load as load_yaml
 
 from ._spec import PkgType
@@ -133,10 +136,15 @@ def calculate_update(
 ) -> Mapping[str, str]:
     changes: dict[str, str] = {}
     if specs:
-        with ThreadPoolExecutor(max_workers=min(len(specs), 10)) as executor:
+        parallel = min(len(specs), 10)
+        client = Client(
+            verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            limits=Limits(max_keepalive_connections=parallel, max_connections=parallel),
+        )
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
             # Start the load operations and mark each future with its URL
             future_to_url = {
-                executor.submit(update_spec, index_url, npm_registry, pkg, pkg_type, pre_release): pkg
+                executor.submit(update_spec, client, index_url, npm_registry, pkg, pkg_type, pre_release): pkg
                 for pkg, pkg_type, pre_release in specs
             }
             for future in as_completed(future_to_url):

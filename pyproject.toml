@@ -37,8 +37,10 @@ dynamic = [
   "version",
 ]
 dependencies = [
+  "httpx>=0.28.1",
   "packaging>=24.1",
   "pyyaml>=6.0.2",
+  "truststore>=0.10",
 ]
 optional-dependencies.docs = [
   "furo>=2024.8.6",
@@ -50,6 +52,7 @@ optional-dependencies.testing = [
   "covdefaults>=2.3",
   "pytest>=8.3.3",
   "pytest-cov>=6",
+  "pytest-httpx>=0.35",
   "pytest-mock>=3.14",
 ]
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
@@ -75,7 +78,6 @@ lint.select = [
   "ALL",
 ]
 lint.ignore = [
-  "ANN101", # no type annotation for self
   "ANN401", # allow Any as type annotation
   "COM812", # Conflict with formatter
   "CPY",    # No copyright statements
