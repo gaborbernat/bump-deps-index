@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from io import BytesIO
 from typing import TYPE_CHECKING
 
 import pytest
+from httpx import Client
 from packaging.version import Version
 
 from bump_deps_index._spec import PkgType, get_js_pkgs, get_pkgs, update
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
+    from pytest_httpx import HTTPXMock
     from pytest_mock import MockerFixture
 
 
-def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> None:
-    @contextmanager
-    def _read_url(url: str) -> Iterator[BytesIO]:
-        assert url == "I/A-B"
-        yield BytesIO(raw_html.encode())
-
+def test_get_pkgs(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> None:
     raw_html = """
     <html>
     <body>
@@ -34,9 +27,9 @@ def test_get_pkgs(mocker: MockerFixture, capsys: pytest.CaptureFixture[str]) -> 
     <a/>
     </body></html>
     """
-    mocker.patch("bump_deps_index._spec.urlopen", side_effect=_read_url)
+    httpx_mock.add_response("https://I.com/A-B", text=raw_html)
 
-    result = get_pkgs("I", package="A-B", pre_release=False)
+    result = get_pkgs(Client(), "https://I.com", package="A-B", pre_release=False)
 
     assert result == [Version("1.0.3"), Version("1.0.2"), Version("1.0.1"), Version("1.0.0")]
     out, err = capsys.readouterr()
@@ -106,13 +99,11 @@ def test_update(  # noqa: PLR0913
         mocker.patch("bump_deps_index._spec.get_pkgs", return_value=versions)
     else:
         mocker.patch("bump_deps_index._spec.get_js_pkgs", return_value=versions)
-    res = update("I", "N", spec, pkg_type, pre_release)
+    res = update(Client(), "I", "N", spec, pkg_type, pre_release)
     assert res == result
 
 
-def test_get_js_pkgs(mocker: MockerFixture) -> None:
-    url_open = mocker.patch("bump_deps_index._spec.urlopen")
-    content = b'{"versions":{"1.0": {}, "1.1": {}, "bad": {}, "1.2a1": {}}}'
-    url_open.return_value.__enter__.return_value = BytesIO(content)
-    result = get_js_pkgs("N", "a", pre_release=False)
+def test_get_js_pkgs(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(text='{"versions":{"1.0": {}, "1.1": {}, "bad": {}, "1.2a1": {}}}')
+    result = get_js_pkgs(Client(), "https://N.com", "a", pre_release=False)
     assert result == ["1.1", "1.0"]

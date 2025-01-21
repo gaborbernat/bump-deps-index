@@ -3,6 +3,8 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+from httpx import Client
+
 from bump_deps_index import Options, run
 from bump_deps_index._spec import PkgType
 
@@ -17,7 +19,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
     mapping = {"A": "A>=1", "B": "B"}
     update_spec = mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
 
     run(
@@ -36,11 +38,12 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
 
     found = set()
     for called in update_spec.call_args_list:
-        assert len(called.args) == 5
-        assert called.args[0] == "https://pypi.org/simple"
-        assert called.args[1] == "N"
-        found.add((called.args[2], called.args[3]))
-        assert called.args[4] is False
+        assert len(called.args) == 6
+        assert isinstance(called.args[0], Client)
+        assert called.args[1] == "https://pypi.org/simple"
+        assert called.args[2] == "N"
+        found.add((called.args[3], called.args[4]))
+        assert called.args[5] is False
         assert not called.kwargs
     assert found == {("C", PkgType.PYTHON), ("B", PkgType.PYTHON), ("A", PkgType.PYTHON)}
 
@@ -49,7 +52,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=1", "E": "E>=3", "F": "F>=4"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / "pyproject.toml"
     toml = """
@@ -88,7 +91,7 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp
     mapping = {"A": "A>=1"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / "tox.toml"
     toml = """
@@ -122,7 +125,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
     mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=3"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / "tox.ini"
     tox_ini = """
@@ -176,7 +179,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     mapping = {"A": "A>=1", "B": "B==1", "C": "C>=3"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / "setup.cfg"
     setup_cfg = """
@@ -228,7 +231,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
     }
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / ".pre-commit-config.yaml"
     setup_cfg = """
@@ -297,7 +300,7 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
     mapping = {"A": "A>=1", "B==1": "B==2"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, spec, ___, ____: mapping[spec],
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
     dest = tmp_path / "requirements.txt"
     req_txt = """
