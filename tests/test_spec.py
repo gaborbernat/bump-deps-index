@@ -27,7 +27,7 @@ def test_get_pkgs(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> 
     <a/>
     </body></html>
     """
-    httpx_mock.add_response("https://I.com/A-B", text=raw_html)
+    httpx_mock.add_response(url="https://I.com/A-B/", text=raw_html)
 
     result = get_pkgs(Client(), "https://I.com", package="A-B", pre_release=False)
 
