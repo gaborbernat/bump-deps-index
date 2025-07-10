@@ -69,7 +69,7 @@ def update_python(client: Client, index_url: str, spec: str, pre_release: bool) 
     else:
         return spec
     ver = str(version)
-    ver = ver.split("+")[0]  # strip build numbers
+    ver = ver.partition("+")[0]  # strip build numbers
     while ver.endswith(".0"):
         ver = ver[:-2]
     c_ver = next(
