@@ -52,7 +52,7 @@ def run(opt: Options) -> None:
 
 def load_from_requirements_txt(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     pre = False if pre_release is None else pre_release
-    yield from _generate(filename.read_text().split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
+    yield from _generate(filename.read_text(encoding="utf-8").split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 def load_from_pyproject_toml(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
@@ -96,7 +96,7 @@ def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[t
 
 
 def load_from_pre_commit(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    with filename.open("rt") as file_handler:
+    with filename.open("rt", encoding="utf-8") as file_handler:
         cfg = load_yaml(file_handler)
     pre = True if pre_release is None else pre_release
     for repo in cfg.get("repos", []) if isinstance(cfg, dict) else []:
@@ -123,10 +123,10 @@ class NoTransformConfigParser(RawConfigParser):
 
 
 def update_file(filename: Path, changes: Mapping[str, str]) -> None:
-    text = filename.read_text()
+    text = filename.read_text(encoding="utf-8")
     for src, dst in changes.items():
         text = text.replace(src, dst)
-    filename.write_text(text)
+    filename.write_text(text, encoding="utf-8")
 
 
 def calculate_update(
