@@ -36,7 +36,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
     assert err == "failed C with KeyError('C')\n"
     assert set(out.splitlines()) == {"A -> A>=1", "B"}
 
-    found = set()
+    found: set[tuple[str, PkgType]] = set()
     for called in update_spec.call_args_list:
         assert len(called.args) == 6
         assert isinstance(called.args[0], Client)
