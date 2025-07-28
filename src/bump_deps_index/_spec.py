@@ -97,20 +97,28 @@ class IndexParser(HTMLParser):
         super().__init__()
         self._at_tag: deque[str] = deque()
         self._files: list[str] = []
+        self._attrs: list[tuple[str, str | None]] = []
 
     @property
     def files(self) -> frozenset[str]:
         return frozenset(self._files)
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._at_tag.append(tag)
+        self._attrs = attrs
 
     def handle_endtag(self, tag: str) -> None:
         if self._at_tag and self._at_tag[-1] == tag:  # pragma: no branch
             self._at_tag.pop()
+        self._attrs = []
 
     def handle_data(self, data: str) -> None:
-        if self._at_tag and self._at_tag[-1] == "a" and data.strip():
+        if (
+            self._at_tag
+            and self._at_tag[-1] == "a"
+            and data.strip()
+            and not any(k == "data-yanked" for k, _ in self._attrs)
+        ):
             self._files.append(data.strip())
 
 

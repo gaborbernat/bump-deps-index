@@ -127,6 +127,14 @@ count = true
 [tool.pyproject-fmt]
 max_supported_python = "3.14"
 
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+verbosity_assertions = 2
+filterwarnings = [
+  "error",
+  "ignore:unclosed database in <sqlite3.Connection object at:ResourceWarning",
+]
+
 [tool.coverage]
 run.plugins = [
   "covdefaults",
