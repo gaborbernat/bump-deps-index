@@ -4,7 +4,7 @@ import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from configparser import RawConfigParser
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict, cast
 
 from httpx import Client, Limits
 from truststore import SSLContext
@@ -88,18 +88,31 @@ def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[t
     pre = False if pre_release is None else pre_release
     for section in cfg.sections():
         if section.startswith("testenv"):
-            values = cast("list[str]", cfg[section].get("deps", "").split("\n"))
+            values = cfg[section].get("deps", "").split("\n")
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
         elif section == "tox":
-            values = cast("list[str]", cfg[section].get("requires", "").split("\n"))
+            values = cfg[section].get("requires", "").split("\n")
             yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
+
+
+class Hook(TypedDict):
+    id: str
+    args: NotRequired[list[str]]
+    additional_dependencies: NotRequired[list[str]]
+
+
+class RepoConfig(TypedDict):
+    repo: str
+    rev: NotRequired[str]
+    hooks: list[Hook]
 
 
 def load_from_pre_commit(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
     with filename.open("rt", encoding="utf-8") as file_handler:
         cfg = load_yaml(file_handler)
     pre = True if pre_release is None else pre_release
-    for repo in cfg.get("repos", []) if isinstance(cfg, dict) else []:
+    repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
+    for repo in repos:
         for hook in repo["hooks"]:
             for pkg in hook.get("additional_dependencies", []):
                 yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON, pre
@@ -117,9 +130,9 @@ def load_from_setup_cfg(filename: Path, *, pre_release: bool | None) -> Iterator
 
 
 class NoTransformConfigParser(RawConfigParser):
-    def optionxform(self, s: str) -> str:  # noqa: PLR6301
+    def optionxform(self, optionstr: str) -> str:  # noqa: PLR6301
         """Disable default lower-casing."""
-        return s
+        return optionstr
 
 
 def update_file(filename: Path, changes: Mapping[str, str]) -> None:
