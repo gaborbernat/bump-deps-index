@@ -1,8 +1,8 @@
 [build-system]
 build-backend = "hatchling.build"
 requires = [
-  "hatch-vcs>=0.4",
-  "hatchling>=1.25",
+  "hatch-vcs>=0.5",
+  "hatchling>=1.27",
 ]
 
 [project]
@@ -30,6 +30,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -38,28 +39,42 @@ dynamic = [
 ]
 dependencies = [
   "httpx>=0.28.1",
-  "packaging>=24.1",
+  "packaging>=25",
   "pyyaml>=6.0.2",
-  "truststore>=0.10",
-]
-optional-dependencies.docs = [
-  "furo>=2024.8.6",
-  "proselint>=0.14",
-  "sphinx>=8.1.3",
-  "sphinx-argparse-cli>=1.18.2",
-]
-optional-dependencies.testing = [
-  "covdefaults>=2.3",
-  "pytest>=8.3.3",
-  "pytest-cov>=6",
-  "pytest-httpx>=0.35",
-  "pytest-mock>=3.14",
+  "truststore>=0.10.1",
 ]
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"
 urls.Source = "https://github.com/gaborbernat/bump-deps-index"
 urls.Tracker = "https://github.com/gaborbernat/bump-deps-index/issues"
 scripts.bump-deps-index = "bump_deps_index.__main__:main"
+
+[dependency-groups]
+dev = [
+  { include-group = "lint" },
+  { include-group = "pkg-meta" },
+  { include-group = "test" },
+  { include-group = "type" },
+]
+test = [
+  "covdefaults>=2.3",
+  "pytest>=8.4.1",
+  "pytest-cov>=6.2.1",
+  "pytest-httpx>=0.35",
+  "pytest-mock>=3.14.1",
+]
+type = [
+  "pyright>=1.1.403",
+  { include-group = "test" },
+]
+docs = [
+  "furo>=2025.7.19",
+  "proselint>=0.14",
+  "sphinx>=8.2.3",
+  "sphinx-argparse-cli>=1.19",
+]
+lint = [ "pre-commit-uv>=4.1.4" ]
+pkg-meta = [ "check-wheel-contents>=0.6.1", "twine>=6.1", "uv>=0.5.31" ]
 
 [tool.hatch]
 build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
@@ -110,7 +125,7 @@ builtin = "clear,usage,en-GB_to_en-US"
 count = true
 
 [tool.pyproject-fmt]
-max_supported_python = "3.13"
+max_supported_python = "3.14"
 
 [tool.coverage]
 run.plugins = [
@@ -129,12 +144,8 @@ paths.source = [
   "*\\src",
 ]
 
-[tool.mypy]
-python_version = "3.11"
-show_error_codes = true
-strict = true
-overrides = [
-  { module = [
-    "lxml.*",
-  ], ignore_missing_imports = true },
-]
+[tool.pyright]
+include = [ "src", "tests" ]
+typeCheckingMode = "strict"
+reportUnknownMemberType = false
+executionEnvironments = [ { root = "tests", reportPrivateUsage = false, reportUnknownLambdaType = false } ]
