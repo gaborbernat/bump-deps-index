@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 
 from httpx import Client
 
-from bump_deps_index import Options, run
+from bump_deps_index import Options, main, run
+from bump_deps_index._loaders import get_loaders
 from bump_deps_index._spec import PkgType
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
             npm_registry="N",
             pkgs=[" A ", "B", "C"],
             filenames=None,
-            pre_release=False,
+            pre_release="no",
         ),
     )
 
@@ -317,5 +318,41 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
     req_txt = """
     A>=1
     B==2
+    """
+    assert dest.read_text() == dedent(req_txt).lstrip()
+
+
+def test_run_requirements_txt_in(
+    capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    get_loaders.cache_clear()
+
+    mapping = {"A": "A>=1", "B==1": "B==2"}
+    mocker.patch(
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+    )
+    (tmp_path / "requirements.txt").write_text("C")
+    dest = tmp_path / "requirements.in"
+    req_txt = """
+    A
+    B==1
+
+    # bad
+    """
+    dest.write_text(dedent(req_txt).lstrip())
+    monkeypatch.chdir(tmp_path)
+
+    main(["--index-url", "https://pypi.org/simple", "--pre-release", "no"])
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {"B==1 -> B==2", "A -> A>=1"}
+
+    req_txt = """
+    A>=1
+    B==2
+
+    # bad
     """
     assert dest.read_text() == dedent(req_txt).lstrip()

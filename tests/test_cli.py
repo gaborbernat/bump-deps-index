@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from itertools import product
+from itertools import chain, combinations
 from pathlib import Path
 
 import pytest
 
 from bump_deps_index._cli import Options, parse_cli
+from bump_deps_index._loaders import get_loaders
 
 
 def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -31,11 +32,24 @@ def test_cli_override_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert options.filenames == [Path("pyproject.toml")]
 
 
-@pytest.mark.parametrize("files", product(["pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg"]))
-def test_cli_pickup_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, files: list[str]) -> None:
+_filenames = [Path(i) for i in ("pyproject.toml", "tox.ini", ".pre-commit-config.yaml", "setup.cfg")]
+
+
+@pytest.mark.parametrize(
+    "files",
+    [set(c) for c in chain.from_iterable(combinations(_filenames, r) for r in range(1, len(_filenames) + 1))],
+    ids=[
+        "+".join(f.name for f in sorted(c, key=lambda p: p.name))
+        for c in chain.from_iterable(combinations(_filenames, r) for r in range(1, len(_filenames) + 1))
+    ],
+)
+def test_cli_pickup_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, files: set[Path]) -> None:
+    get_loaders.cache_clear()
     for file in files:
         (tmp_path / file).write_text("")
     (tmp_path / "decoy").write_text("")
     monkeypatch.chdir(tmp_path)
+
     options = parse_cli([])
-    assert set(options.filenames) == {tmp_path / f for f in files}
+
+    assert set(options.filenames) == files

@@ -3,27 +3,21 @@ from __future__ import annotations
 import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from configparser import RawConfigParser
-from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING
 
 from httpx import Client, Limits
 from truststore import SSLContext
-from yaml import safe_load as load_yaml
+
+from bump_deps_index._loaders import get_loaders
 
 from ._spec import PkgType
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from ._cli import Options
-
-from tomllib import load as load_toml
-
-
-class _Loader(Protocol):
-    def __call__(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]: ...
 
 
 def run(opt: Options) -> None:
@@ -32,107 +26,30 @@ def run(opt: Options) -> None:
 
     :param opt: the configuration namespace
     """
+    pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
+
     if opt.pkgs:
-        specs: dict[tuple[str, PkgType, bool], None] = {
-            (i.strip(), PkgType.JS if "@" in i else PkgType.PYTHON, opt.pre_release == "yes"): None for i in opt.pkgs
-        }
-        calculate_update(opt.index_url, opt.npm_registry, list(specs))
-    else:
-        for filename in opt.filenames:
-            is_req_txt = filename.suffix == ".txt"
-            if filename.name not in LOADERS and not is_req_txt:
-                msg = f"we do not support {filename}"  # pragma: no cover
-                raise NotImplementedError(msg)  # pragma: no cover
-            loader = LOADERS.get(filename.name, load_from_requirements_txt)
-            pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
-            specs = {(i.strip(), t, p): None for i, t, p in loader(filename, pre_release=pre_release) if i.strip()}
-            changes = calculate_update(opt.index_url, opt.npm_registry, list(specs))
-            update_file(filename, changes)
+        pre_release = False if pre_release is None else pre_release
+        specs: list[tuple[str, PkgType, bool]] = list({
+            (i.strip(), PkgType.JS if "@" in i else PkgType.PYTHON, pre_release): None for i in opt.pkgs
+        })
+        calculate_update(opt.index_url, opt.npm_registry, specs)
+        return
 
-
-def load_from_requirements_txt(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    pre = False if pre_release is None else pre_release
-    yield from _generate(filename.read_text(encoding="utf-8").split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
-
-
-def load_from_pyproject_toml(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    with filename.open("rb") as file_handler:
-        cfg = load_toml(file_handler)
-    yield from _generate(cfg.get("build-system", {}).get("requires", []), pkg_type=PkgType.PYTHON)
-    yield from _generate(cfg.get("project", {}).get("dependencies", []), pkg_type=PkgType.PYTHON)
-    pre = False if pre_release is None else pre_release
-    for entries in cfg.get("project", {}).get("optional-dependencies", {}).values():
-        yield from _generate(entries, pkg_type=PkgType.PYTHON, pre_release=pre)
-    for values in cfg.get("dependency-groups", {}).values():
-        yield from _generate([v for v in values if not isinstance(v, dict)], pkg_type=PkgType.PYTHON)
-
-
-def load_tox_toml(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:  # noqa: ARG001
-    with filename.open("rb") as file_handler:
-        cfg = load_toml(file_handler)
-    yield from _generate(cfg.get("requires", []), pkg_type=PkgType.PYTHON)
-
-
-def _generate(
-    generator: Iterable[str],
-    pkg_type: PkgType,
-    pre_release: bool = False,  # noqa: FBT001, FBT002
-) -> Iterator[tuple[str, PkgType, bool]]:
-    for value in generator:
-        yield value, pkg_type, pre_release
-
-
-def load_from_tox_ini(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    cfg = NoTransformConfigParser()
-    cfg.read(filename)
-    pre = False if pre_release is None else pre_release
-    for section in cfg.sections():
-        if section.startswith("testenv"):
-            values = cfg[section].get("deps", "").split("\n")
-            yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
-        elif section == "tox":
-            values = cfg[section].get("requires", "").split("\n")
-            yield from _generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
-
-
-class Hook(TypedDict):
-    id: str
-    args: NotRequired[list[str]]
-    additional_dependencies: NotRequired[list[str]]
-
-
-class RepoConfig(TypedDict):
-    repo: str
-    rev: NotRequired[str]
-    hooks: list[Hook]
-
-
-def load_from_pre_commit(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    with filename.open("rt", encoding="utf-8") as file_handler:
-        cfg = load_yaml(file_handler)
-    pre = True if pre_release is None else pre_release
-    repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
-    for repo in repos:
-        for hook in repo["hooks"]:
-            for pkg in hook.get("additional_dependencies", []):
-                yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON, pre
-
-
-def load_from_setup_cfg(filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-    cfg = NoTransformConfigParser()
-    cfg.read(filename)
-    if cfg.has_section("options"):
-        yield from _generate(cfg["options"].get("install_requires", "").split("\n"), pkg_type=PkgType.PYTHON)
-    pre = False if pre_release is None else pre_release
-    if cfg.has_section("options.extras_require"):
-        for group in cfg["options.extras_require"].values():
-            yield from _generate(group.split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
-
-
-class NoTransformConfigParser(RawConfigParser):
-    def optionxform(self, optionstr: str) -> str:  # noqa: PLR6301
-        """Disable default lower-casing."""
-        return optionstr
+    for filename in opt.filenames:
+        for loader in get_loaders():
+            if loader.supports(filename):
+                specs = list({
+                    (name.strip(), typ, pkg)
+                    for name, typ, pkg in loader.load(filename, pre_release=pre_release)
+                    if name.strip()
+                })
+                changes = calculate_update(opt.index_url, opt.npm_registry, specs)
+                update_file(filename, changes)
+                break
+        else:
+            msg = f"we do not support {filename}"  # pragma: no cover
+            raise NotImplementedError(msg)  # pragma: no cover
 
 
 def update_file(filename: Path, changes: Mapping[str, str]) -> None:
@@ -172,14 +89,6 @@ def calculate_update(
     return changes
 
 
-LOADERS: Mapping[str, _Loader] = {
-    "pyproject.toml": load_from_pyproject_toml,
-    ".pre-commit-config.yaml": load_from_pre_commit,
-    "tox.ini": load_from_tox_ini,
-    "setup.cfg": load_from_setup_cfg,
-    "tox.toml": load_tox_toml,
-}
 __all__ = [
-    "LOADERS",
     "run",
 ]
