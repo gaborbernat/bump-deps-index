@@ -3,9 +3,13 @@ from __future__ import annotations
 import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
 from httpx import Client, Limits
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 from truststore import SSLContext
 
 from bump_deps_index._loaders import get_loaders
@@ -15,7 +19,6 @@ from ._spec import update as update_spec
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from pathlib import Path
 
     from ._cli import Options
 
@@ -37,12 +40,13 @@ def run(opt: Options) -> None:
         return
 
     for filename in opt.filenames:
+        project = get_project()
         for loader in get_loaders():
             if loader.supports(filename):
                 specs = list({
                     (name.strip(), typ, pkg)
                     for name, typ, pkg in loader.load(filename, pre_release=pre_release)
-                    if name.strip()
+                    if name.strip() and Requirement(name.strip()).name != project
                 })
                 changes = calculate_update(opt.index_url, opt.npm_registry, specs)
                 update_file(filename, changes)
@@ -50,6 +54,16 @@ def run(opt: Options) -> None:
         else:
             msg = f"we do not support {filename}"  # pragma: no cover
             raise NotImplementedError(msg)  # pragma: no cover
+
+
+def get_project() -> str | None:
+    if not (pyproject := Path.cwd() / "pyproject.toml").exists():
+        return None
+    with pyproject.open("rb") as file_handler:
+        cfg = load_toml(file_handler)
+    if (res := cfg.get("project", {}).get("name")) is not None:  # pragma: no branch
+        res = canonicalize_name(res)
+    return res
 
 
 def update_file(filename: Path, changes: Mapping[str, str]) -> None:
