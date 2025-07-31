@@ -36,10 +36,10 @@ class ToxIni(Loader):
         pre = False if pre_release is None else pre_release
         for section in cfg.sections():
             if section.startswith("testenv"):
-                values = cfg[section].get("deps", "").split("\n")
+                values = [i for i in cfg[section].get("deps", "").split("\n") if not i.strip().startswith("{")]
                 yield from self._generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
             elif section == "tox":
-                values = cfg[section].get("requires", "").split("\n")
+                values = [i for i in cfg[section].get("requires", "").split("\n") if not i.strip().startswith("{")]
                 yield from self._generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 

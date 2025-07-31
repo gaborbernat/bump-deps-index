@@ -46,7 +46,7 @@ def run(opt: Options) -> None:
                 specs = list({
                     (name.strip(), typ, pkg)
                     for name, typ, pkg in loader.load(filename, pre_release=pre_release)
-                    if name.strip() and Requirement(name.strip()).name != project
+                    if name.strip() and ("@" in name or Requirement(name.strip()).name != project)
                 })
                 changes = calculate_update(opt.index_url, opt.npm_registry, specs)
                 update_file(filename, changes)
