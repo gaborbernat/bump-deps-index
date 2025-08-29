@@ -3,6 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+import pytest
 from httpx import Client
 
 from bump_deps_index import Options, main, run
@@ -12,7 +13,6 @@ from bump_deps_index._spec import PkgType
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import pytest
     from pytest_mock import MockerFixture
 
 
@@ -322,8 +322,20 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
     assert dest.read_text() == dedent(req_txt).lstrip()
 
 
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "requirements",
+        "requirements.test",
+        "requirements-test",
+    ],
+)
 def test_run_requirements_txt_in(
-    capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    capsys: pytest.CaptureFixture[str],
+    mocker: MockerFixture,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
 ) -> None:
     get_loaders.cache_clear()
 
@@ -332,8 +344,8 @@ def test_run_requirements_txt_in(
         "bump_deps_index._run.update_spec",
         side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
     )
-    (tmp_path / "requirements.txt").write_text("C")
-    dest = tmp_path / "requirements.in"
+    (tmp_path / f"{filename}.txt").write_text("C")
+    dest = tmp_path / f"{filename}.in"
     req_txt = """
     A
     B==1
