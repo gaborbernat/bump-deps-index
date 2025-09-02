@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 _BASE: Final[str] = "requirements"
 
+
 class Requirements(Loader):
     def supports(self, filename: Path) -> bool:  # noqa: PLR6301
         return (
@@ -33,7 +34,7 @@ class Requirements(Loader):
 
         for filename in found:
             if filename.suffix == ".txt" and filename.with_suffix(".in").name in existing_names:
-                continue 
+                continue
             with filename.open("rt", encoding="utf-8") as file_handler:
                 if not any(  # pragma: no branch
                     line.startswith(generated_marker) for line in file_handler if line.startswith("#")
