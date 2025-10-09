@@ -40,8 +40,8 @@ dynamic = [
 dependencies = [
   "httpx>=0.28.1",
   "packaging>=25",
-  "pyyaml>=6.0.2",
-  "truststore>=0.10.1",
+  "pyyaml>=6.0.3",
+  "truststore>=0.10.4",
 ]
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"
@@ -58,23 +58,23 @@ dev = [
 ]
 test = [
   "covdefaults>=2.3",
-  "pytest>=8.4.1",
-  "pytest-cov>=6.2.1",
+  "pytest>=8.4.2",
+  "pytest-cov>=7",
   "pytest-httpx>=0.35",
-  "pytest-mock>=3.14.1",
+  "pytest-mock>=3.15.1",
 ]
 type = [
-  "pyright>=1.1.403",
+  "pyright>=1.1.406",
   { include-group = "test" },
 ]
 docs = [
-  "furo>=2025.7.19",
+  "furo>=2025.9.25",
   "proselint>=0.14",
   "sphinx>=8.2.3",
   "sphinx-argparse-cli>=1.19",
 ]
-lint = [ "pre-commit-uv>=4.1.4" ]
-pkg-meta = [ "check-wheel-contents>=0.6.1", "twine>=6.1", "uv>=0.5.31" ]
+lint = [ "pre-commit-uv>=4.1.5" ]
+pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=6.2", "uv>=0.8.22" ]
 
 [tool.hatch]
 build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
@@ -123,9 +123,6 @@ lint.preview = true
 [tool.codespell]
 builtin = "clear,usage,en-GB_to_en-US"
 count = true
-
-[tool.pyproject-fmt]
-max_supported_python = "3.14"
 
 [tool.pytest.ini_options]
 testpaths = [ "tests" ]
