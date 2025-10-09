@@ -19,7 +19,7 @@ class ToxToml(Loader):
     @cached_property
     def files(self) -> Iterator[Path]:
         if (path := Path.cwd() / self._filename).exists():
-            yield path
+            yield path  # pragma: no cover # false positive
 
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename

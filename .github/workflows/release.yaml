@@ -19,7 +19,7 @@ jobs:
         with:
           cache-dependency-glob: "pyproject.toml"
       - name: 📦 Build package
-        run: uv build --python 3.13 --python-preference only-managed --sdist --wheel . --out-dir dist
+        run: uv build --python 3.14 --python-preference only-managed --sdist --wheel . --out-dir dist
       - name: 📤 Store the distribution packages
         uses: actions/upload-artifact@v4
         with:
