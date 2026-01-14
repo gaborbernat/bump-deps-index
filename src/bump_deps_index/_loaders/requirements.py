@@ -43,7 +43,11 @@ class Requirements(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         pre = False if pre_release is None else pre_release
-        lines = [i.strip() for i in filename.read_text(encoding="utf-8").split("\n") if not i.strip().startswith("#")]
+        lines = [
+            i.strip()
+            for i in filename.read_text(encoding="utf-8").split("\n")
+            if i.strip() and not i.strip().startswith("#") and not i.strip().startswith("-")
+        ]
         yield from self._generate(lines, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
