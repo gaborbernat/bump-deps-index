@@ -111,6 +111,53 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp
     assert dest.read_text() == dedent(toml).lstrip()
 
 
+def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
+    mapping = {"A": "A>=1", "B": "B>=2", "C": "C>=3", "D": "D>=4"}
+    mocker.patch(
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+    )
+    dest = tmp_path / "tox.toml"
+    toml = """
+    requires = ["A"]
+
+    [env_run_base]
+    deps = ["B"]
+
+    [env.test]
+    deps = ["-r requirements.txt", "C"]
+
+    [env.no_deps]
+    description = "no deps here"
+
+    [ui]
+    deps = ["D"]
+    """
+    dest.write_text(dedent(toml).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {"A -> A>=1", "B -> B>=2", "C -> C>=3", "D -> D>=4"}
+
+    toml = """
+    requires = ["A>=1"]
+
+    [env_run_base]
+    deps = ["B>=2"]
+
+    [env.test]
+    deps = ["-r requirements.txt", "C>=3"]
+
+    [env.no_deps]
+    description = "no deps here"
+
+    [ui]
+    deps = ["D>=4"]
+    """
+    assert dest.read_text() == dedent(toml).lstrip()
+
+
 def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / "tox.ini"
     dest.write_text("")
@@ -135,6 +182,8 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
         C
     [testenv]
     deps =
+        -e .
+        -r requirements.txt
         A
     [testenv:ok]
     deps =
@@ -155,6 +204,8 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
         C>=3
     [testenv]
     deps =
+        -e .
+        -r requirements.txt
         A>=1
     [testenv:ok]
     deps =
@@ -318,6 +369,37 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
     req_txt = """
     A>=1
     B==2
+    """
+    assert dest.read_text() == dedent(req_txt).lstrip()
+
+
+def test_run_requirements_txt_skip_options(
+    capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path
+) -> None:
+    mapping = {"A": "A>=1"}
+    mocker.patch(
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+    )
+    dest = tmp_path / "requirements.txt"
+    req_txt = """
+    -e .[test]
+    -r other.txt
+    --index-url https://pypi.org/simple
+    A
+    """
+    dest.write_text(dedent(req_txt).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {"A -> A>=1"}
+
+    req_txt = """
+    -e .[test]
+    -r other.txt
+    --index-url https://pypi.org/simple
+    A>=1
     """
     assert dest.read_text() == dedent(req_txt).lstrip()
 
