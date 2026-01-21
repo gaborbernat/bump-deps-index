@@ -49,7 +49,7 @@ def run(opt: Options) -> None:
                     if name.strip() and ("@" in name or Requirement(name.strip()).name != project)
                 })
                 changes = calculate_update(opt.index_url, opt.npm_registry, specs)
-                update_file(filename, changes)
+                loader.update_file(filename, changes)
                 break
         else:
             msg = f"we do not support {filename}"  # pragma: no cover
@@ -64,13 +64,6 @@ def get_project() -> str | None:
     if (res := cfg.get("project", {}).get("name")) is not None:  # pragma: no branch
         res = canonicalize_name(res)
     return res
-
-
-def update_file(filename: Path, changes: Mapping[str, str]) -> None:
-    text = filename.read_text(encoding="utf-8")
-    for src, dst in changes.items():
-        text = text.replace(src, dst)
-    filename.write_text(text, encoding="utf-8")
 
 
 def calculate_update(

@@ -9,7 +9,7 @@ from bump_deps_index._spec import PkgType
 from ._base import Loader
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
 _BASE: Final[str] = "requirements"
 
@@ -21,6 +21,15 @@ class Requirements(Loader):
             and (filename.stem.split(".")[0] == _BASE or filename.stem.split("-")[0] == _BASE)
             and not (filename.suffix == ".txt" and filename.with_suffix(".in").exists())
         )
+
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
+        lines = filename.read_text(encoding="utf-8").split("\n")
+        result: list[str] = []
+        for line in lines:
+            if line.strip() and not line.strip().startswith("#") and not line.strip().startswith("-"):
+                line = self._apply_changes(line, changes)  # noqa: PLW2901
+            result.append(line)
+        filename.write_text("\n".join(result), encoding="utf-8")
 
     @cached_property
     def files(self) -> Iterator[Path]:
