@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import cached_property
 from pathlib import Path
 from tomllib import load as load_toml
@@ -10,7 +11,7 @@ from bump_deps_index._spec import PkgType
 from ._base import Loader
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
 _Section = dict[str, object]
 
@@ -25,6 +26,26 @@ class ToxToml(Loader):
 
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
+
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
+        lines = filename.read_text(encoding="utf-8").split("\n")
+        result: list[str] = []
+        in_deps_section = False
+        bracket_depth = 0
+        deps_pattern = re.compile(r"^(requires|deps)\s*=\s*\[")
+        for line in lines:
+            stripped = line.strip()
+            if deps_pattern.match(stripped):
+                in_deps_section = True
+                bracket_depth = stripped.count("[") - stripped.count("]")
+            elif in_deps_section:
+                bracket_depth += stripped.count("[") - stripped.count("]")
+            if in_deps_section:
+                line = self._apply_changes(line, changes)  # noqa: PLW2901
+            result.append(line)
+            if in_deps_section and bracket_depth == 0:
+                in_deps_section = False
+        filename.write_text("\n".join(result), encoding="utf-8")
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         pre = False if pre_release is None else pre_release

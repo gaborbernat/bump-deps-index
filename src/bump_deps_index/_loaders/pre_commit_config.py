@@ -11,7 +11,7 @@ from bump_deps_index._spec import PkgType
 from ._base import Loader
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
 
 class Hook(TypedDict):
@@ -36,6 +36,9 @@ class PreCommitConfig(Loader):
 
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
+
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
+        filename.write_text(self._apply_changes(filename.read_text(encoding="utf-8"), changes), encoding="utf-8")
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:  # noqa: PLR6301
         with filename.open("rt", encoding="utf-8") as file_handler:

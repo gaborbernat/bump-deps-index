@@ -6,6 +6,7 @@ from ._base import Loader
 from .pre_commit_config import PreCommitConfig
 from .pyproject_toml import PyProjectToml
 from .requirements import Requirements
+from .script_metadata import ScriptMetadata
 from .setup_cfg import SetupCfg
 from .tox_ini import ToxIni
 from .tox_toml import ToxToml
@@ -21,6 +22,7 @@ def get_loaders() -> list[Loader]:
         Requirements(),
         SetupCfg(),
         ToxIni(),
+        ScriptMetadata(),
     ]
 
 
