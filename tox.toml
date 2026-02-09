@@ -53,7 +53,7 @@ description = "Run Python type checker"
 commands = [
   [
     "pyright",
-    { replace = "posargs", extend = true, default = [  ] },
+    { replace = "posargs", extend = true, default = [] },
   ],
 ]
 
