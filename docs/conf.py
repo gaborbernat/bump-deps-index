@@ -11,7 +11,8 @@ import bump_deps_index
 from bump_deps_index import __version__
 
 if TYPE_CHECKING:
-    from docutils.nodes import Element
+    from docutils.nodes import Element, reference
+    from sphinx.addnodes import pending_xref
     from sphinx.application import Sphinx
     from sphinx.builders import Builder
     from sphinx.environment import BuildEnvironment
@@ -61,9 +62,9 @@ def setup(app: Sphinx) -> None:  # noqa: D103
             builder: Builder,
             type: str,  # noqa: A002
             target: str,
-            node: resolve_xref,
+            node: pending_xref,
             contnode: Element,
-        ) -> Element:
+        ) -> reference | None:
             # fixup some wrongly resolved mappings
             mapping = {
                 "pathlib._local.Path": "pathlib.Path",

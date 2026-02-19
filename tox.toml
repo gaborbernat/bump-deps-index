@@ -47,15 +47,9 @@ pass_env = [
 commands = [ [ "pre-commit", "run", "--all-files", "--show-diff-on-failure", { replace = "posargs", extend = true } ] ]
 
 [env.type]
-package = "editable"
 dependency_groups = [ "type" ]
-description = "Run Python type checker"
-commands = [
-  [
-    "pyright",
-    { replace = "posargs", extend = true, default = [] },
-  ],
-]
+description = "run type check on code base"
+commands = [ [ "ty", "check", "--output-format", "concise", "--error-on-warning", "." ] ]
 
 [env.docs]
 description = "Build documentation"
