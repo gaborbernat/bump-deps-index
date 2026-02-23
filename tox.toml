@@ -1,5 +1,5 @@
 requires = [ "tox>=4.30.3", "tox-uv>=1.28" ]
-env_list = [ "fix", "3.14t", "3.14", "3.13", "3.12", "3.11", "3.10", "type", "docs", "pkg_meta" ]
+env_list = [ "3.14", "3.13", "3.12", "3.11", "3.10", "3.14t", "docs", "fix", "pkg_meta", "type" ]
 skip_missing_interpreters = true
 
 [env_run_base]
@@ -31,25 +31,6 @@ commands = [
     ] },
   ],
 ]
-
-[env.fix]
-description = "format the code base to adhere to our styles, and complain about what we cannot do automatically"
-skip_install = true
-dependency_groups = [ "fix" ]
-pass_env = [
-  { replace = "ref", of = [
-    "env_run_base",
-    "pass_env",
-  ], extend = true },
-  "PROGRAMDATA",
-  "DISABLE_PRE_COMMIT_UV_PATCH",
-]
-commands = [ [ "pre-commit", "run", "--all-files", "--show-diff-on-failure", { replace = "posargs", extend = true } ] ]
-
-[env.type]
-dependency_groups = [ "type" ]
-description = "run type check on code base"
-commands = [ [ "ty", "check", "--output-format", "concise", "--error-on-warning", "." ] ]
 
 [env.docs]
 description = "Build documentation"
@@ -83,6 +64,20 @@ commands = [
   ],
 ]
 
+[env.fix]
+description = "format the code base to adhere to our styles, and complain about what we cannot do automatically"
+skip_install = true
+dependency_groups = [ "fix" ]
+pass_env = [
+  { replace = "ref", of = [
+    "env_run_base",
+    "pass_env",
+  ], extend = true },
+  "DISABLE_PRE_COMMIT_UV_PATCH",
+  "PROGRAMDATA",
+]
+commands = [ [ "pre-commit", "run", "--all-files", "--show-diff-on-failure", { replace = "posargs", extend = true } ] ]
+
 [env.pkg_meta]
 description = "check that the long description is valid"
 skip_install = true
@@ -108,6 +103,11 @@ commands = [
     "{env_tmp_dir}",
   ],
 ]
+
+[env.type]
+description = "run type check on code base"
+dependency_groups = [ "type" ]
+commands = [ [ "ty", "check", "--output-format", "concise", "--error-on-warning", "." ] ]
 
 [env.dev]
 description = "dev environment with all deps at {envdir}"
