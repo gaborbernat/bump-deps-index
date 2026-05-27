@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 
 
 class Loader(ABC):
-    @cached_property
     @abstractmethod
+    @cached_property
     def files(self) -> Iterator[Path]:
         raise NotImplementedError
 
