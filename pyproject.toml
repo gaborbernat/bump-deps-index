@@ -78,8 +78,8 @@ lint = [ "pre-commit-uv>=4.1.5" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=6.2", "uv>=0.8.22" ]
 
 [tool.hatch]
-build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
 version.source = "vcs"
+build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
 
 [tool.black]
 line-length = 120
@@ -131,11 +131,11 @@ environment.python-version = "3.14"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
-ini_options.verbosity_assertions = 2
 ini_options.filterwarnings = [
   "error",
   "ignore:unclosed database in <sqlite3.Connection object at:ResourceWarning",
 ]
+ini_options.verbosity_assertions = 2
 
 [tool.coverage]
 run.parallel = true
