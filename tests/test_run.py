@@ -189,6 +189,88 @@ def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     assert dest.read_text() == dedent(toml).lstrip()
 
 
+def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
+    # a deps list may hold tox native-TOML substitution tables; bump the deps reachable through every
+    # fallback branch (if then/else, posargs/env/glob default), transitively for nested substitutions,
+    # while leaving ref targets (bumped where defined) and substitution metadata (name/pattern) untouched
+    mapping = {n: f"{n}>=1" for n in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")}
+    mocker.patch(
+        "bump_deps_index._run.update_spec",
+        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+    )
+    dest = tmp_path / "tox.toml"
+    toml = """
+    requires = ["alpha"]
+
+    [env_run_base]
+    deps = [
+      { replace = "if", condition = "true", then = ["bravo"], else = ["charlie"], extend = true },
+      { replace = "posargs", default = ["delta"], extend = true },
+      { replace = "env", name = "X", default = "echo" },
+      { replace = "glob", pattern = "*.txt", default = ["foxtrot"], extend = true },
+      { replace = "ref", of = ["env_run_base", "deps"] },
+    ]
+
+    [env_base.matrix]
+    factors = [["py312", "py313"]]
+    deps = [
+      { replace = "if", condition = "true", then = [
+        { replace = "posargs", default = ["golf"], extend = true },
+      ], extend = true },
+    ]
+
+    [env.type]
+    deps = ["hotel"]
+    """
+    dest.write_text(dedent(toml).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert set(out.splitlines()) == {f"{n} -> {n}>=1" for n in mapping}
+
+    toml = """
+    requires = ["alpha>=1"]
+
+    [env_run_base]
+    deps = [
+      { replace = "if", condition = "true", then = ["bravo>=1"], else = ["charlie>=1"], extend = true },
+      { replace = "posargs", default = ["delta>=1"], extend = true },
+      { replace = "env", name = "X", default = "echo>=1" },
+      { replace = "glob", pattern = "*.txt", default = ["foxtrot>=1"], extend = true },
+      { replace = "ref", of = ["env_run_base", "deps"] },
+    ]
+
+    [env_base.matrix]
+    factors = [["py312", "py313"]]
+    deps = [
+      { replace = "if", condition = "true", then = [
+        { replace = "posargs", default = ["golf>=1"], extend = true },
+      ], extend = true },
+    ]
+
+    [env.type]
+    deps = ["hotel>=1"]
+    """
+    assert dest.read_text() == dedent(toml).lstrip()
+
+
+def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    # a non-table value under env/env_base is not a real environment; skip it instead of crashing
+    dest = tmp_path / "tox.toml"
+    toml = """
+    [env]
+    broken = "not-a-table"
+    """
+    dest.write_text(dedent(toml).lstrip())
+    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    out, err = capsys.readouterr()
+    assert not err
+    assert not set(out.splitlines())
+    assert dest.read_text() == dedent(toml).lstrip()
+
+
 def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"pytest>=7.0": "pytest>=8.0", "coverage>=6.0": "coverage>=7.0"}
     mocker.patch(
