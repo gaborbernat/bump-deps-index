@@ -40,8 +40,10 @@ def test_run_rejects_unsupported_file(tmp_path: Path) -> None:
     filename = tmp_path / "dependencies.json"
     filename.touch()
 
-    with pytest.raises(NotImplementedError, match=f"we do not support {filename}"):
+    with pytest.raises(NotImplementedError) as exception_info:
         run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[filename], pre_release="no"))
+
+    assert str(exception_info.value) == f"we do not support {filename}"
 
 
 def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
