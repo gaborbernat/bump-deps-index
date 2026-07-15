@@ -6,5 +6,4 @@ Index
 
    cli
    py_api
-   changelog
    self
