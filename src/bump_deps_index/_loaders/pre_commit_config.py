@@ -40,7 +40,7 @@ class PreCommitConfig(Loader):
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
         filename.write_text(self._apply_changes(filename.read_text(encoding="utf-8"), changes), encoding="utf-8")
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:  # noqa: PLR6301
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg = load_yaml(file_handler)
         pre = True if pre_release is None else pre_release
@@ -48,7 +48,9 @@ class PreCommitConfig(Loader):
         for repo in repos:
             for hook in repo["hooks"]:
                 for pkg in hook.get("additional_dependencies", []):
-                    yield pkg, PkgType.JS if "@" in pkg else PkgType.PYTHON, pre
+                    yield from self._generate(
+                        [pkg], pkg_type=PkgType.JS if "@" in pkg else PkgType.PYTHON, pre_release=pre
+                    )
 
 
 __all__ = [

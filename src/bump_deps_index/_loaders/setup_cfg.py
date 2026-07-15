@@ -5,6 +5,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from typing_extensions import override
+
 from bump_deps_index._spec import PkgType
 
 from ._base import Loader
@@ -14,8 +16,9 @@ if TYPE_CHECKING:
 
 
 class NoTransformConfigParser(RawConfigParser):
-    def optionxform(self, optionstr: str) -> str:  # noqa: PLR6301
-        """Disable default lower-casing."""
+    @override
+    def optionxform(self, optionstr: str) -> str:
+        """Preserve dependency names because package indexes treat punctuation as significant."""
         return optionstr
 
 
@@ -38,9 +41,11 @@ class SetupCfg(Loader):
             stripped = line.strip()
             if stripped.startswith("["):
                 in_deps_section = stripped in {"[options]", "[options.extras_require]"}
-            elif in_deps_section and stripped and not stripped.startswith("#"):
-                line = self._apply_changes(line, changes)  # noqa: PLW2901
-            result.append(line)
+            result.append(
+                self._apply_changes(line, changes)
+                if in_deps_section and stripped and not stripped.startswith("#")
+                else line
+            )
         filename.write_text("\n".join(result), encoding="utf-8")
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:

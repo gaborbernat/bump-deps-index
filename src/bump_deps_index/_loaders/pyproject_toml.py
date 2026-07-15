@@ -25,7 +25,7 @@ class PyProjectToml(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:  # noqa: PLR6301
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
         """Update only dependency sections in pyproject.toml."""
         content = filename.read_text(encoding="utf-8")
         lines = content.split("\n")
@@ -50,10 +50,7 @@ class PyProjectToml(Loader):
                     bracket_depth = stripped.count("[") - stripped.count("]")
             elif in_deps_section:
                 bracket_depth += stripped.count("[") - stripped.count("]")
-            if in_deps_section:
-                for src, dst in changes.items():
-                    line = line.replace(src, dst)  # noqa: PLW2901
-            result_lines.append(line)
+            result_lines.append(self._apply_changes(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
         filename.write_text("\n".join(result_lines), encoding="utf-8")

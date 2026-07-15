@@ -42,6 +42,7 @@ dependencies = [
   "packaging>=25",
   "pyyaml>=6.0.3",
   "truststore>=0.10.4",
+  "typing-extensions>=4.4",
 ]
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"

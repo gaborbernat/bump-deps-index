@@ -1,11 +1,9 @@
-"""Documentation generation configuration."""  # noqa: INP001
+"""Documentation generation configuration."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-
-from sphinx.domains.python import PythonDomain
 
 import bump_deps_index
 from bump_deps_index import __version__
@@ -14,13 +12,12 @@ if TYPE_CHECKING:
     from docutils.nodes import Element, reference
     from sphinx.addnodes import pending_xref
     from sphinx.application import Sphinx
-    from sphinx.builders import Builder
     from sphinx.environment import BuildEnvironment
 
 
 project = name = "bumps-deps-index"
 now = datetime.now(tz=UTC)
-copyright = f"2022-{now.year}"  # noqa: A001
+globals()["copyright"] = f"2022-{now.year}"
 version, release = __version__, __version__.split("+")[0]
 
 extensions = [
@@ -53,24 +50,19 @@ for module in (bump_deps_index,):
             inheritance_alias[of] = f"{module.__name__}.{entry}"
 
 
-def setup(app: Sphinx) -> None:  # noqa: D103
-    class PatchedPythonDomain(PythonDomain):
-        def resolve_xref(  # noqa: PLR0913,PLR0917
-            self,
-            env: BuildEnvironment,
-            fromdocname: str,
-            builder: Builder,
-            type: str,  # noqa: A002
-            target: str,
-            node: pending_xref,
-            contnode: Element,
-        ) -> reference | None:
-            # fixup some wrongly resolved mappings
-            mapping = {
-                "pathlib._local.Path": "pathlib.Path",
-            }
-            if target in mapping:
-                target = node["reftarget"] = mapping[target]
-            return super().resolve_xref(env, fromdocname, builder, type, target, node, contnode)
+def setup(app: Sphinx) -> None:
+    """Sphinx resolves pathlib.Path to an undocumented private alias without this hook."""
+    app.connect("missing-reference", _resolve_private_path)
 
-    app.add_domain(PatchedPythonDomain, override=True)
+
+def _resolve_private_path(
+    app: Sphinx,
+    env: BuildEnvironment,
+    node: pending_xref,
+    contnode: Element,
+) -> reference | None:
+    if node["reftarget"] != "pathlib._local.Path":
+        return None
+    node["reftarget"] = "pathlib.Path"
+    domain = env.get_domain("py")
+    return domain.resolve_xref(env, node["refdoc"], app.builder, node["reftype"], node["reftarget"], node, contnode)

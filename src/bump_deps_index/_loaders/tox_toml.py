@@ -43,9 +43,7 @@ class ToxToml(Loader):
                 bracket_depth = stripped.count("[") - stripped.count("]")
             elif in_deps_section:
                 bracket_depth += stripped.count("[") - stripped.count("]")
-            if in_deps_section:
-                line = self._apply_changes(line, changes)  # noqa: PLW2901
-            result.append(line)
+            result.append(self._apply_changes(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
         filename.write_text("\n".join(result), encoding="utf-8")

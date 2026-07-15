@@ -39,7 +39,8 @@ class Loader(ABC):
     def _generate(
         generator: Iterable[str],
         pkg_type: PkgType,
-        pre_release: bool = False,  # noqa: FBT001, FBT002
+        *,
+        pre_release: bool = False,
     ) -> Iterator[tuple[str, PkgType, bool]]:
         for value in generator:
             yield value, pkg_type, pre_release

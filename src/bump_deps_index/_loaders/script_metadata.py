@@ -33,7 +33,7 @@ class ScriptMetadata(Loader):
         """Check if file is a Python script with metadata."""
         return filename.suffix == ".py" and self._has_script_metadata(filename)
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:  # noqa: PLR6301
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
         """Update only the script metadata block, not the rest of the file."""
         content = filename.read_text(encoding="utf-8")
         lines = content.split("\n")
@@ -47,18 +47,19 @@ class ScriptMetadata(Loader):
         if start_idx is None or end_idx is None:
             return
         block = "\n".join(lines[start_idx:end_idx])
-        for src, dst in changes.items():
-            block = block.replace(src, dst)
+        block = self._apply_changes(block, changes)
         lines[start_idx:end_idx] = block.split("\n")
         filename.write_text("\n".join(lines), encoding="utf-8")
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:  # noqa: ARG002
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         """Extract dependencies from script metadata block."""
         if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:
             return
         try:
             yield from self._generate(
-                load_toml(io.BytesIO(toml_str.encode("utf-8"))).get("dependencies", []), pkg_type=PkgType.PYTHON
+                load_toml(io.BytesIO(toml_str.encode("utf-8"))).get("dependencies", []),
+                pkg_type=PkgType.PYTHON,
+                pre_release=False if pre_release is None else pre_release,
             )
         except TOMLDecodeError:
             return

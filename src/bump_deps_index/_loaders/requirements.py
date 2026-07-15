@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, ClassVar
 
 from bump_deps_index._spec import PkgType
 
@@ -11,24 +11,23 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-_BASE: Final[str] = "requirements"
-
 
 class Requirements(Loader):
-    def supports(self, filename: Path) -> bool:  # noqa: PLR6301
+    _base: ClassVar[str] = "requirements"
+
+    def supports(self, filename: Path) -> bool:
         return (
             filename.suffix in {".in", ".txt"}
-            and (filename.stem.split(".")[0] == _BASE or filename.stem.split("-")[0] == _BASE)
+            and (filename.stem.split(".")[0] == self._base or filename.stem.split("-")[0] == self._base)
             and not (filename.suffix == ".txt" and filename.with_suffix(".in").exists())
         )
 
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
         lines = filename.read_text(encoding="utf-8").split("\n")
-        result: list[str] = []
-        for line in lines:
-            if line.strip() and not line.strip().startswith("#") and not line.strip().startswith("-"):
-                line = self._apply_changes(line, changes)  # noqa: PLW2901
-            result.append(line)
+        result = [
+            self._apply_changes(line, changes) if line.strip() and not line.strip().startswith(("#", "-")) else line
+            for line in lines
+        ]
         filename.write_text("\n".join(result), encoding="utf-8")
 
     @cached_property
@@ -37,7 +36,8 @@ class Requirements(Loader):
         found = {
             f
             for f in Path.cwd().iterdir()
-            if (f.stem.split(".")[0] == _BASE or f.stem.split("-")[0] == _BASE) and f.suffix in {".in", ".txt"}
+            if (f.stem.split(".")[0] == self._base or f.stem.split("-")[0] == self._base)
+            and f.suffix in {".in", ".txt"}
         }
         existing_names = {f.name for f in found}
 
