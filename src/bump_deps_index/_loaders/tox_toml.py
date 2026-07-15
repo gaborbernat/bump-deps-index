@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import re
-from functools import cached_property
 from pathlib import Path
 from tomllib import load as load_toml
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
 
 from bump_deps_index._spec import PkgType
 
@@ -16,16 +15,16 @@ if TYPE_CHECKING:
 
     TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
-_NESTED: frozenset[str] = frozenset({"env", "env_base"})
+_NESTED: Final = frozenset({"env", "env_base"})
 
 
 class ToxToml(Loader):
     _filename: ClassVar[str] = "tox.toml"
 
-    @cached_property
+    @property
     def files(self) -> Iterator[Path]:
         if (path := Path.cwd() / self._filename).exists():
-            yield path  # pragma: no cover # false positive
+            yield path
 
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
@@ -43,7 +42,7 @@ class ToxToml(Loader):
                 bracket_depth = stripped.count("[") - stripped.count("]")
             elif in_deps_section:
                 bracket_depth += stripped.count("[") - stripped.count("]")
-            result.append(self._apply_changes(line, changes) if in_deps_section else line)
+            result.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
         filename.write_text("\n".join(result), encoding="utf-8")
@@ -72,15 +71,7 @@ class ToxToml(Loader):
 
     @classmethod
     def _specs(cls, value: TomlValue) -> list[str]:
-        """
-        Collect requirement strings from a tox ``requires``/``deps`` value.
-
-        tox native TOML lets a list hold inline-table substitutions alongside plain strings. A spec can only live in
-        the branches a substitution may fall back to: ``if`` (``then``/``else``), ``posargs``/``env``/``glob``
-        (``default``); these are followed transitively so nested substitutions are bumped too. ``ref`` points at
-        another config key bumped where it is defined, so it carries no inline spec. Flag entries (``-r ...``) and
-        ``{...}`` references are skipped, matching the tox.ini loader.
-        """
+        """Collect dependencies from nested tox substitution fallbacks."""
         found: list[str] = []
         cls._collect(value, found)
         return found

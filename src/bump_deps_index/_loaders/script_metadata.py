@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-from functools import cached_property
 from pathlib import Path
 from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
@@ -16,11 +15,8 @@ if TYPE_CHECKING:
 
 
 class ScriptMetadata(Loader):
-    """Loader for PEP-723 inline script metadata."""
-
-    @cached_property
+    @property
     def files(self) -> Iterator[Path]:
-        """Find .py files with script metadata blocks."""
         for path in Path.cwd().iterdir():
             if path.is_file() and path.suffix == ".py":
                 try:
@@ -30,11 +26,9 @@ class ScriptMetadata(Loader):
                     continue
 
     def supports(self, filename: Path) -> bool:
-        """Check if file is a Python script with metadata."""
         return filename.suffix == ".py" and self._has_script_metadata(filename)
 
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        """Update only the script metadata block, not the rest of the file."""
         content = filename.read_text(encoding="utf-8")
         lines = content.split("\n")
         start_idx = end_idx = None
@@ -47,12 +41,11 @@ class ScriptMetadata(Loader):
         if start_idx is None or end_idx is None:
             return
         block = "\n".join(lines[start_idx:end_idx])
-        block = self._apply_changes(block, changes)
+        block = self._replace_quoted(block, changes)
         lines[start_idx:end_idx] = block.split("\n")
         filename.write_text("\n".join(lines), encoding="utf-8")
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-        """Extract dependencies from script metadata block."""
         if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:
             return
         try:
@@ -66,7 +59,6 @@ class ScriptMetadata(Loader):
 
     @staticmethod
     def _extract_toml_from_comments(content: str) -> str | None:
-        """Extract TOML content from # /// script block."""
         lines = content.split("\n")
         start_idx = end_idx = None
         for i, line in enumerate(lines):
@@ -89,7 +81,6 @@ class ScriptMetadata(Loader):
 
     @staticmethod
     def _has_script_metadata(file_path: Path) -> bool:
-        """Quick check if file contains script metadata marker."""
         try:
             return "# /// script" in file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):

@@ -14,7 +14,6 @@ from .tox_toml import ToxToml
 
 @cache
 def get_loaders() -> list[Loader]:
-    """Return a list of all available loaders."""
     return [
         PreCommitConfig(),
         PyProjectToml(),

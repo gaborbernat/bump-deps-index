@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from collections import deque
 from dataclasses import dataclass
@@ -8,9 +9,17 @@ from functools import cache
 from html.parser import HTMLParser
 from threading import Lock
 from typing import TYPE_CHECKING, Final
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
+from packaging.utils import (
+    InvalidSdistFilename,
+    InvalidWheelFilename,
+    canonicalize_name,
+    parse_sdist_filename,
+    parse_wheel_filename,
+)
 from packaging.version import Version
 
 if TYPE_CHECKING:
@@ -46,68 +55,98 @@ _JS_LOCK: Final[Lock] = Lock()
 
 @cache
 def print_index(of_type: str, registry: str) -> None:
-    sys.stdout.write(f"Using {of_type} index: {registry}\n")
+    sys.stdout.write(f"Using {of_type} index: {redact_url(registry)}\n")
+
+
+def redact_url(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc.rpartition("@")[2], parsed.path, parsed.query, parsed.fragment))
+
+
+def package_type(spec: str) -> PkgType:
+    try:
+        requirement = Requirement(spec)
+    except ValueError:
+        return PkgType.JS
+    return PkgType.PYTHON if requirement.url is None or urlsplit(requirement.url).scheme else PkgType.JS
 
 
 def update_js(client: Client, npm_registry: str, spec: str, *, pre_release: bool) -> str:
     ver_at = spec.rfind("@")
     package = spec[: len(spec) if ver_at in {-1, 0} else ver_at]
     version = get_js_pkgs(client, npm_registry, package, pre_release=pre_release)[0]
-    ver = str(version)
-    while ver.endswith(".0"):
-        ver = ver[:-2]
-    return f"{package}@{ver}"
+    return f"{package}@{version}"
+
+
+_SEMVER: Final = re.compile(
+    r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+
+
+def _semver_key(version: str) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]] | None:
+    if (match := _SEMVER.fullmatch(version)) is None:
+        return None
+    pre = match["pre"]
+    identifiers = tuple((0, int(value)) if value.isdecimal() else (1, value) for value in pre.split(".")) if pre else ()
+    return int(match["major"]), int(match["minor"]), int(match["patch"]), int(pre is None), identifiers
 
 
 def get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release: bool) -> list[str]:
-    info = client.get(f"{npm_registry}/{package}", follow_redirects=True).json()
-    found: list[Version] = []
-    for version_str in info["versions"]:
-        try:
-            version = Version(version_str)
-        except ValueError:
-            continue
-        if pre_release or not version.is_prerelease:
-            found.append(version)
-    return [str(i) for i in sorted(found, reverse=True)]
+    response = client.get(f"{npm_registry.rstrip('/')}/{quote(package, safe='@')}", follow_redirects=True)
+    response.raise_for_status()
+    info = response.json()
+    found = [
+        (key, version)
+        for version in info["versions"]
+        if (key := _semver_key(version)) is not None and (pre_release or key[3] == 1)
+    ]
+    return [version for _, version in sorted(found, reverse=True)]
 
 
 def update_python(client: Client, spec: str, config: UpdateConfig) -> str:
-    req = Requirement(spec)
-    eq = any(s for s in req.specifier if s.operator == "==")
+    requirement = Requirement(spec)
+    if requirement.url is not None:
+        return spec
+    exact_operator = next(
+        (specifier.operator for specifier in requirement.specifier if specifier.operator in {"==", "==="}), None
+    )
     for version in get_pkgs(
         client,
         config.index_url,
-        req.name,
+        requirement.name,
         pre_release=config.pre_release,
         python_version=config.python_version,
     ):
-        if eq or all(s.contains(str(version)) for s in req.specifier):
+        if exact_operator is not None or requirement.specifier.contains(version, prereleases=config.pre_release):
             break
     else:
         return spec
-    ver = str(version)
-    ver = ver.partition("+")[0]  # strip build numbers
-    while ver.endswith(".0"):
-        ver = ver[:-2]
-    c_ver = next(
-        (s.version for s in req.specifier if (s.operator == ">=" and not eq) or (eq and s.operator == "==")),
+    candidate_version = str(version).partition("+")[0]
+    while candidate_version.endswith(".0"):
+        candidate_version = candidate_version[:-2]
+    current_version = next(
+        (
+            specifier.version
+            for specifier in requirement.specifier
+            if (specifier.operator == ">=" and exact_operator is None) or specifier.operator == exact_operator
+        ),
         None,
     )
-    if c_ver is None:
-        new_ver = req.name
-        if req.extras:
-            new_ver = f"{new_ver}[{', '.join(req.extras)}]"
-        new_ver = f"{new_ver}{',' if req.specifier else ''}>={ver}"
-        if req.marker:
-            new_ver = f"{new_ver};{req.marker}"
-        new_req = str(Requirement(new_ver))
+    if current_version is None:
+        new_spec = requirement.name
+        if requirement.extras:
+            new_spec = f"{new_spec}[{', '.join(sorted(requirement.extras))}]"
+        new_spec = f"{new_spec}{requirement.specifier}{',' if requirement.specifier else ''}>={candidate_version}"
+        if requirement.marker:
+            new_spec = f"{new_spec};{requirement.marker}"
+        new_requirement = str(Requirement(new_spec))
     else:
-        op = "==" if eq else ">="
-        new_req = str(req).replace(f"{op}{c_ver}", f"{op}{ver}")
+        operator = exact_operator or ">="
+        new_requirement = str(requirement).replace(f"{operator}{current_version}", f"{operator}{candidate_version}")
     if "'" in spec:
-        new_req = new_req.replace('"', "'")
-    return new_req
+        new_requirement = new_requirement.replace('"', "'")
+    return new_requirement
 
 
 class IndexParser(HTMLParser):
@@ -126,7 +165,7 @@ class IndexParser(HTMLParser):
         self._attrs = attrs
 
     def handle_endtag(self, tag: str) -> None:
-        if self._at_tag and self._at_tag[-1] == tag:  # pragma: no branch
+        if self._at_tag and self._at_tag[-1] == tag:
             self._at_tag.pop()
         self._attrs = []
 
@@ -149,10 +188,11 @@ def get_pkgs(
     pre_release: bool,
     python_version: Version | None = None,
 ) -> list[Version]:
-    text = client.get(f"{index_url}/{package}/", follow_redirects=True).text
+    response = client.get(f"{index_url.rstrip('/')}/{canonicalize_name(package)}/", follow_redirects=True)
+    response.raise_for_status()
     versions: set[Version] = set()
     parser = IndexParser()
-    parser.feed(text)
+    parser.feed(response.text)
     for raw_file, requires_python in parser.files:
         if (
             python_version is not None
@@ -160,28 +200,28 @@ def get_pkgs(
             and not SpecifierSet(requires_python).contains(python_version)
         ):
             continue
-        file = raw_file
-        file = file.removesuffix(".tar.bz2")
-        file = file.removesuffix(".tar.gz")
-        file = file.removesuffix(".whl")
-        file = file.removesuffix(".zip")
-        parts = file.split("-")
-        for part in parts[1:]:
-            if part.split(".")[0].isnumeric():
-                break
-        else:
-            continue
         try:
-            version = Version(part)
-        except ValueError:
-            pass
+            version = _version_from_file(raw_file)
+        except (InvalidSdistFilename, InvalidWheelFilename, IndexError, ValueError):
+            continue
         else:
             versions.add(version)
     return sorted((v for v in versions if (True if pre_release else not v.is_prerelease)), reverse=True)
 
 
+def _version_from_file(filename: str) -> Version:
+    if filename.endswith(".whl"):
+        return parse_wheel_filename(filename)[1]
+    if filename.endswith((".tar.gz", ".zip")):
+        return parse_sdist_filename(filename)[1]
+    file = filename.removesuffix(".tar.bz2").removesuffix(".whl")
+    return Version(file.rsplit("-", 1)[1])
+
+
 __all__ = [
     "PkgType",
     "UpdateConfig",
+    "package_type",
+    "redact_url",
     "update",
 ]
