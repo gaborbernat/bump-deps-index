@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from bump_deps_index._loaders import get_loaders
+from bump_deps_index._spec import redact_url
 from bump_deps_index.version import version
 
 if TYPE_CHECKING:
@@ -46,10 +47,10 @@ def _build_parser() -> ArgumentParser:
     epilog = f"running {version} at {Path(__file__).parent}"
     parser = ArgumentParser(prog="bump-deps-index", formatter_class=_HelpFormatter, epilog=epilog)
     index_url = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple")
-    msg = f"PyPI index URL to target (default: {index_url})"
+    msg = f"PyPI index URL to target (default: {redact_url(index_url)})"
     parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
     npm_registry = os.environ.get("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
-    msg = f"NPM registry (default: {npm_registry})"
+    msg = f"NPM registry (default: {redact_url(npm_registry)})"
     parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=npm_registry, help=msg)
     msg = "accept pre-release versions"
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)

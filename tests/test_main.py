@@ -5,10 +5,11 @@ from pathlib import Path
 from subprocess import check_call
 from typing import TYPE_CHECKING
 
+import pytest
+
 from bump_deps_index import Options, main
 
 if TYPE_CHECKING:
-    import pytest
     from pytest_mock import MockerFixture
 
 
@@ -38,3 +39,13 @@ def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_pat
         pre_release="file-default",
     )
     run.assert_called_once_with(opt)
+
+
+def test_main_exits_on_failed_update(mocker: MockerFixture) -> None:
+    mocker.patch("bump_deps_index.parse_cli")
+    mocker.patch("bump_deps_index.run", return_value=False)
+
+    with pytest.raises(SystemExit) as error:
+        main([])
+
+    assert error.value.code == 1
