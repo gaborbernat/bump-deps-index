@@ -95,26 +95,24 @@ lint.select = [
   "ALL",
 ]
 lint.ignore = [
-  "ANN401", # allow Any as type annotation
   "COM812", # Conflict with formatter
-  "CPY",    # No copyright statements
+  "CPY",    # The project does not add copyright headers to individual files
   "D203",   # `one-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible
   "D212",   # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible
-  "DOC",    # no support
+  "DOC",    # Public API documentation is generated from signatures
   "ISC001", # Conflict with formatter
   "RUF067", # `__init__` module should only contain docstrings and re-exports
-  "S104",   # Possible binding to all interface
 ]
 lint.per-file-ignores."tests/**/*.py" = [
-  "D",       # don't care about documentation in tests
-  "FBT",     # don't care about booleans as positional arguments in tests
-  "INP001",  # no implicit namespace
-  "PLC2701", # Private name import
-  "PLR0917", # Too many positional arguments
-  "PLR2004", # Magic value used in comparison, consider replacing with a constant variable
-  "S101",    # asserts allowed in tests
-  "S404",    # `subprocess` module is possibly insecure
-  "S603",    # `subprocess` call: check for execution of untrusted input
+  "D",       # Test names document behavior
+  "FBT",     # Boolean parameters keep parameterized cases compact
+  "INP001",  # The tests directory is not a package
+  "PLC2701", # Tests cover private parsing boundaries directly
+  "PLR0917", # Test inputs favor explicit parameters over setup objects
+  "PLR2004", # Literal expected values keep assertions local
+  "S101",    # Tests use assertions
+  "S404",    # Entry-point tests invoke a local Python executable
+  "S603",    # Entry-point arguments are fixed by the tests
 ]
 lint.isort = { known-first-party = [
   "bump_deps_index",
@@ -128,7 +126,7 @@ builtin = "clear,usage,en-GB_to_en-US"
 count = true
 
 [tool.ty]
-environment.python-version = "3.14"
+environment.python-version = "3.11"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]

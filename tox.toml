@@ -1,5 +1,5 @@
 requires = [ "tox>=4.30.3", "tox-uv>=1.28" ]
-env_list = [ "3.14", "3.13", "3.12", "3.11", "3.10", "3.14t", "docs", "fix", "pkg_meta", "type" ]
+env_list = [ "3.14", "3.13", "3.12", "3.11", "3.14t", "docs", "fix", "pkg_meta", "type" ]
 skip_missing_interpreters = true
 
 [env_run_base]
@@ -39,7 +39,7 @@ commands = [
   [
     "python",
     "-c",
-    "import glob; import subprocess; subprocess.call(['proselint'] + glob.glob('docs/*.rst'))",
+    "import glob; import subprocess; subprocess.check_call(['proselint', 'check', *glob.glob('docs/*.rst')])",
   ],
   [
     "sphinx-build",
@@ -67,7 +67,7 @@ commands = [
 [env.fix]
 description = "format the code base to adhere to our styles, and complain about what we cannot do automatically"
 skip_install = true
-dependency_groups = [ "fix" ]
+dependency_groups = [ "lint" ]
 pass_env = [
   { replace = "ref", of = [
     "env_run_base",

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from sphinx.environment import BuildEnvironment
 
 
-project = name = "bumps-deps-index"
+project = name = "bump-deps-index"
 now = datetime.now(tz=UTC)
 globals()["copyright"] = f"2022-{now.year}"
 version, release = __version__, __version__.split("+")[0]
@@ -31,14 +31,14 @@ extensions = [
 master_doc, source_suffix = "index", ".rst"
 
 html_theme = "furo"
-html_title, html_last_updated_fmt = "Bump PyPI deps from index", now.isoformat()
+html_title, html_last_updated_fmt = "Bump dependencies from package indexes", now.isoformat()
 pygments_style, pygments_dark_style = "sphinx", "monokai"
 
 autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "description", "short"
 inheritance_alias, inheritance_graph_attrs = {}, {"rankdir": "TB"}
 autodoc_default_options = {"members": True, "member-order": "bysource", "undoc-members": True, "show-inheritance": True}
 
-intersphinx_mapping = {"python": ("https://docs.python.org/3.10", None)}
+intersphinx_mapping = {"python": ("https://docs.python.org/3.11", None)}
 nitpicky = True
 nitpick_ignore = []
 
