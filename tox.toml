@@ -16,7 +16,7 @@ commands = [
     { replace = "posargs", default = [
       "--no-cov-on-fail",
       "--cov",
-      "{env_site_packages_dir}{/}bump_deps_index",
+      "bump_deps_index",
       "--cov",
       "{tox_root}{/}tests",
       "--cov-config",
