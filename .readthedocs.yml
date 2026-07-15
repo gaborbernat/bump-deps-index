@@ -1,7 +1,8 @@
 version: 2
 build:
   os: ubuntu-lts-latest
-  tools: {}
+  tools:
+    python: "3.14"
   commands:
     - python -m pip install uv==0.8.22
     - python -m uv tool install tox==4.30.3 --with tox-uv==1.28 -p 3.14 --managed-python
