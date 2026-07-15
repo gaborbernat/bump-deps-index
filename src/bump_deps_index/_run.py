@@ -7,14 +7,16 @@ from pathlib import Path
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
-from httpx import Client, Limits
+from httpx import Client, HTTPError, Limits
 from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 from truststore import SSLContext
 
 from bump_deps_index._loaders import get_loaders
 
-from ._spec import PkgType
+from ._spec import PkgType, UpdateConfig
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
@@ -30,17 +32,17 @@ def run(opt: Options) -> None:
     :param opt: the configuration namespace
     """
     pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
+    project, python_version = get_project()
 
     if opt.pkgs:
         pre_release = False if pre_release is None else pre_release
         specs: list[tuple[str, PkgType, bool]] = list({
             (i.strip(), PkgType.JS if "@" in i else PkgType.PYTHON, pre_release): None for i in opt.pkgs
         })
-        calculate_update(opt.index_url, opt.npm_registry, specs)
+        calculate_update(opt.index_url, opt.npm_registry, specs, python_version)
         return
 
     for filename in opt.filenames:
-        project = get_project()
         for loader in get_loaders():
             if loader.supports(filename):
                 specs = list({
@@ -48,7 +50,7 @@ def run(opt: Options) -> None:
                     for name, typ, pkg in loader.load(filename, pre_release=pre_release)
                     if name.strip() and ("@" in name or Requirement(name.strip()).name != project)
                 })
-                changes = calculate_update(opt.index_url, opt.npm_registry, specs)
+                changes = calculate_update(opt.index_url, opt.npm_registry, specs, python_version)
                 loader.update_file(filename, changes)
                 break
         else:
@@ -56,20 +58,38 @@ def run(opt: Options) -> None:
             raise NotImplementedError(msg)  # pragma: no cover
 
 
-def get_project() -> str | None:
+def get_project() -> tuple[str | None, Version | None]:
     if not (pyproject := Path.cwd() / "pyproject.toml").exists():
-        return None
+        return None, None
     with pyproject.open("rb") as file_handler:
         cfg = load_toml(file_handler)
-    if (res := cfg.get("project", {}).get("name")) is not None:  # pragma: no branch
-        res = canonicalize_name(res)
-    return res
+    project = cfg.get("project", {})
+    name = project.get("name")
+    return canonicalize_name(name) if name is not None else None, _python_floor(project.get("requires-python"))
+
+
+def _python_floor(requires_python: str | None) -> Version | None:
+    bounds = [
+        _lower_bound(specifier.operator, specifier.version)
+        for specifier in SpecifierSet(requires_python or "")
+        if specifier.operator in {"==", ">", ">=", "~="}
+    ]
+    return max(bounds, default=None)
+
+
+def _lower_bound(operator: str, raw_version: str) -> Version:
+    version = Version(raw_version.removesuffix(".*"))
+    if operator != ">":
+        return version
+    release = (*version.release, *(0 for _ in range(3 - len(version.release))))
+    return Version(".".join(str(part) for part in (*release[:-1], release[-1] + 1)))
 
 
 def calculate_update(
     index_url: str,
     npm_registry: str,
     specs: Sequence[tuple[str, PkgType, bool]],
+    python_version: Version | None,
 ) -> Mapping[str, str]:
     changes: dict[str, str] = {}
     if specs:
@@ -81,18 +101,29 @@ def calculate_update(
         with ThreadPoolExecutor(max_workers=parallel) as executor:
             # Start the load operations and mark each future with its URL
             future_to_url = {
-                executor.submit(update_spec, client, index_url, npm_registry, pkg, pkg_type, pre_release): pkg
+                executor.submit(
+                    update_spec,
+                    client,
+                    pkg,
+                    pkg_type,
+                    UpdateConfig(
+                        index_url=index_url,
+                        npm_registry=npm_registry,
+                        pre_release=pre_release,
+                        python_version=python_version,
+                    ),
+                ): pkg
                 for pkg, pkg_type, pre_release in specs
             }
             for future in as_completed(future_to_url):
                 spec = future_to_url[future]
                 try:
                     res = future.result()
-                except Exception as exc:  # noqa: BLE001
-                    print(f"failed {spec} with {exc!r}", file=sys.stderr)  # noqa: T201
+                except (HTTPError, IndexError, KeyError, ValueError) as exc:
+                    sys.stderr.write(f"failed {spec} with {exc!r}\n")
                 else:
                     changes[spec] = res
-                    print(f"{spec}{f' -> {res}' if res != spec else ''}")  # noqa: T201
+                    sys.stdout.write(f"{spec}{f' -> {res}' if res != spec else ''}\n")
     return changes
 
 

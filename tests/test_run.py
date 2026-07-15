@@ -5,14 +5,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 from httpx import Client
+from packaging.version import Version
 
 from bump_deps_index import Options, main, run
 from bump_deps_index._loaders import get_loaders
-from bump_deps_index._spec import PkgType
+from bump_deps_index._spec import PkgType, UpdateConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest_httpx import HTTPXMock
     from pytest_mock import MockerFixture
 
 
@@ -20,7 +22,7 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
     mapping = {"A": "A>=1", "B": "B"}
     update_spec = mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
 
     run(
@@ -39,21 +41,41 @@ def test_run_args(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> 
 
     found: set[tuple[str, PkgType]] = set()
     for called in update_spec.call_args_list:
-        assert len(called.args) == 6
+        assert len(called.args) == 4
         assert isinstance(called.args[0], Client)
-        assert called.args[1] == "https://pypi.org/simple"
-        assert called.args[2] == "N"
-        found.add((called.args[3], called.args[4]))
-        assert called.args[5] is False
+        found.add((called.args[1], called.args[2]))
+        assert called.args[3] == UpdateConfig(
+            index_url="https://pypi.org/simple",
+            npm_registry="N",
+            pre_release=False,
+            python_version=Version("3.11"),
+        )
         assert not called.kwargs
     assert found == {("C", PkgType.PYTHON), ("B", PkgType.PYTHON), ("A", PkgType.PYTHON)}
+
+
+def test_run_args_without_pyproject_keeps_index_selection(
+    capsys: pytest.CaptureFixture[str],
+    httpx_mock: HTTPXMock,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    httpx_mock.add_response(
+        url="https://I.com/A/",
+        text='<a data-requires-python="&gt;=4">A-2.tar.gz</a>',
+    )
+
+    run(Options(index_url="https://I.com", npm_registry="", pkgs=["A"], filenames=None, pre_release="no"))
+
+    assert "A -> A>=2" in capsys.readouterr().out.splitlines()
 
 
 def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
     mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=1", "E": "E>=3", "F": "F>=4"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "pyproject.toml"
     toml = """
@@ -88,13 +110,53 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     assert dest.read_text() == dedent(toml).lstrip()
 
 
+@pytest.mark.parametrize(
+    ("requires_python", "expected"),
+    [
+        pytest.param(None, "A>=2", id="missing"),
+        pytest.param(">=3.9", "A>=0.9", id="inclusive-floor"),
+        pytest.param(">3.9", "A>=1", id="exclusive-floor"),
+    ],
+)
+def test_run_pyproject_toml_respects_requires_python(
+    httpx_mock: HTTPXMock,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    requires_python: str | None,
+    expected: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    dest = tmp_path / "pyproject.toml"
+    requires_python_line = f'requires-python = "{requires_python}"' if requires_python is not None else ""
+    toml = f"""
+    [project]
+    name = "demo"
+    {requires_python_line}
+    dependencies = ["A"]
+    """
+    dest.write_text(dedent(toml).lstrip())
+    httpx_mock.add_response(
+        url="https://I.com/A/",
+        text="""
+        <a data-requires-python="&gt;=3.10">A-2.tar.gz</a>
+        <a data-requires-python="&gt;=3.10">A-1-py3-none-any.whl</a>
+        <a data-requires-python="&gt;=3.9.1">A-1.tar.gz</a>
+        <a data-requires-python="&gt;=3.9">A-0.9.tar.gz</a>
+        """,
+    )
+
+    run(Options(index_url="https://I.com", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    assert dest.read_text() == dedent(toml).lstrip().replace('dependencies = ["A"]', f'dependencies = ["{expected}"]')
+
+
 def test_run_pyproject_toml_multiline(
     capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path
 ) -> None:
     mapping = {"requests>=2.28": "requests>=2.30", "httpx>=0.27": "httpx>=0.28"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "pyproject.toml"
     toml = """
@@ -123,7 +185,7 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp
     mapping = {"A": "A>=1"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "tox.toml"
     toml = """
@@ -146,7 +208,7 @@ def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     mapping = {"A": "A>=1", "B": "B>=2", "C": "C>=3", "D": "D>=4"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "tox.toml"
     toml = """
@@ -196,7 +258,7 @@ def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], mocker: Mock
     mapping = {n: f"{n}>=1" for n in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "tox.toml"
     toml = """
@@ -275,7 +337,7 @@ def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     mapping = {"pytest>=7.0": "pytest>=8.0", "coverage>=6.0": "coverage>=7.0"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "tox.toml"
     toml = """
@@ -312,7 +374,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, 
     mapping = {"A": "A>=1", "B==2": "B==1", "C": "C>=3"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "tox.ini"
     tox_ini = """
@@ -370,7 +432,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     mapping = {"A": "A>=1", "B": "B==1", "C": "C>=3"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "setup.cfg"
     setup_cfg = """
@@ -422,7 +484,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], mocker: MockerFixtur
     }
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / ".pre-commit-config.yaml"
     setup_cfg = """
@@ -491,7 +553,7 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
     mapping = {"A": "A>=1", "B==1": "B==2"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "requirements.txt"
     req_txt = """
@@ -518,7 +580,7 @@ def test_run_requirements_txt_skip_options(
     mapping = {"A": "A>=1"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "requirements.txt"
     req_txt = """
@@ -563,7 +625,7 @@ def test_run_requirements_txt_in(
     mapping = {"A": "A>=1", "B==1": "B==2"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     (tmp_path / f"{filename}.txt").write_text("C")
     dest = tmp_path / f"{filename}.in"
@@ -596,7 +658,7 @@ def test_run_script_metadata(capsys: pytest.CaptureFixture[str], mocker: MockerF
     mapping = {"rich>=13.9.4": "rich>=13.9.5", "orjson>=3.10.13": "orjson>=3.10.14"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """
@@ -646,7 +708,7 @@ def test_script_metadata_ignores_requires_python(
     mapping = {"requests>=2.28": "requests>=2.30"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """
@@ -744,7 +806,7 @@ def test_script_metadata_with_extras(
     mapping = {"requests[security]>=2.28.0": "requests[security]>=2.30.0"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """
@@ -771,7 +833,7 @@ def test_script_metadata_inline_array(
     mapping = {"rich>=13.9.4": "rich>=13.9.5", "orjson": "orjson>=3.10.14"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """
@@ -861,7 +923,7 @@ def test_script_metadata_with_blank_line_in_toml(
     mapping = {"requests>=2.28": "requests>=2.30"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """
@@ -913,7 +975,7 @@ def test_script_metadata_only_replaces_in_block(
     mapping = {"httpx>=0.27.0": "httpx>=0.28.1", "rich>=13.0.0": "rich>=14.2"}
     mocker.patch(
         "bump_deps_index._run.update_spec",
-        side_effect=lambda _, __, ___, spec, ____, _____: mapping[spec],
+        side_effect=lambda _, spec, __, ___: mapping[spec],
     )
     dest = tmp_path / "script.py"
     script = """

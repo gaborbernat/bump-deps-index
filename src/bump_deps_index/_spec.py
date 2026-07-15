@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import sys
 from collections import deque
+from dataclasses import dataclass
 from enum import Enum, auto
 from functools import cache
 from html.parser import HTMLParser
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 if TYPE_CHECKING:
@@ -19,35 +22,44 @@ class PkgType(Enum):
     JS = auto()
 
 
-def update(client: Client, index_url: str, npm_registry: str, spec: str, pkg_type: PkgType, pre_release: bool) -> str:  # noqa: FBT001, PLR0913, PLR0917
+@dataclass(frozen=True)
+class UpdateConfig:
+    index_url: str
+    npm_registry: str
+    pre_release: bool
+    python_version: Version | None
+
+
+def update(client: Client, spec: str, pkg_type: PkgType, config: UpdateConfig) -> str:
     if pkg_type is PkgType.PYTHON:
-        with _py_lock:
-            print_index("Python", index_url)
-        return update_python(client, index_url, spec, pre_release)
-    with _js_lock:
-        print_index("JavaScript", npm_registry)
-    return update_js(client, npm_registry, spec, pre_release)
+        with _PY_LOCK:
+            print_index("Python", config.index_url)
+        return update_python(client, spec, config)
+    with _JS_LOCK:
+        print_index("JavaScript", config.npm_registry)
+    return update_js(client, config.npm_registry, spec, pre_release=config.pre_release)
 
 
-_py_lock, _js_lock = Lock(), Lock()
+_PY_LOCK: Final[Lock] = Lock()
+_JS_LOCK: Final[Lock] = Lock()
 
 
 @cache
 def print_index(of_type: str, registry: str) -> None:
-    print(f"Using {of_type} index: {registry}")  # noqa: T201
+    sys.stdout.write(f"Using {of_type} index: {registry}\n")
 
 
-def update_js(client: Client, npm_registry: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
+def update_js(client: Client, npm_registry: str, spec: str, *, pre_release: bool) -> str:
     ver_at = spec.rfind("@")
     package = spec[: len(spec) if ver_at in {-1, 0} else ver_at]
-    version = get_js_pkgs(client, npm_registry, package, pre_release)[0]
+    version = get_js_pkgs(client, npm_registry, package, pre_release=pre_release)[0]
     ver = str(version)
     while ver.endswith(".0"):
         ver = ver[:-2]
     return f"{package}@{ver}"
 
 
-def get_js_pkgs(client: Client, npm_registry: str, package: str, pre_release: bool) -> list[str]:  # noqa: FBT001
+def get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release: bool) -> list[str]:
     info = client.get(f"{npm_registry}/{package}", follow_redirects=True).json()
     found: list[Version] = []
     for version_str in info["versions"]:
@@ -60,10 +72,16 @@ def get_js_pkgs(client: Client, npm_registry: str, package: str, pre_release: bo
     return [str(i) for i in sorted(found, reverse=True)]
 
 
-def update_python(client: Client, index_url: str, spec: str, pre_release: bool) -> str:  # noqa: FBT001
+def update_python(client: Client, spec: str, config: UpdateConfig) -> str:
     req = Requirement(spec)
     eq = any(s for s in req.specifier if s.operator == "==")
-    for version in get_pkgs(client, index_url, req.name, pre_release):
+    for version in get_pkgs(
+        client,
+        config.index_url,
+        req.name,
+        pre_release=config.pre_release,
+        python_version=config.python_version,
+    ):
         if eq or all(s.contains(str(version)) for s in req.specifier):
             break
     else:
@@ -96,11 +114,11 @@ class IndexParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self._at_tag: deque[str] = deque()
-        self._files: list[str] = []
+        self._files: list[tuple[str, str | None]] = []
         self._attrs: list[tuple[str, str | None]] = []
 
     @property
-    def files(self) -> frozenset[str]:
+    def files(self) -> frozenset[tuple[str, str | None]]:
         return frozenset(self._files)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -119,15 +137,29 @@ class IndexParser(HTMLParser):
             and data.strip()
             and not any(k == "data-yanked" for k, _ in self._attrs)
         ):
-            self._files.append(data.strip())
+            requires_python = next((value for key, value in self._attrs if key == "data-requires-python"), None)
+            self._files.append((data.strip(), requires_python))
 
 
-def get_pkgs(client: Client, index_url: str, package: str, pre_release: bool) -> list[Version]:  # noqa: FBT001
+def get_pkgs(
+    client: Client,
+    index_url: str,
+    package: str,
+    *,
+    pre_release: bool,
+    python_version: Version | None = None,
+) -> list[Version]:
     text = client.get(f"{index_url}/{package}/", follow_redirects=True).text
     versions: set[Version] = set()
     parser = IndexParser()
     parser.feed(text)
-    for raw_file in parser.files:
+    for raw_file, requires_python in parser.files:
+        if (
+            python_version is not None
+            and requires_python is not None
+            and not SpecifierSet(requires_python).contains(python_version)
+        ):
+            continue
         file = raw_file
         file = file.removesuffix(".tar.bz2")
         file = file.removesuffix(".tar.gz")
@@ -150,5 +182,6 @@ def get_pkgs(client: Client, index_url: str, package: str, pre_release: bool) ->
 
 __all__ = [
     "PkgType",
+    "UpdateConfig",
     "update",
 ]
