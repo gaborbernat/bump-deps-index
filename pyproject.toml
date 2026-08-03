@@ -139,6 +139,7 @@ ini_options.filterwarnings = [
 ini_options.verbosity_assertions = 2
 
 [tool.coverage]
+run.core = "ctrace"  # sysmon (3.14+ default) cannot record the per-test contexts we collect
 run.parallel = true
 run.plugins = [
   "covdefaults",
