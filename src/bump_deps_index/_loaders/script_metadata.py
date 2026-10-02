@@ -28,9 +28,8 @@ class ScriptMetadata(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.suffix == ".py" and self._has_script_metadata(filename)
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        content = filename.read_text(encoding="utf-8")
-        lines = content.split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         start_idx = end_idx = None
         for i, line in enumerate(lines):
             if line.rstrip() == "# /// script":
@@ -39,11 +38,11 @@ class ScriptMetadata(Loader):
                 end_idx = i + 1
                 break
         if start_idx is None or end_idx is None:
-            return
+            return text
         block = "\n".join(lines[start_idx:end_idx])
         block = self._replace_quoted(block, changes)
         lines[start_idx:end_idx] = block.split("\n")
-        filename.write_text("\n".join(lines), encoding="utf-8")
+        return "\n".join(lines)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:

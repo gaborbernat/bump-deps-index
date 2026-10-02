@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
+    from pytest_httpx import HTTPXMock
     from pytest_mock import MockerFixture
 
 
@@ -133,8 +134,26 @@ def test_run_pre_commit_keeps_filtered_inline_dependencies(monkeypatch: pytest.M
 
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], mocker: MockerFixture) -> None:
     mocker.patch("bump_deps_index._run.update_spec", side_effect=ValueError)
-    run(Options(index_url="https://pypi.org/simple", pkgs=[], filenames=[], pre_release="no"))
+    assert run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[], pre_release="no"))
 
     out, err = capsys.readouterr()
-    assert not err
+    assert err == "no supported dependency files found\n"
     assert not out
+
+
+def test_run_pre_commit_node_hook_dependencies_are_javascript(httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    httpx_mock.add_response(url="https://N.com/eslint", json={"versions": {"9.0.0": {}}})
+    config = tmp_path / ".pre-commit-config.yaml"
+    content = """
+    repos:
+      - repo: local
+        hooks:
+          - id: lint
+            language: node
+            additional_dependencies: [eslint]
+    """
+    config.write_text(dedent(content).lstrip(), encoding="utf-8")
+
+    assert run(Options(index_url="I", npm_registry="https://N.com", pkgs=[], filenames=[config], pre_release="no"))
+
+    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[eslint]", "[eslint@9.0.0]")

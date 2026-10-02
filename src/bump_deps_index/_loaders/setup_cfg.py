@@ -32,23 +32,30 @@ class SetupCfg(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        lines = filename.read_text(encoding="utf-8").split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         result: list[str] = []
         section = ""
         dependency_key = ""
         for line in lines:
             stripped = line.strip()
+            key_line = False
             if stripped.startswith("["):
                 section = stripped.strip("[]")
                 dependency_key = ""
             elif stripped and not line[:1].isspace() and "=" in line:
                 dependency_key = line.partition("=")[0].strip()
+                key_line = True
             update = (
                 section == "options" and dependency_key == "install_requires"
             ) or section == "options.extras_require"
-            result.append(self._replace_requirement_line(line, changes) if update else line)
-        filename.write_text("\n".join(result), encoding="utf-8")
+            if not update:
+                result.append(line)
+            elif key_line:
+                result.append(self._replace_key_line(line, changes))
+            else:
+                result.append(self._replace_requirement_line(line, changes))
+        return "\n".join(result)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         cfg = NoTransformConfigParser()

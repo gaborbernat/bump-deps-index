@@ -31,7 +31,12 @@ bump-deps-index 'httpx>=0.27' prettier@3.0.0
 Use `--file` to limit updates. Supported inputs include `pyproject.toml`, `tox.toml`, `tox.ini`, `setup.cfg`,
 requirements files, `.pre-commit-config.yaml`, and Python scripts with PEP 723 metadata.
 
-When `[project].requires-python` is present in the root `pyproject.toml`, Python updates exclude distributions that do
-not support the project's oldest interpreter. Projects without that field keep the index's existing selection behavior.
+Set `[project].requires-python` in a `pyproject.toml` and you get Python updates from distributions that support the
+oldest interpreter you allow there, for files in that directory and its subdirectories. Without that field, you get the
+newest release on the index.
+
+For an `==` pin you get a newer release or no change, and you keep the precision you wrote on `~=` bounds, so you go
+from `~=1.4` to `~=1.9`. You keep hashed requirements as you wrote them, since you would need new hashes for a new
+version. You see changes on disk for files with a new version, with their line endings intact.
 
 See the [documentation](https://bump-deps-index.readthedocs.io) for all options.

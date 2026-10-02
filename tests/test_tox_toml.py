@@ -36,14 +36,23 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp
     assert dest.read_text() == dedent(toml).lstrip()
 
 
-def test_run_rejects_unsupported_file(tmp_path: Path) -> None:
-    filename = tmp_path / "dependencies.json"
-    filename.touch()
+@pytest.mark.parametrize(
+    ("name", "exists", "message"),
+    [
+        pytest.param("dependencies.json", True, "we do not support {}", id="unsupported"),
+        pytest.param("tox.toml", False, "{} does not exist", id="missing"),
+    ],
+)
+def test_run_rejects_file(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, name: str, exists: bool, message: str
+) -> None:
+    filename = tmp_path / name
+    if exists:
+        filename.touch()
 
-    with pytest.raises(NotImplementedError) as exception_info:
-        run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[filename], pre_release="no"))
+    assert not run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[filename], pre_release="no"))
 
-    assert str(exception_info.value) == f"we do not support {filename}"
+    assert capsys.readouterr().err == f"{message.format(filename)}\n"
 
 
 def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
