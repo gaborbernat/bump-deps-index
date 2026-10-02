@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 # match the factor shape to skip the colons inside URL requirements
-_FACTOR: Final = re.compile(r"^(?P<prefix>[\w!{},.-]+(?:\s*,\s*[\w!{},.-]+)*\s*:\s*)(?P<requirement>\S.*)$")
+_FACTOR: Final = re.compile(r"^(?P<prefix>[\w!{}.-]+(?:\s*,\s*[\w!{}.-]+)*\s*:\s*)(?P<requirement>\S.*)$")
 
 
 class Loader(ABC):

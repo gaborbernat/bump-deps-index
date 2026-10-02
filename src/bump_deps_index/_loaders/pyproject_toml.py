@@ -31,13 +31,13 @@ class PyProjectToml(Loader):
         result_lines: list[str] = []
         current_section = ""
         section_pattern = re.compile(r"^\[(?P<section>[^]]+)]")
-        key_pattern = re.compile(r"^(?P<key>(?:[^=\s]|\s(?!\s*=))+?)\s*=\s*[\[{]")
+        key_pattern = re.compile(r"^(?P<key>[^=]*)=\s*[\[{]")
         for line in lines:
             stripped = line.strip()
             if section_match := section_pattern.match(stripped):
                 current_section = section_match["section"]
             if match := key_pattern.match(stripped):
-                key = match["key"].strip("\"'")
+                key = match["key"].strip().strip("\"'")
                 project_dependency = current_section == "project" and (
                     key in {"dependencies", "optional-dependencies"} or key.startswith("optional-dependencies.")
                 )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -338,6 +339,36 @@ def test_failure_message_redacts_index_credentials(
     err = capsys.readouterr().err
     assert "https://index.example/simple/foo/" in err
     assert "s3cret" not in err
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "expected"),
+    [
+        pytest.param(
+            "tox.ini",
+            f"[testenv]\ndeps =\n    {'!,' * 26}x\n    foo>=1\n",
+            f"[testenv]\ndeps =\n    {'!,' * 26}x\n    foo>=2\n",
+            id="tox-ini-factor-like-commas",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            f'[project]\nname = "demo"\ndependencies = [\n  "foo"{" " * 100_000},\n]\n',
+            f'[project]\nname = "demo"\ndependencies = [\n  "foo>=2"{" " * 100_000},\n]\n',
+            id="pyproject-long-whitespace",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("foo_index")
+def test_pathological_line_parses_in_linear_time(
+    tmp_path: Path, run_files: Callable[..., bool], name: str, content: str, expected: str
+) -> None:
+    dest = tmp_path / name
+    dest.write_text(content, encoding="utf-8")
+    start = time.perf_counter()
+
+    assert run_files(dest)
+
+    assert (dest.read_text(encoding="utf-8"), time.perf_counter() - start < 1) == (expected, True)
 
 
 @pytest.fixture
