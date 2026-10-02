@@ -11,6 +11,7 @@ from bump_deps_index._loaders import get_loaders
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest_httpx import HTTPXMock
     from pytest_mock import MockerFixture
 
 
@@ -70,15 +71,32 @@ def test_run_requirements_txt_skip_options(
     assert dest.read_text() == dedent(req_txt).lstrip()
 
 
-def test_run_requirements_txt_preserves_hashes(mocker: MockerFixture, tmp_path: Path) -> None:
-    mocker.patch("bump_deps_index._run.update_spec", side_effect=lambda _, spec, __, ___: f"{spec}>=2")
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        pytest.param(
+            "A \\\n    --hash=sha256:123\nB --hash=sha256:456\nD\n",
+            "A \\\n    --hash=sha256:123\nB --hash=sha256:456\nD>=2\n",
+            id="hashed",
+        ),
+        pytest.param(
+            "./local\nhttps://example.com/a.whl\n${PKG}\nD\n",
+            "./local\nhttps://example.com/a.whl\n${PKG}\nD>=2\n",
+            id="without-name",
+        ),
+    ],
+)
+def test_run_requirements_txt_skips_entries(httpx_mock: HTTPXMock, tmp_path: Path, content: str, expected: str) -> None:
+    httpx_mock.add_response(url="https://I.com/d/", text="<a>D-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
-    requirements.write_text("A \\\n    --hash=sha256:123\n", encoding="utf-8")
+    requirements.write_text(content, encoding="utf-8")
 
-    successful = run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[requirements], pre_release="no"))
+    successful = run(
+        Options(index_url="https://I.com", npm_registry="N", pkgs=[], filenames=[requirements], pre_release="no")
+    )
 
     assert successful
-    assert requirements.read_text(encoding="utf-8") == "A>=2 \\\n    --hash=sha256:123\n"
+    assert requirements.read_text(encoding="utf-8") == expected
 
 
 def test_run_requirements_txt_distinguishes_markers_from_comments(mocker: MockerFixture, tmp_path: Path) -> None:

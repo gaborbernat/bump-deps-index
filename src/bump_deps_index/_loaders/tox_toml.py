@@ -29,8 +29,8 @@ class ToxToml(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        lines = filename.read_text(encoding="utf-8").split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         result: list[str] = []
         in_deps_section = False
         bracket_depth = 0
@@ -45,7 +45,7 @@ class ToxToml(Loader):
             result.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
-        filename.write_text("\n".join(result), encoding="utf-8")
+        return "\n".join(result)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         pre = False if pre_release is None else pre_release

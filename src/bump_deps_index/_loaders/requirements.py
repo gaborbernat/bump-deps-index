@@ -21,15 +21,15 @@ class Requirements(Loader):
             and not (filename.suffix == ".txt" and filename.with_suffix(".in").exists())
         )
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        lines = filename.read_text(encoding="utf-8").split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         result = [
             self._replace_requirement_line(line, changes)
             if line.strip() and not line.strip().startswith(("#", "-"))
             else line
             for line in lines
         ]
-        filename.write_text("\n".join(result), encoding="utf-8")
+        return "\n".join(result)
 
     @property
     def files(self) -> Iterator[Path]:
@@ -54,13 +54,18 @@ class Requirements(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         pre = False if pre_release is None else pre_release
-        lines = []
+        requirements: list[str] = []
+        logical, continued = "", False
         for line in filename.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith(("#", "-")):
-                requirement, _ = self._split_comment(stripped)
-                lines.append(requirement.removesuffix("\\").rstrip())
-        yield from self._generate(lines, pkg_type=PkgType.PYTHON, pre_release=pre)
+            stripped, _ = self._split_comment(line.strip())
+            logical = f"{logical} {stripped}" if continued else stripped
+            if continued := logical.endswith("\\"):
+                logical = logical.removesuffix("\\").rstrip()
+                continue
+            # skip hashed entries; you would need new hashes for a new version
+            if logical and not logical.startswith(("#", "-")) and "--hash" not in logical:
+                requirements.append(logical)
+        yield from self._generate(requirements, pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 __all__ = [

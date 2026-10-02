@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 class Hook(TypedDict):
     id: str
+    language: NotRequired[str]
     args: NotRequired[list[str]]
     additional_dependencies: NotRequired[list[str]]
 
@@ -37,8 +38,8 @@ class PreCommitConfig(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        lines = filename.read_text(encoding="utf-8").split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         result: list[str] = []
         dependency_indent: int | None = None
         for line in lines:
@@ -60,7 +61,7 @@ class PreCommitConfig(Loader):
             else:
                 updated_line = line
             result.append(updated_line)
-        filename.write_text("\n".join(result), encoding="utf-8")
+        return "\n".join(result)
 
     @classmethod
     def _replace_list_item(cls, line: str, changes: Mapping[str, str]) -> str:
@@ -88,8 +89,10 @@ class PreCommitConfig(Loader):
         repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
         for repo in repos:
             for hook in repo["hooks"]:
+                node = hook.get("language") == "node"
                 for pkg in hook.get("additional_dependencies", []):
-                    yield from self._generate([pkg], pkg_type=package_type(pkg), pre_release=pre)
+                    pkg_type = PkgType.JS if node else package_type(pkg)
+                    yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
 
 
 __all__ = [

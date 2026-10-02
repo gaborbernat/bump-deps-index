@@ -246,3 +246,25 @@ def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, httpx
 
     assert successful
     assert pyproject.read_text(encoding="utf-8").count(">=2.0.0rc1") == 4
+
+
+def test_run_reports_unparsable_pyproject_and_continues(
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path
+) -> None:
+    httpx_mock.add_response(url="https://I.com/a/", text="<a>A-1.tar.gz</a>")
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text("[project\n")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("A\n")
+    options = Options(
+        index_url="https://I.com", npm_registry="N", pkgs=[], filenames=[pyproject, requirements], pre_release="no"
+    )
+
+    assert not run(options)
+
+    error = "TOMLDecodeError(\"Expected ']' at the end of a table declaration (at line 1, column 9)\")"
+    assert capsys.readouterr().err.splitlines() == [
+        f"failed to read {pyproject} with {error}",
+        f"ignoring project metadata from {pyproject} due to {error}",
+    ]
+    assert (pyproject.read_text(), requirements.read_text()) == ("[project\n", "A>=1\n")

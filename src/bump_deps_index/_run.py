@@ -3,67 +3,87 @@ from __future__ import annotations
 import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from configparser import Error as ConfigParserError
+from itertools import chain
 from pathlib import Path
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
 from httpx import Client, HTTPError, Limits
-from packaging.requirements import Requirement
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 from truststore import SSLContext
+from yaml import YAMLError
 
 from bump_deps_index._loaders import get_loaders
 
-from ._spec import PkgType, UpdateConfig, package_type
+from ._spec import PkgType, UpdateConfig, package_type, redact_text
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
     from ._cli import Options
+    from ._loaders import Loader
+
+
+_Spec = tuple[str, PkgType, bool, Version | None]
 
 
 def run(opt: Options) -> bool:
     """Update dependencies selected by the CLI options."""
     pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
-    project, python_version = get_project()
 
     if opt.pkgs:
+        _, python_version = _get_project(Path.cwd())
         pre_release = False if pre_release is None else pre_release
-        specs = list({(package.strip(), package_type(package.strip()), pre_release): None for package in opt.pkgs})
-        _, successful = calculate_update(opt.index_url, opt.npm_registry, specs, python_version)
+        specs = list({
+            (package.strip(), package_type(package.strip()), pre_release, python_version): None for package in opt.pkgs
+        })
+        _, successful = _calculate_update(opt.index_url, opt.npm_registry, specs)
         return successful
 
+    if not opt.filenames:
+        sys.stderr.write("no supported dependency files found\n")
     successful = True
+    plans: list[tuple[Path, Loader, list[_Spec]]] = []
     for filename in opt.filenames:
-        for loader in get_loaders():
-            if loader.supports(filename):
-                specs = list({
-                    (name.strip(), package_type_, accept_prereleases)
-                    for name, package_type_, accept_prereleases in loader.load(filename, pre_release=pre_release)
-                    if name.strip()
-                    and (package_type(name.strip()) is PkgType.JS or Requirement(name.strip()).name != project)
-                })
-                changes, file_successful = calculate_update(opt.index_url, opt.npm_registry, specs, python_version)
-                loader.update_file(filename, changes)
-                successful &= file_successful
-                break
+        if not filename.is_file():
+            sys.stderr.write(f"{filename} does not exist\n")
+            successful = False
+        elif (loader := next((i for i in get_loaders() if i.supports(filename)), None)) is None:
+            sys.stderr.write(f"we do not support {filename}\n")
+            successful = False
+        elif (specs := _load_specs(loader, filename, pre_release=pre_release)) is None:
+            successful = False
         else:
-            msg = f"we do not support {filename}"
-            raise NotImplementedError(msg)
-    return successful
+            plans.append((filename, loader, specs))
+
+    # resolve the files in one batch to send one lookup per package across files
+    results, resolved = _calculate_update(
+        opt.index_url, opt.npm_registry, list(dict.fromkeys(chain.from_iterable(specs for _, _, specs in plans)))
+    )
+    for filename, loader, specs in plans:
+        loader.update_file(filename, {spec[0]: results[spec] for spec in specs if spec in results})
+    return successful and resolved
 
 
-def get_project() -> tuple[str | None, Version | None]:
-    if not (pyproject := Path.cwd() / "pyproject.toml").exists():
+def _get_project(directory: Path) -> tuple[str | None, Version | None]:
+    pyproject = next(
+        (path for folder in (directory, *directory.parents) if (path := folder / "pyproject.toml").is_file()), None
+    )
+    if pyproject is None:
         return None, None
-    with pyproject.open("rb") as file_handler:
-        cfg = load_toml(file_handler)
-    project = cfg.get("project", {})
-    name = project.get("name")
-    return canonicalize_name(name) if name is not None else None, _python_floor(project.get("requires-python"))
+    try:
+        with pyproject.open("rb") as file_handler:
+            project = load_toml(file_handler).get("project", {})
+        name = project.get("name")
+        return canonicalize_name(name) if name is not None else None, _python_floor(project.get("requires-python"))
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"ignoring project metadata from {pyproject} due to {exc!r}\n")
+        return None, None
 
 
 def _python_floor(requires_python: str | None) -> Version | None:
@@ -108,13 +128,8 @@ def _next_release(version: Version) -> Version:
     return Version(".".join(str(part) for part in (*release[:-1], release[-1] + 1)))
 
 
-def calculate_update(
-    index_url: str,
-    npm_registry: str,
-    specs: Sequence[tuple[str, PkgType, bool]],
-    python_version: Version | None,
-) -> tuple[Mapping[str, str], bool]:
-    changes: dict[str, str] = {}
+def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec]) -> tuple[dict[_Spec, str], bool]:
+    changes: dict[_Spec, str] = {}
     successful = True
     if specs:
         parallel = min(len(specs), 10)
@@ -125,32 +140,54 @@ def calculate_update(
             ) as client,
             ThreadPoolExecutor(max_workers=parallel) as executor,
         ):
-            future_to_url = {
+            future_to_spec = {
                 executor.submit(
                     update_spec,
                     client,
-                    package,
-                    pkg_type,
+                    spec[0],
+                    spec[1],
                     UpdateConfig(
                         index_url=index_url,
                         npm_registry=npm_registry,
-                        pre_release=pre_release,
-                        python_version=python_version,
+                        pre_release=spec[2],
+                        python_version=spec[3],
                     ),
-                ): package
-                for package, pkg_type, pre_release in specs
+                ): spec
+                for spec in specs
             }
-            for future in as_completed(future_to_url):
-                spec = future_to_url[future]
+            for future in as_completed(future_to_spec):
+                spec = future_to_spec[future]
                 try:
                     result = future.result()
                 except (HTTPError, IndexError, KeyError, ValueError) as exc:
                     successful = False
-                    sys.stderr.write(f"failed {spec} with {exc!r}\n")
+                    sys.stderr.write(f"failed {spec[0]} with {redact_text(repr(exc))}\n")
                 else:
                     changes[spec] = result
-                    sys.stdout.write(f"{spec}{f' -> {result}' if result != spec else ''}\n")
+                    sys.stdout.write(f"{spec[0]}{f' -> {result}' if result != spec[0] else ''}\n")
     return changes, successful
+
+
+def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> list[_Spec] | None:
+    try:
+        entries = list(loader.load(filename, pre_release=pre_release))
+    except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
+        sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
+        return None
+    project, python_version = _get_project(filename.resolve().parent)
+    specs: dict[_Spec, None] = {}
+    for raw, pkg_type, accept_prereleases in entries:
+        if not (name := raw.strip()):
+            continue
+        if pkg_type is PkgType.PYTHON:
+            try:
+                requirement = Requirement(name)
+            except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
+                continue
+            if canonicalize_name(requirement.name) == project:
+                continue
+        specs[name, pkg_type, accept_prereleases, python_version] = None
+    return list(specs)
 
 
 __all__ = [

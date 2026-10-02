@@ -24,23 +24,22 @@ class PyProjectToml(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        content = filename.read_text(encoding="utf-8")
-        lines = content.split("\n")
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        lines = text.split("\n")
         in_deps_section = False
         bracket_depth = 0
         result_lines: list[str] = []
         current_section = ""
         section_pattern = re.compile(r"^\[(?P<section>[^]]+)]")
-        key_pattern = re.compile(r"^(?P<key>(?:[^=\s]|\s(?!\s*=))+?)\s*=\s*\[")
+        key_pattern = re.compile(r"^(?P<key>[^=]*)=\s*[\[{]")
         for line in lines:
             stripped = line.strip()
             if section_match := section_pattern.match(stripped):
                 current_section = section_match["section"]
             if match := key_pattern.match(stripped):
-                key = match["key"].strip("\"'")
+                key = match["key"].strip().strip("\"'")
                 project_dependency = current_section == "project" and (
-                    key == "dependencies" or key.startswith("optional-dependencies.")
+                    key in {"dependencies", "optional-dependencies"} or key.startswith("optional-dependencies.")
                 )
                 if (
                     (current_section == "build-system" and key == "requires")
@@ -54,7 +53,7 @@ class PyProjectToml(Loader):
             result_lines.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
-        filename.write_text("\n".join(result_lines), encoding="utf-8")
+        return "\n".join(result_lines)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
         with filename.open("rb") as file_handler:
