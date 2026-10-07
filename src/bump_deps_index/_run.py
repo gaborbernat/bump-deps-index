@@ -194,9 +194,8 @@ def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> 
                 continue
             if canonicalize_name(requirement.name) == project:
                 continue
-        specs[
-            name, pkg_type, accept_prereleases, project_floor if requires_python is None else floors[requires_python]
-        ] = None
+        floor = project_floor if requires_python is None else floors[requires_python]
+        specs[name, pkg_type, accept_prereleases, floor] = None
     return list(specs)
 
 

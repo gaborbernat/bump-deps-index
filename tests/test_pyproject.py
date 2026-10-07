@@ -34,20 +34,15 @@ def test_run_args(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
 
 
 def test_run_args_without_pyproject_keeps_index_selection(
-    capsys: pytest.CaptureFixture[str],
-    httpx_mock: HTTPXMock,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    httpx_mock.add_response(
-        url="https://I.com/a/",
-        text='<a data-requires-python="&gt;=4">A-2.tar.gz</a>',
-    )
+    index.pypi["A"] = ["2"]
+    index.requires_python["a-2.tar.gz"] = ">=4"
 
-    run(Options(index_url="https://I.com", npm_registry="", pkgs=["A"], filenames=None, pre_release="no"))
+    assert index.run(pkgs=["A"])
 
-    assert "A -> A>=2" in capsys.readouterr().out.splitlines()
+    assert capsys.readouterr().out.splitlines() == ["Using Python index: https://pypi.example/simple", "A -> A>=2"]
 
 
 def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
@@ -132,7 +127,7 @@ def test_run_pyproject_toml_respects_requires_python(
         """,
     )
 
-    run(Options(index_url="https://I.com", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert run(Options(index_url="https://I.com", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
 
     assert dest.read_text() == dedent(toml).lstrip().replace('dependencies = ["A"]', f'dependencies = ["{expected}"]')
 
@@ -163,7 +158,7 @@ def test_run_pyproject_toml_multiline(capsys: pytest.CaptureFixture[str], index:
     assert dest.read_text() == dedent(toml).lstrip().replace("2.28", "2.30").replace("0.27", "0.28")
 
 
-def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, index: FakeIndex) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         dedent(
@@ -184,39 +179,22 @@ def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, httpx
         ).lstrip(),
         encoding="utf-8",
     )
-    for package in ("build-dep", "runtime-dep", "optional-dep", "group-dep"):
-        httpx_mock.add_response(
-            url=f"https://index.example/simple/{package}/",
-            text=f"<a>{package}-2.0.0rc1.tar.gz</a>",
-        )
+    index.pypi.update({key: ["2.0.0rc1"] for key in ("build-dep", "runtime-dep", "optional-dep", "group-dep")})
 
-    successful = run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="N",
-            pkgs=[],
-            filenames=[pyproject],
-            pre_release="yes",
-        )
-    )
+    assert index.run(pyproject, pre_release="yes")
 
-    assert successful
     assert pyproject.read_text(encoding="utf-8").count(">=2.0.0rc1") == 4
 
 
 def test_run_reports_unparsable_pyproject_and_continues(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
 ) -> None:
-    httpx_mock.add_response(url="https://I.com/a/", text="<a>A-1.tar.gz</a>")
+    index.pypi["A"] = ["1"]
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[project\n")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("A\n")
-    options = Options(
-        index_url="https://I.com", npm_registry="N", pkgs=[], filenames=[pyproject, requirements], pre_release="no"
-    )
-
-    assert not run(options)
+    assert not index.run(pyproject, requirements)
 
     error = "TOMLDecodeError(\"Expected ']' at the end of a table declaration (at line 1, column 9)\")"
     assert capsys.readouterr().err.splitlines() == [

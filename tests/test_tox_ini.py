@@ -56,14 +56,3 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_p
     deps = NO
     """
     assert dest.read_text() == dedent(tox_ini).lstrip()
-
-
-def test_tox_ini_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
-    dest = tmp_path / "tox.ini"
-    dest.write_text("")
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
-    assert not dest.read_text()

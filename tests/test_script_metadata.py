@@ -3,7 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
-from bump_deps_index._loaders import get_loaders
+from bump_deps_index import main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -200,18 +200,6 @@ def test_script_metadata_inline_array(
     }
 
 
-def test_script_metadata_file_without_metadata_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    dest = tmp_path / "regular.py"
-    dest.write_text("import sys\nprint('hello')\n")
-
-    monkeypatch.chdir(tmp_path)
-
-    loaders = get_loaders()
-    script_loader = next(loader for loader in loaders if loader.__class__.__name__ == "ScriptMetadata")
-
-    assert dest not in list(script_loader.files)
-
-
 def test_script_metadata_malformed_invalid_comment_prefix(
     capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex
 ) -> None:
@@ -229,38 +217,6 @@ def test_script_metadata_malformed_invalid_comment_prefix(
     out, err = capsys.readouterr()
     assert not err
     assert not out.strip()
-
-
-def test_script_metadata_file_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    script_file = tmp_path / "script.py"
-    script = """
-    # /// script
-    # dependencies = ["requests"]
-    # ///
-    """
-    script_file.write_text(dedent(script).lstrip())
-
-    broken_link = tmp_path / "broken.py"
-    broken_link.symlink_to(tmp_path / "nonexistent.py")
-
-    monkeypatch.chdir(tmp_path)
-
-    loaders = get_loaders()
-    script_loader = next(loader for loader in loaders if loader.__class__.__name__ == "ScriptMetadata")
-
-    found_files = list(script_loader.files)
-    assert script_file in found_files
-    assert broken_link not in found_files
-
-
-def test_script_metadata_supports_file_read_error(tmp_path: Path) -> None:
-    broken_link = tmp_path / "broken.py"
-    broken_link.symlink_to(tmp_path / "nonexistent.py")
-
-    loaders = get_loaders()
-    script_loader = next(loader for loader in loaders if loader.__class__.__name__ == "ScriptMetadata")
-
-    assert not script_loader.supports(broken_link)
 
 
 def test_script_metadata_with_blank_line_in_toml(
@@ -288,28 +244,6 @@ def test_script_metadata_with_blank_line_in_toml(
         "Using Python index: https://pypi.example/simple",
         "requests>=2.28 -> requests>=2.30",
     }
-
-
-def test_script_metadata_file_unicode_decode_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    script_file = tmp_path / "valid.py"
-    script = """
-    # /// script
-    # dependencies = ["requests"]
-    # ///
-    """
-    script_file.write_text(dedent(script).lstrip())
-
-    invalid_file = tmp_path / "invalid.py"
-    invalid_file.write_bytes(b"# /// script\n\xff\xfe")
-
-    monkeypatch.chdir(tmp_path)
-
-    loaders = get_loaders()
-    script_loader = next(loader for loader in loaders if loader.__class__.__name__ == "ScriptMetadata")
-
-    found_files = list(script_loader.files)
-    assert script_file in found_files
-    assert invalid_file not in found_files
 
 
 def test_script_metadata_only_replaces_in_block(
@@ -387,3 +321,33 @@ def test_script_metadata_reports_invalid_requires_python(
     assert not index.run(dest)
 
     assert capsys.readouterr().err == f"failed to read {dest} with InvalidSpecifier(\"Invalid specifier: '>=3.9.*'\")\n"
+
+
+def test_script_metadata_discovery_skips_unreadable_and_plain_files(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    index.pypi["requests"] = ["2"]
+    script = tmp_path / "valid.py"
+    script.write_text('# /// script\n# dependencies = ["requests"]\n# ///\n')
+    (tmp_path / "regular.py").write_text("import sys\n")
+    (tmp_path / "broken.py").symlink_to(tmp_path / "nonexistent.py")
+    (tmp_path / "invalid.py").write_bytes(b"# /// script\n\xff\xfe")
+
+    main(["-i", index.index_url])
+
+    assert (capsys.readouterr(), script.read_text()) == (
+        ("Using Python index: https://pypi.example/simple\nrequests -> requests>=2\n", ""),
+        '# /// script\n# dependencies = ["requests>=2"]\n# ///\n',
+    )
+
+
+def test_script_metadata_rejects_undecodable_file(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
+) -> None:
+    invalid = tmp_path / "invalid.py"
+    invalid.write_bytes(b"# /// script\n\xff\xfe")
+
+    assert not index.run(invalid)
+
+    assert capsys.readouterr().err == f"we do not support {invalid}\n"

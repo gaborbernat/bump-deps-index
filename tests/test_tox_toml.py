@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index import Options, run
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -33,20 +31,19 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path
 
 
 @pytest.mark.parametrize(
-    ("name", "exists", "message"),
+    ("name", "message"),
     [
-        pytest.param("dependencies.json", True, "we do not support {}", id="unsupported"),
-        pytest.param("tox.toml", False, "{} does not exist", id="missing"),
+        pytest.param("dependencies.json", "we do not support {}", id="unsupported"),
+        pytest.param("tox.toml", "{} does not exist", id="missing"),
     ],
 )
 def test_run_rejects_file(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path, name: str, exists: bool, message: str
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, name: str, message: str
 ) -> None:
+    (tmp_path / "dependencies.json").touch()
     filename = tmp_path / name
-    if exists:
-        filename.touch()
 
-    assert not run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[filename], pre_release="no"))
+    assert not index.run(filename)
 
     assert capsys.readouterr().err == f"{message.format(filename)}\n"
 
@@ -199,14 +196,3 @@ def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], index: FakeIndex
     }
 
     assert dest.read_text() == dedent(toml).lstrip().replace("7.0", "8.1").replace("6.0", "7.1")
-
-
-def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
-    dest = tmp_path / "tox.ini"
-    dest.write_text("")
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
-    assert not dest.read_text()

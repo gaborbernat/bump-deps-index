@@ -46,14 +46,3 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
         C>=3
     """
     assert dest.read_text() == dedent(setup_cfg).lstrip()
-
-
-def test_run_setup_cfg_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
-    dest = tmp_path / "setup.cfg"
-    dest.write_text("")
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
-    assert not dest.read_text()

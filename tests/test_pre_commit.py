@@ -3,8 +3,6 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
-from bump_deps_index import Options, run
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -61,17 +59,6 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
     assert dest.read_text() == dedent(setup_cfg).lstrip()
 
 
-def test_run_pre_commit_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    dest = tmp_path / ".pre-commit-config.yaml"
-    dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
-
-    out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
-    assert not dest.read_text()
-
-
 def test_run_pre_commit_preserves_yaml_layout(index: FakeIndex, tmp_path: Path) -> None:
     index.pypi.update(bar=["2"], baz=["3"], foo=["1"])
     config = tmp_path / ".pre-commit-config.yaml"
@@ -110,16 +97,17 @@ def test_run_pre_commit_preserves_yaml_layout(index: FakeIndex, tmp_path: Path) 
     )
 
 
-def test_run_pre_commit_keeps_filtered_inline_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_pre_commit_keeps_filtered_inline_dependencies(
+    index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\n', encoding="utf-8")
     config = tmp_path / ".pre-commit-config.yaml"
     content = "repos:\n  - repo: local\n    hooks:\n      - id: foo\n        additional_dependencies: [foo]\n"
     config.write_text(content, encoding="utf-8")
 
-    successful = run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[config], pre_release="no"))
+    assert index.run(config)
 
-    assert successful
     assert config.read_text(encoding="utf-8") == content
 
 

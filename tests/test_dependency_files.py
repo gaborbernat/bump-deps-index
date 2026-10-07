@@ -27,27 +27,23 @@ def test_requirements_preserves_comments_and_similar_names(tmp_path: Path, index
 
 def test_pyproject_updates_only_dependency_tables(tmp_path: Path, index: FakeIndex) -> None:
     pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        dedent(
-            """
-            [project]
-            name = "example"
+    content = """
+    [project]
+    name = "example"
 
-            [project.optional-dependencies]
-            test = ["foo"]
+    [project.optional-dependencies]
+    test = ["foo"]
 
-            [tool.example]
-            dependencies = ["foo"]
-            """
-        ).lstrip(),
-        encoding="utf-8",
-    )
+    [tool.example]
+    dependencies = ["foo"]
+    """
+    pyproject.write_text(dedent(content).lstrip(), encoding="utf-8")
     index.pypi["foo"] = ["2"]
 
     assert index.run(pyproject)
 
-    assert '[project.optional-dependencies]\ntest = ["foo>=2"]' in pyproject.read_text(encoding="utf-8")
-    assert '[tool.example]\ndependencies = ["foo"]' in pyproject.read_text(encoding="utf-8")
+    expected = dedent(content).lstrip().replace('test = ["foo"]', 'test = ["foo>=2"]')
+    assert pyproject.read_text(encoding="utf-8") == expected
 
 
 def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, index: FakeIndex) -> None:
@@ -114,25 +110,20 @@ def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, index: FakeIndex
 
 def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
-    config.write_text(
-        dedent(
-            """
-            repos:
-              - repo: https://example.com/foo
-                hooks:
-                  - id: foo
-                    additional_dependencies:
-                      - foo
-            """
-        ).lstrip(),
-        encoding="utf-8",
-    )
+    content = """
+    repos:
+      - repo: https://example.com/foo
+        hooks:
+          - id: foo
+            additional_dependencies:
+              - foo
+    """
+    config.write_text(dedent(content).lstrip(), encoding="utf-8")
     index.pypi["foo"] = ["2"]
 
     assert index.run(config)
 
-    assert "repo: https://example.com/foo" in config.read_text(encoding="utf-8")
-    assert "      - foo>=2" in config.read_text(encoding="utf-8")
+    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("- foo\n", "- foo>=2\n")
 
 
 @pytest.mark.parametrize(
@@ -406,6 +397,20 @@ def test_pathological_line_parses_in_linear_time(
     assert index.run(dest)
 
     assert (dest.read_text(encoding="utf-8"), time.perf_counter() - start < 1) == (expected, True)
+
+
+@pytest.mark.parametrize(
+    "name", ["pyproject.toml", "tox.toml", "tox.ini", "setup.cfg", ".pre-commit-config.yaml", "requirements.txt"]
+)
+def test_empty_file_stays_empty(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, name: str
+) -> None:
+    dest = tmp_path / name
+    dest.write_text("")
+
+    assert index.run(dest)
+
+    assert (*capsys.readouterr(), dest.read_text()) == ("", "", "")
 
 
 @pytest.fixture

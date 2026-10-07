@@ -18,6 +18,13 @@ if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
 
 
+@pytest.fixture
+def index(httpx_mock: HTTPXMock) -> FakeIndex:
+    fake = FakeIndex()
+    httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)
+    return fake
+
+
 @dataclass
 class FakeIndex:
     pypi: dict[str, list[str]] = field(default_factory=dict)
@@ -57,10 +64,3 @@ class FakeIndex:
             for version in versions
         )
         return httpx.Response(200, text="".join(links))
-
-
-@pytest.fixture
-def index(httpx_mock: HTTPXMock) -> FakeIndex:
-    fake = FakeIndex()
-    httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)
-    return fake

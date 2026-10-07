@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, TypeAlias
+
+from bump_deps_index._spec import PkgType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
     from pathlib import Path
-    from typing import TypeAlias
 
-    from bump_deps_index._spec import PkgType
-
-    Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
+Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
 
 
 # match the factor shape to skip the colons inside URL requirements
