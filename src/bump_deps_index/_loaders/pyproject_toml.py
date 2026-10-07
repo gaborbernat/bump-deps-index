@@ -47,9 +47,9 @@ class PyProjectToml(Loader):
                     or current_section in {"project.optional-dependencies", "dependency-groups"}
                 ):
                     in_deps_section = True
-                    bracket_depth = stripped.count("[") - stripped.count("]")
+                    bracket_depth = self._bracket_delta(stripped)
             elif in_deps_section:
-                bracket_depth += stripped.count("[") - stripped.count("]")
+                bracket_depth += self._bracket_delta(stripped)
             result_lines.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False

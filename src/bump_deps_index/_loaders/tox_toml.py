@@ -39,9 +39,9 @@ class ToxToml(Loader):
             stripped = line.strip()
             if deps_pattern.match(stripped):
                 in_deps_section = True
-                bracket_depth = stripped.count("[") - stripped.count("]")
+                bracket_depth = self._bracket_delta(stripped)
             elif in_deps_section:
-                bracket_depth += stripped.count("[") - stripped.count("]")
+                bracket_depth += self._bracket_delta(stripped)
             result.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False

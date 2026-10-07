@@ -206,6 +206,72 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             """,
             id="pyproject-skips-own-non-canonical-name",
         ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            dependencies = [
+              "foo>=1",  # see [docs
+            ]
+            [tool.other]
+            pins = ["foo>=1"]
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = [
+              "foo>=2",  # see [docs
+            ]
+            [tool.other]
+            pins = ["foo>=1"]
+            """,
+            id="pyproject-bracket-in-comment",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            dependencies = [
+              "not \\"]\\" valid",
+              "foo>=1",
+            ]
+            [tool.other]
+            pins = ["foo>=1"]
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = [
+              "not \\"]\\" valid",
+              "foo>=2",
+            ]
+            [tool.other]
+            pins = ["foo>=1"]
+            """,
+            id="pyproject-bracket-in-string",
+        ),
+        pytest.param(
+            "tox.toml",
+            """
+            [env_run_base]
+            deps = [
+              "foo>=1",  # see [docs
+            ]
+            [env_run_base.set_env]
+            PINNED = "foo>=1"
+            """,
+            """
+            [env_run_base]
+            deps = [
+              "foo>=2",  # see [docs
+            ]
+            [env_run_base.set_env]
+            PINNED = "foo>=1"
+            """,
+            id="tox-toml-bracket-in-comment",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")

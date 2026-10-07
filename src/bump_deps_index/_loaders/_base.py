@@ -75,6 +75,24 @@ class Loader(ABC):
         return factor["requirement"] if (factor := _FACTOR.match(value.strip())) else value.strip()
 
     @staticmethod
+    def _bracket_delta(line: str) -> int:
+        # skip brackets inside strings and comments; `# see [docs` must not keep a dependency array open
+        delta, quote, escaped = 0, "", False
+        for character in line:
+            if escaped:
+                escaped = False
+            elif quote:
+                escaped = character == "\\" and quote == '"'
+                quote = "" if character == quote else quote
+            elif character in {'"', "'"}:
+                quote = character
+            elif character == "#":
+                break
+            else:
+                delta += {"[": 1, "]": -1}.get(character, 0)
+        return delta
+
+    @staticmethod
     def _split_comment(value: str) -> tuple[str, str]:
         quote = ""
         for index, character in enumerate(value):
