@@ -170,7 +170,7 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
                     sys.stderr.write(f"failed {spec[0]} with {redact_text(repr(exc))}\n")
                 else:
                     changes[spec] = result
-                    sys.stdout.write(f"{spec[0]}{f' -> {result}' if result != spec[0] else ''}\n")
+                    sys.stdout.write(redact_text(f"{spec[0]}{f' -> {result}' if result != spec[0] else ''}\n"))
     return changes, successful
 
 

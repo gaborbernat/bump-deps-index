@@ -349,6 +349,21 @@ def test_failure_message_redacts_index_credentials(
     assert "s3cret" not in err
 
 
+def test_output_redacts_direct_reference_credentials(
+    tmp_path: Path, index: FakeIndex, capsys: pytest.CaptureFixture[str]
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    content = "foo @ https://user:s3cret@files.example/foo-1.0-py3-none-any.whl\n"
+    requirements.write_text(content, encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert (capsys.readouterr().out.splitlines(), requirements.read_text(encoding="utf-8")) == (
+        ["Using Python index: https://pypi.example/simple", "foo @ https://files.example/foo-1.0-py3-none-any.whl"],
+        content,
+    )
+
+
 @pytest.mark.parametrize(
     ("name", "content", "expected"),
     [
