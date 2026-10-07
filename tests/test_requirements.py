@@ -138,3 +138,30 @@ def test_run_requirements_txt_in(
     # bad
     """
     assert dest.read_text() == dedent(req_txt).lstrip()
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        pytest.param(
+            "C \\\n  ; python_version > '3'\n",
+            "C>=2 \\\n  ; python_version > '3'\n",
+            id="edit-first-line",
+        ),
+        pytest.param(
+            "C \\\n  >=1 ; python_version > '3'  # why\n",
+            "C \\\n  >=2 ; python_version > '3'  # why\n",
+            id="edit-continuation-line",
+        ),
+    ],
+)
+def test_run_requirements_txt_updates_continued_entries(
+    index: FakeIndex, tmp_path: Path, content: str, expected: str
+) -> None:
+    index.pypi["C"] = ["2"]
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(content, encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert requirements.read_text(encoding="utf-8") == expected
