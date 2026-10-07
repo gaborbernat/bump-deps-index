@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from httpx import Client
 
 _URL_CREDENTIALS: Final = re.compile(r"(?<=://)[^/\s@'\"]+@")
+_NAME_AND_EXTRAS: Final = re.compile(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?")
 _SIMPLE_JSON: Final = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
 _NPM_ACCEPT: Final = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
@@ -79,7 +80,7 @@ def _update_python(client: Client, spec: str, config: UpdateConfig) -> str:
         (specifier for operator in (">=", "~=") for specifier in specifiers if specifier.operator == operator), None
     )
     if current is None:
-        return _add_lower_bound(spec, requirement, _trim_version(version))
+        return _add_lower_bound(spec, _trim_version(version))
     new_version = _format_version(version, current)
     if _same_version(current, new_version):
         return spec
@@ -204,17 +205,15 @@ def _trim_version(version: Version) -> str:
     return result
 
 
-def _add_lower_bound(spec: str, requirement: Requirement, version: str) -> str:
-    new_spec = requirement.name
-    if requirement.extras:
-        new_spec = f"{new_spec}[{', '.join(sorted(requirement.extras))}]"
-    new_spec = f"{new_spec}{requirement.specifier}{',' if requirement.specifier else ''}>={version}"
-    if requirement.marker:
-        new_spec = f"{new_spec};{requirement.marker}"
-    new_requirement = str(Requirement(new_spec))
-    if "'" in spec:
-        new_requirement = new_requirement.replace('"', "'")
-    return new_requirement
+def _add_lower_bound(spec: str, version: str) -> str:
+    head = spec[: len(spec) - len(_NAME_AND_EXTRAS.sub("", spec, count=1))]
+    specifier = spec[len(head) :].partition(";")[0].rstrip()
+    rest = spec[len(head) + len(specifier) :]
+    if not specifier:
+        return f"{head}>={version}{rest}"
+    if specifier.endswith(")"):
+        return f"{head}{specifier[:-1]},>={version}){rest}"
+    return f"{head}{specifier},>={version}{rest}"
 
 
 def _format_version(version: Version, current: Specifier) -> str:
