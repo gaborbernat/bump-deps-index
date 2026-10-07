@@ -192,7 +192,7 @@ def _version_from_file(filename: str) -> Version:
 
 def _is_downgrade(pinned: str, version: Version) -> bool:
     try:
-        return version < Version(pinned)
+        return version < Version(pinned.removesuffix(".*"))
     except InvalidVersion:
         return False
 
@@ -220,19 +220,24 @@ def _add_lower_bound(spec: str, requirement: Requirement, version: str) -> str:
 def _format_version(version: Version, current: Specifier) -> str:
     if current.operator == "===":
         return str(version)  # keep the full string for `===`, a string comparison
+    if current.version.endswith(".*"):
+        return f"{_release_prefix(version, len(Version(current.version.removesuffix('.*')).release))}.*"
     if current.operator == "~=":
         if version.is_prerelease:
             return str(version).partition("+")[0]
-        precision = max(2, len(Version(current.version).release))
-        release = ".".join(str(part) for part in (*version.release, 0, 0)[:precision])
-        return f"{version.epoch}!{release}" if version.epoch else release
+        return _release_prefix(version, max(2, len(Version(current.version).release)))
     return _trim_version(version)
 
 
+def _release_prefix(version: Version, depth: int) -> str:
+    release = ".".join(str(part) for part in (*version.release, *(0,) * depth)[:depth])
+    return f"{version.epoch}!{release}" if version.epoch else release
+
+
 def _same_version(current: Specifier, new_version: str) -> bool:
-    if current.operator == "===":
+    if current.operator == "===" or current.version.endswith(".*"):
         return current.version == new_version
-    return "*" not in current.version and Version(current.version) == Version(new_version)
+    return Version(current.version) == Version(new_version)
 
 
 def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
