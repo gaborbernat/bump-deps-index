@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index import Options, main
+from bump_deps_index import main
 
 if TYPE_CHECKING:
-    from pytest_mock import MockerFixture
+    from conftest import FakeIndex
 
 
 def test_main(capfd: pytest.CaptureFixture[str]) -> None:
@@ -25,27 +25,21 @@ def test_script(capfd: pytest.CaptureFixture[str]) -> None:
     assert out
 
 
-def test_main_py(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_main_updates_packages(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
-    monkeypatch.delenv("NPM_CONFIG_REGISTRY", raising=False)
-    run = mocker.patch("bump_deps_index.run")
-    main(["A"])
-    opt = Options(
-        index_url="https://pypi.org/simple",
-        npm_registry="https://registry.npmjs.org",
-        pkgs=["A"],
-        filenames=[],
-        pre_release="file-default",
-    )
-    run.assert_called_once_with(opt)
+    index.pypi["A"] = ["1"]
+
+    main(["-i", index.index_url, "A"])
+
+    assert capsys.readouterr().out.splitlines() == ["Using Python index: https://pypi.example/simple", "A -> A>=1"]
 
 
-def test_main_exits_on_failed_update(mocker: MockerFixture) -> None:
-    mocker.patch("bump_deps_index.parse_cli")
-    mocker.patch("bump_deps_index.run", return_value=False)
+def test_main_exits_on_failed_update(index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
 
     with pytest.raises(SystemExit) as error:
-        main([])
+        main(["-i", index.index_url, "missing"])
 
     assert error.value.code == 1

@@ -19,7 +19,7 @@ from yaml import YAMLError
 
 from bump_deps_index._loaders import get_loaders
 
-from ._spec import PkgType, UpdateConfig, package_type, redact_text
+from ._spec import PkgType, UpdateConfig, package_type, redact_text, redact_url
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
@@ -132,6 +132,12 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
     changes: dict[_Spec, str] = {}
     successful = True
     if specs:
+        for of_type, pkg_type, registry in (
+            ("Python", PkgType.PYTHON, index_url),
+            ("JavaScript", PkgType.JS, npm_registry),
+        ):
+            if any(spec[1] is pkg_type for spec in specs):
+                sys.stdout.write(f"Using {of_type} index: {redact_url(registry)}\n")
         parallel = min(len(specs), 10)
         with (
             Client(

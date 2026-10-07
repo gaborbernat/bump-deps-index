@@ -7,14 +7,28 @@ import pytest
 from httpx import Client
 from packaging.version import Version
 
-from bump_deps_index._spec import PkgType, UpdateConfig, get_js_pkgs, get_pkgs, redact_text, update
+from bump_deps_index._spec import PkgType, UpdateConfig, redact_text, update
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
-    from pytest_mock import MockerFixture
 
 
-def test_get_pkgs(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> None:
+def _python(spec: str, *, pre_release: bool = False, python_version: Version | None = None) -> str:
+    config = UpdateConfig(
+        index_url="https://I.com", npm_registry="N", pre_release=pre_release, python_version=python_version
+    )
+    return update(Client(), spec, PkgType.PYTHON, config)
+
+
+def _js(spec: str, *, pre_release: bool = False) -> str:
+    config = UpdateConfig(index_url="I", npm_registry="https://N.com", pre_release=pre_release, python_version=None)
+    return update(Client(), spec, PkgType.JS, config)
+
+
+def test_update_python_parses_index_file_names(httpx_mock: HTTPXMock) -> None:
     raw_html = """
     <html>
     <body>
@@ -30,25 +44,13 @@ def test_get_pkgs(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> 
     """
     httpx_mock.add_response(url="https://I.com/a-b/", text=raw_html)
 
-    result = get_pkgs(Client(), "https://I.com", package="A-B", pre_release=False)
-
-    assert result == [Version("1.0.3"), Version("1.0.2"), Version("1.0.1"), Version("1.0.0")]
-    out, err = capsys.readouterr()
-    assert not out
-    assert not err
+    assert _python("A-B") == "A-B>=1.0.3"
 
 
 def test_update_python_accepts_release_without_requires_python(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url="https://I.com/a/", text="<a>A-2.tar.gz</a>")
 
-    updated = update(
-        Client(),
-        "A",
-        PkgType.PYTHON,
-        UpdateConfig(index_url="https://I.com", npm_registry="N", pre_release=False, python_version=Version("3.9")),
-    )
-
-    assert updated == "A>=2"
+    assert _python("A", python_version=Version("3.9")) == "A>=2"
 
 
 @pytest.mark.parametrize(
@@ -128,87 +130,56 @@ def test_update_python(
     index = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
     httpx_mock.add_response(url="https://I.com/a/", text=index, is_optional=True)
 
-    updated = update(
-        Client(),
-        spec,
-        PkgType.PYTHON,
-        UpdateConfig(index_url="https://I.com", npm_registry="N", pre_release=pre_release, python_version=None),
-    )
-
-    assert updated == result
+    assert _python(spec, pre_release=pre_release) == result
 
 
 @pytest.mark.parametrize(
-    ("spec", "result"),
+    ("spec", "versions", "pre_release", "result"),
     [
-        pytest.param("A@1", "A@2.0.0", id="versioned"),
-        pytest.param("A", "A@2.0.0", id="bare"),
+        pytest.param("a@1", ["1.0.0", "2.0.0"], False, "a@2.0.0", id="versioned"),
+        pytest.param("a", ["2.0.0"], False, "a@2.0.0", id="bare"),
+        pytest.param("a", ["1.0.0", "1.1.0", "bad", "1.2.0-a.1"], False, "a@1.1.0", id="skip-invalid-and-pre"),
+        pytest.param("a", ["1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1"], True, "a@1.0.0-rc.1", id="pre-rc"),
+        pytest.param("a", ["1.0.0-beta.2", "1.0.0-beta.11"], True, "a@1.0.0-beta.11", id="pre-numeric-order"),
     ],
 )
-def test_update_js(mocker: MockerFixture, spec: str, result: str) -> None:
-    mocker.patch("bump_deps_index._spec.get_js_pkgs", return_value=["2.0.0"])
+def test_update_js(httpx_mock: HTTPXMock, spec: str, versions: list[str], pre_release: bool, result: str) -> None:
+    httpx_mock.add_response(url="https://N.com/a", json={"versions": {key: {} for key in versions}})
 
-    updated = update(
-        Client(),
-        spec,
-        PkgType.JS,
-        UpdateConfig(index_url="I", npm_registry="N", pre_release=False, python_version=None),
-    )
-
-    assert updated == result
+    assert _js(spec, pre_release=pre_release) == result
 
 
-def test_get_js_pkgs(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(text='{"versions":{"1.0.0": {}, "1.1.0": {}, "bad": {}, "1.2.0-a.1": {}}}')
-    result = get_js_pkgs(Client(), "https://N.com", "a", pre_release=False)
-    assert result == ["1.1.0", "1.0.0"]
+def test_update_js_encodes_scoped_package(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(url="https://N.com/@scope%2Fpackage", json={"versions": {"1.0.0": {}}})
+
+    assert _js("@scope/package") == "@scope/package@1.0.0"
 
 
-def test_get_js_pkgs_orders_semver_prereleases(httpx_mock: HTTPXMock) -> None:
+def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
-        text='{"versions":{"1.0.0-beta.2": {}, "1.0.0-beta.11": {}, "1.0.0-rc.1": {}, "1.0.0": {}}}'
-    )
-
-    result = get_js_pkgs(Client(), "https://N.com/", "a", pre_release=True)
-
-    assert result == ["1.0.0", "1.0.0-rc.1", "1.0.0-beta.11", "1.0.0-beta.2"]
-
-
-def test_get_js_pkgs_encodes_scoped_package(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url="https://N.com/@scope%2Fpackage", text='{"versions":{"1.0.0": {}}}')
-
-    result = get_js_pkgs(Client(), "https://N.com", "@scope/package", pre_release=False)
-
-    assert result == ["1.0.0"]
-
-
-def test_update_redacts_index_credentials_and_preserves_port(
-    capsys: pytest.CaptureFixture[str], mocker: MockerFixture
-) -> None:
-    mocker.patch("bump_deps_index._spec.get_pkgs", return_value=[])
-
-    update(
-        Client(),
-        "credential-test",
-        PkgType.PYTHON,
-        UpdateConfig(
-            index_url="https://user:secret@index.example:8443/simple",
-            npm_registry="N",
-            pre_release=False,
-            python_version=None,
-        ),
-    )
-
-    assert capsys.readouterr().out == "Using Python index: https://index.example:8443/simple\n"
-
-
-def test_get_js_pkgs_requests_abbreviated_metadata_and_skips_deprecated(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(
+        url="https://N.com/a",
         match_headers={"Accept": "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"},
-        text='{"versions":{"1.0.0": {}, "2.0.0": {"deprecated": "broken"}}}',
+        json={"versions": {"1.0.0": {}, "2.0.0": {"deprecated": "broken"}}},
     )
 
-    assert get_js_pkgs(Client(), "https://N.com", "a", pre_release=False) == ["1.0.0"]
+    assert _js("a") == "a@1.0.0"
+
+
+def test_run_prints_index_once_without_credentials(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
+) -> None:
+    index.index_url = "https://user:secret@pypi.example:8443/simple"
+    index.pypi.update(a=["1"], b=["2"])
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("a\nb\n")
+
+    assert index.run(requirements)
+
+    lines = capsys.readouterr().out.splitlines()
+    assert (lines[0], sorted(lines[1:])) == (
+        "Using Python index: https://pypi.example:8443/simple",
+        ["a -> a>=1", "b -> b>=2"],
+    )
 
 
 @pytest.mark.parametrize(
@@ -240,23 +211,20 @@ def test_get_js_pkgs_requests_abbreviated_metadata_and_skips_deprecated(httpx_mo
         ),
     ],
 )
-def test_get_pkgs_filters_files(httpx_mock: HTTPXMock, content_type: str, body: str) -> None:
+def test_update_python_filters_files(httpx_mock: HTTPXMock, content_type: str, body: str) -> None:
     httpx_mock.add_response(url="https://I.com/a/", headers={"Content-Type": content_type}, text=body)
 
-    result = get_pkgs(Client(), "https://I.com", "a", pre_release=False, python_version=Version("3.11"))
-
-    assert result == [Version("2"), Version("1")]
+    assert _python("A", python_version=Version("3.11")) == "A>=2"
 
 
-def test_get_pkgs_fetches_each_project_once_per_client(httpx_mock: HTTPXMock) -> None:
+def test_update_python_fetches_each_project_once_per_client(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url="https://I.com/a/", text="<a>A-2.tar.gz</a>")
     client = Client()
+    config = UpdateConfig(index_url="https://I.com", npm_registry="N", pre_release=False, python_version=None)
 
-    first = get_pkgs(client, "https://I.com", "a", pre_release=False)
-    second = get_pkgs(client, "https://I.com", "A", pre_release=True)
+    results = [update(client, spec, PkgType.PYTHON, config) for spec in ("a", "A>=1")]
 
-    assert first == second == [Version("2")]
-    assert len(httpx_mock.get_requests()) == 1
+    assert (results, len(httpx_mock.get_requests())) == (["a>=2", "A>=2"], 1)
 
 
 def test_redact_text() -> None:

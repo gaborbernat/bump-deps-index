@@ -7,36 +7,25 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index._cli import Options
-from bump_deps_index._run import run
-
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from pathlib import Path
 
+    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
 
-def test_requirements_preserves_comments_and_similar_names(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_requirements_preserves_comments_and_similar_names(tmp_path: Path, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo  # keep this reason\nfoobar\n", encoding="utf-8")
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
-    httpx_mock.add_response(url="https://index.example/simple/foobar/", text="<a>foobar-3.tar.gz</a>")
+    index.pypi["foo"] = ["2"]
+    index.pypi["foobar"] = ["3"]
 
-    run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="https://registry.example",
-            pkgs=[],
-            filenames=[requirements],
-            pre_release="no",
-        )
-    )
+    assert index.run(requirements)
 
     assert requirements.read_text(encoding="utf-8") == "foo>=2  # keep this reason\nfoobar>=3\n"
 
 
-def test_pyproject_updates_only_dependency_tables(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_pyproject_updates_only_dependency_tables(tmp_path: Path, index: FakeIndex) -> None:
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
         dedent(
@@ -53,23 +42,15 @@ def test_pyproject_updates_only_dependency_tables(tmp_path: Path, httpx_mock: HT
         ).lstrip(),
         encoding="utf-8",
     )
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
+    index.pypi["foo"] = ["2"]
 
-    run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="https://registry.example",
-            pkgs=[],
-            filenames=[pyproject],
-            pre_release="no",
-        )
-    )
+    assert index.run(pyproject)
 
     assert '[project.optional-dependencies]\ntest = ["foo>=2"]' in pyproject.read_text(encoding="utf-8")
     assert '[tool.example]\ndependencies = ["foo"]' in pyproject.read_text(encoding="utf-8")
 
 
-def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, index: FakeIndex) -> None:
     setup_cfg = tmp_path / "setup.cfg"
     setup_cfg.write_text(
         dedent(
@@ -83,17 +64,9 @@ def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, httpx_mock: H
         ).lstrip(),
         encoding="utf-8",
     )
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
+    index.pypi["foo"] = ["2"]
 
-    run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="https://registry.example",
-            pkgs=[],
-            filenames=[setup_cfg],
-            pre_release="no",
-        )
-    )
+    assert index.run(setup_cfg)
 
     assert (
         setup_cfg.read_text(encoding="utf-8")
@@ -109,7 +82,7 @@ def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, httpx_mock: H
     )
 
 
-def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, index: FakeIndex) -> None:
     tox_ini = tmp_path / "tox.ini"
     tox_ini.write_text(
         dedent(
@@ -122,17 +95,9 @@ def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, httpx_mock: HTTP
         ).lstrip(),
         encoding="utf-8",
     )
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
+    index.pypi["foo"] = ["2"]
 
-    run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="https://registry.example",
-            pkgs=[],
-            filenames=[tox_ini],
-            pre_release="no",
-        )
-    )
+    assert index.run(tox_ini)
 
     assert (
         tox_ini.read_text(encoding="utf-8")
@@ -147,7 +112,7 @@ def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, httpx_mock: HTTP
     )
 
 
-def test_pre_commit_preserves_repository_urls(tmp_path: Path, httpx_mock: HTTPXMock) -> None:
+def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
         dedent(
@@ -162,17 +127,9 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, httpx_mock: HTTPXM
         ).lstrip(),
         encoding="utf-8",
     )
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
+    index.pypi["foo"] = ["2"]
 
-    run(
-        Options(
-            index_url="https://index.example/simple",
-            npm_registry="https://registry.example",
-            pkgs=[],
-            filenames=[config],
-            pre_release="no",
-        )
-    )
+    assert index.run(config)
 
     assert "repo: https://example.com/foo" in config.read_text(encoding="utf-8")
     assert "      - foo>=2" in config.read_text(encoding="utf-8")
@@ -252,49 +209,45 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, httpx_mock: HTTPXM
     ],
 )
 @pytest.mark.usefixtures("foo_index")
-def test_file_updates(tmp_path: Path, run_files: Callable[..., bool], name: str, content: str, expected: str) -> None:
+def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str, expected: str) -> None:
     dest = tmp_path / name
     dest.write_text(dedent(content).lstrip(), encoding="utf-8")
 
-    assert run_files(dest)
+    assert index.run(dest)
 
     assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()
 
 
 @pytest.mark.usefixtures("foo_index")
-def test_requirements_preserves_crlf_line_endings(
-    tmp_path: Path, httpx_mock: HTTPXMock, run_files: Callable[..., bool]
-) -> None:
+def test_requirements_preserves_crlf_line_endings(tmp_path: Path, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_bytes(b"foo>=1\r\nbar>=1\r\n")
-    httpx_mock.add_response(url="https://index.example/simple/bar/", text="<a>bar-1.tar.gz</a>")
+    index.pypi["bar"] = ["1"]
 
-    assert run_files(requirements)
+    assert index.run(requirements)
 
     assert requirements.read_bytes() == b"foo>=2\r\nbar>=1\r\n"
 
 
 @pytest.mark.usefixtures("foo_index")
-def test_unchanged_file_is_not_rewritten(tmp_path: Path, run_files: Callable[..., bool]) -> None:
+def test_unchanged_file_is_not_rewritten(tmp_path: Path, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo>=2\n", encoding="utf-8")
     os.utime(requirements, ns=(0, 0))
 
-    assert run_files(requirements)
+    assert index.run(requirements)
 
     assert requirements.stat().st_mtime_ns == 0
 
 
 @pytest.mark.usefixtures("foo_index")
-def test_package_shared_across_files_is_fetched_once(
-    tmp_path: Path, httpx_mock: HTTPXMock, run_files: Callable[..., bool]
-) -> None:
+def test_package_shared_across_files_is_fetched_once(tmp_path: Path, httpx_mock: HTTPXMock, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo>=1\n", encoding="utf-8")
     tox_toml = tmp_path / "tox.toml"
     tox_toml.write_text('[env_run_base]\ndeps = ["foo>=1", "foo>=1.5"]\n', encoding="utf-8")
 
-    assert run_files(requirements, tox_toml)
+    assert index.run(requirements, tox_toml)
 
     assert (requirements.read_text(encoding="utf-8"), tox_toml.read_text(encoding="utf-8")) == (
         "foo>=2\n",
@@ -303,41 +256,30 @@ def test_package_shared_across_files_is_fetched_once(
     assert len(httpx_mock.get_requests()) == 1
 
 
-def test_requires_python_comes_from_nearest_pyproject(
-    tmp_path: Path, httpx_mock: HTTPXMock, run_files: Callable[..., bool]
-) -> None:
+def test_requires_python_comes_from_nearest_pyproject(tmp_path: Path, index: FakeIndex) -> None:
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\nrequires-python = ">=3.9"\n')
     (tmp_path / "requirements").mkdir()
     requirements = tmp_path / "requirements" / "requirements-dev.txt"
     requirements.write_text("foo\n", encoding="utf-8")
-    httpx_mock.add_response(
-        url="https://index.example/simple/foo/",
-        text='<a data-requires-python="&gt;=3.10">foo-2.tar.gz</a><a>foo-1.tar.gz</a>',
-    )
+    index.pypi["foo"] = ["1", "2"]
+    index.requires_python["foo-2.tar.gz"] = ">=3.10"
 
-    assert run_files(requirements)
+    assert index.run(requirements)
 
     assert requirements.read_text(encoding="utf-8") == "foo>=1\n"
 
 
 def test_failure_message_redacts_index_credentials(
-    tmp_path: Path, httpx_mock: HTTPXMock, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, index: FakeIndex, capsys: pytest.CaptureFixture[str]
 ) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo\n", encoding="utf-8")
-    httpx_mock.add_response(url="https://user:s3cret@index.example/simple/foo/", status_code=404)
-    options = Options(
-        index_url="https://user:s3cret@index.example/simple",
-        npm_registry="https://registry.example",
-        pkgs=[],
-        filenames=[requirements],
-        pre_release="no",
-    )
+    index.index_url = "https://user:s3cret@pypi.example/simple"
 
-    assert not run(options)
+    assert not index.run(requirements)
 
     err = capsys.readouterr().err
-    assert "https://index.example/simple/foo/" in err
+    assert "https://pypi.example/simple/foo/" in err
     assert "s3cret" not in err
 
 
@@ -360,33 +302,17 @@ def test_failure_message_redacts_index_credentials(
 )
 @pytest.mark.usefixtures("foo_index")
 def test_pathological_line_parses_in_linear_time(
-    tmp_path: Path, run_files: Callable[..., bool], name: str, content: str, expected: str
+    tmp_path: Path, index: FakeIndex, name: str, content: str, expected: str
 ) -> None:
     dest = tmp_path / name
     dest.write_text(content, encoding="utf-8")
     start = time.perf_counter()
 
-    assert run_files(dest)
+    assert index.run(dest)
 
     assert (dest.read_text(encoding="utf-8"), time.perf_counter() - start < 1) == (expected, True)
 
 
 @pytest.fixture
-def foo_index(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(url="https://index.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
-
-
-@pytest.fixture
-def run_files() -> Callable[..., bool]:
-    def _run(*filenames: Path) -> bool:
-        return run(
-            Options(
-                index_url="https://index.example/simple",
-                npm_registry="https://registry.example",
-                pkgs=[],
-                filenames=list(filenames),
-                pre_release="no",
-            )
-        )
-
-    return _run
+def foo_index(index: FakeIndex) -> None:
+    index.pypi["foo"] = ["2"]

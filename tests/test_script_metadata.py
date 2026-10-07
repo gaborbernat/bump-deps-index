@@ -3,23 +3,17 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
-from bump_deps_index import Options, run
 from bump_deps_index._loaders import get_loaders
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
-    from pytest_mock import MockerFixture
+    from conftest import FakeIndex
 
 
-def test_run_script_metadata(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    get_loaders.cache_clear()
-    mapping = {"rich>=13.9.4": "rich>=13.9.5", "orjson>=3.10.13": "orjson>=3.10.14"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_run_script_metadata(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi.update({"rich": ["13.9.5"], "orjson": ["3.10.14"]})
     dest = tmp_path / "script.py"
     script = """
     #!/usr/bin/env python3
@@ -36,11 +30,15 @@ def test_run_script_metadata(capsys: pytest.CaptureFixture[str], mocker: MockerF
     print("Hello")
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"rich>=13.9.4 -> rich>=13.9.5", "orjson>=3.10.13 -> orjson>=3.10.14"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "rich>=13.9.4 -> rich>=13.9.5",
+        "orjson>=3.10.13 -> orjson>=3.10.14",
+    }
 
     script = """
     #!/usr/bin/env python3
@@ -61,15 +59,10 @@ def test_run_script_metadata(capsys: pytest.CaptureFixture[str], mocker: MockerF
 
 def test_script_metadata_ignores_requires_python(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
 ) -> None:
-    get_loaders.cache_clear()
-    mapping = {"requests>=2.28": "requests>=2.30"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update({"requests": ["2.30"]})
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -80,19 +73,19 @@ def test_script_metadata_ignores_requires_python(
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"requests>=2.28 -> requests>=2.30"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "requests>=2.28 -> requests>=2.30",
+    }
 
-    result = dest.read_text()
-    assert 'requires-python = ">=3.11"' in result
-    assert "requests>=2.30" in result
+    assert dest.read_text() == dedent(script).lstrip().replace("2.28", "2.30")
 
 
-def test_script_metadata_empty_deps(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    get_loaders.cache_clear()
+def test_script_metadata_empty_deps(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -100,15 +93,14 @@ def test_script_metadata_empty_deps(capsys: pytest.CaptureFixture[str], tmp_path
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
     assert not out.strip()
 
 
-def test_script_metadata_no_deps_key(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    get_loaders.cache_clear()
+def test_script_metadata_no_deps_key(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -116,15 +108,16 @@ def test_script_metadata_no_deps_key(capsys: pytest.CaptureFixture[str], tmp_pat
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
     assert not out.strip()
 
 
-def test_script_metadata_malformed_missing_closing(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    get_loaders.cache_clear()
+def test_script_metadata_malformed_missing_closing(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex
+) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -134,15 +127,16 @@ def test_script_metadata_malformed_missing_closing(capsys: pytest.CaptureFixture
     print("Hello")
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
     assert not out.strip()
 
 
-def test_script_metadata_malformed_invalid_toml(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    get_loaders.cache_clear()
+def test_script_metadata_malformed_invalid_toml(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex
+) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -150,7 +144,7 @@ def test_script_metadata_malformed_invalid_toml(capsys: pytest.CaptureFixture[st
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
@@ -159,15 +153,10 @@ def test_script_metadata_malformed_invalid_toml(capsys: pytest.CaptureFixture[st
 
 def test_script_metadata_with_extras(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
 ) -> None:
-    get_loaders.cache_clear()
-    mapping = {"requests[security]>=2.28.0": "requests[security]>=2.30.0"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update({"requests": ["2.30.1"]})
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -177,24 +166,22 @@ def test_script_metadata_with_extras(
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"requests[security]>=2.28.0 -> requests[security]>=2.30.0"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "requests[security]>=2.28.0 -> requests[security]>=2.30.1",
+    }
 
 
 def test_script_metadata_inline_array(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
 ) -> None:
-    get_loaders.cache_clear()
-    mapping = {"rich>=13.9.4": "rich>=13.9.5", "orjson": "orjson>=3.10.14"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update({"rich": ["13.9.5"], "orjson": ["3.10.14"]})
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -202,15 +189,18 @@ def test_script_metadata_inline_array(
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"rich>=13.9.4 -> rich>=13.9.5", "orjson -> orjson>=3.10.14"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "rich>=13.9.4 -> rich>=13.9.5",
+        "orjson -> orjson>=3.10.14",
+    }
 
 
 def test_script_metadata_file_without_metadata_ignored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    get_loaders.cache_clear()
     dest = tmp_path / "regular.py"
     dest.write_text("import sys\nprint('hello')\n")
 
@@ -222,8 +212,9 @@ def test_script_metadata_file_without_metadata_ignored(tmp_path: Path, monkeypat
     assert dest not in list(script_loader.files)
 
 
-def test_script_metadata_malformed_invalid_comment_prefix(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    get_loaders.cache_clear()
+def test_script_metadata_malformed_invalid_comment_prefix(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex
+) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -233,7 +224,7 @@ def test_script_metadata_malformed_invalid_comment_prefix(capsys: pytest.Capture
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
@@ -241,7 +232,6 @@ def test_script_metadata_malformed_invalid_comment_prefix(capsys: pytest.Capture
 
 
 def test_script_metadata_file_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    get_loaders.cache_clear()
     script_file = tmp_path / "script.py"
     script = """
     # /// script
@@ -264,7 +254,6 @@ def test_script_metadata_file_read_error(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_script_metadata_supports_file_read_error(tmp_path: Path) -> None:
-    get_loaders.cache_clear()
     broken_link = tmp_path / "broken.py"
     broken_link.symlink_to(tmp_path / "nonexistent.py")
 
@@ -276,15 +265,10 @@ def test_script_metadata_supports_file_read_error(tmp_path: Path) -> None:
 
 def test_script_metadata_with_blank_line_in_toml(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
 ) -> None:
-    get_loaders.cache_clear()
-    mapping = {"requests>=2.28": "requests>=2.30"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update({"requests": ["2.30"]})
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -296,15 +280,17 @@ def test_script_metadata_with_blank_line_in_toml(
     # ///
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"requests>=2.28 -> requests>=2.30"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "requests>=2.28 -> requests>=2.30",
+    }
 
 
 def test_script_metadata_file_unicode_decode_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    get_loaders.cache_clear()
     script_file = tmp_path / "valid.py"
     script = """
     # /// script
@@ -328,15 +314,10 @@ def test_script_metadata_file_unicode_decode_error(tmp_path: Path, monkeypatch: 
 
 def test_script_metadata_only_replaces_in_block(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
 ) -> None:
-    get_loaders.cache_clear()
-    mapping = {"httpx>=0.27.0": "httpx>=0.28.1", "rich>=13.0.0": "rich>=14.2"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update({"httpx": ["0.28.1"], "rich": ["14.2"]})
     dest = tmp_path / "script.py"
     script = """
     #!/usr/bin/env python3
@@ -359,15 +340,15 @@ def test_script_metadata_only_replaces_in_block(
     print("Hello")
     """
     dest.write_text(dedent(script).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"httpx>=0.27.0 -> httpx>=0.28.1", "rich>=13.0.0 -> rich>=14.2"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "httpx>=0.27.0 -> httpx>=0.28.1",
+        "rich>=13.0.0 -> rich>=14.2",
+    }
 
-    result = dest.read_text()
-    assert "httpx>=0.28.1" in result
-    assert "rich>=14.2" in result
-    assert "# This should NOT be changed: httpx>=0.27.0" in result
-    assert 'x = "httpx>=0.27.0"' in result
-    assert 'y = "rich>=13.0.0"' in result
+    updated = dedent(script).lstrip().replace('#     "httpx>=0.27.0"', '#     "httpx>=0.28.1"')
+    assert dest.read_text() == updated.replace('#     "rich>=13.0.0"', '#     "rich>=14.2"')
