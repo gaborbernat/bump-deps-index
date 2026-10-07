@@ -49,8 +49,10 @@ class Loader(ABC):
         if not changes:
             return text
         values = "|".join(re.escape(value) for value in sorted(changes, key=len, reverse=True))
-        pattern = re.compile(rf"(?P<quote>['\"])(?P<value>{values})(?P=quote)")
-        return pattern.sub(lambda match: f"{match['quote']}{changes[match['value']]}{match['quote']}", text)
+        pattern = re.compile(rf"(?P<quote>['\"])(?P<pad>[ \t]*)(?P<value>{values})(?P<end>[ \t]*)(?P=quote)")
+        return pattern.sub(
+            lambda match: f"{match['quote']}{match['pad']}{changes[match['value']]}{match['end']}{match['quote']}", text
+        )
 
     @staticmethod
     def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:

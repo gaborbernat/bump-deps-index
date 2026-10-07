@@ -233,6 +233,20 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             """
             [project]
             name = "demo"
+            dependencies = ["  foo>=1 "]
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = ["  foo>=2 "]
+            """,
+            id="pyproject-padded-spec",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
             dependencies = [
               "not \\"]\\" valid",
               "foo>=1",
