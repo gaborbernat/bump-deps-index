@@ -11,6 +11,8 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
+    from ._base import Entry
+
 
 class Requirements(Loader):
     _base: ClassVar[str] = "requirements"
@@ -64,7 +66,7 @@ class Requirements(Loader):
                 else:
                     yield filename
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         lines = filename.read_text(encoding="utf-8").split("\n")
         requirements = [" ".join(segment for _, segment in entry) for entry in self._entries(lines)]
         yield from self._generate(

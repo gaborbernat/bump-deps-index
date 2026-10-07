@@ -177,12 +177,14 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
 def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> list[_Spec] | None:
     try:
         entries = list(loader.load(filename, pre_release=pre_release))
+        # prefer a PEP 723 script's own `requires-python` over the project's, since you run the script outside it
+        floors = {requires: _python_floor(requires) for *_, requires in entries if requires is not None}
     except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
         sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
         return None
-    project, python_version = _get_project(filename.resolve().parent)
+    project, project_floor = _get_project(filename.resolve().parent)
     specs: dict[_Spec, None] = {}
-    for raw, pkg_type, accept_prereleases in entries:
+    for raw, pkg_type, accept_prereleases, requires_python in entries:
         if not (name := raw.strip()):
             continue
         if pkg_type is PkgType.PYTHON:
@@ -192,7 +194,9 @@ def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> 
                 continue
             if canonicalize_name(requirement.name) == project:
                 continue
-        specs[name, pkg_type, accept_prereleases, python_version] = None
+        specs[
+            name, pkg_type, accept_prereleases, project_floor if requires_python is None else floors[requires_python]
+        ] = None
     return list(specs)
 
 

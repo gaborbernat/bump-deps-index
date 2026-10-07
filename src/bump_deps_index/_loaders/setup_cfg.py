@@ -13,6 +13,8 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
+    from ._base import Entry
+
 
 class NoTransformConfigParser(RawConfigParser):
     @override
@@ -57,7 +59,7 @@ class SetupCfg(Loader):
                 result.append(self._replace_requirement_line(line, changes))
         return "\n".join(result)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         cfg = NoTransformConfigParser()
         cfg.read(filename)
         pre = False if pre_release is None else pre_release

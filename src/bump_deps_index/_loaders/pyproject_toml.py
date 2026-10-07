@@ -12,6 +12,8 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
+    from ._base import Entry
+
 
 class PyProjectToml(Loader):
     _filename: ClassVar[str] = "pyproject.toml"
@@ -55,7 +57,7 @@ class PyProjectToml(Loader):
                 in_deps_section = False
         return "\n".join(result_lines)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open("rb") as file_handler:
             cfg = load_toml(file_handler)
         pre = False if pre_release is None else pre_release

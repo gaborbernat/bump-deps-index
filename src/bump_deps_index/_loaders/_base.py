@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
     from pathlib import Path
+    from typing import TypeAlias
 
     from bump_deps_index._spec import PkgType
+
+    Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
 
 
 # match the factor shape to skip the colons inside URL requirements
@@ -26,7 +29,7 @@ class Loader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         raise NotImplementedError
 
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
@@ -111,6 +114,13 @@ class Loader(ABC):
         pkg_type: PkgType,
         *,
         pre_release: bool = False,
-    ) -> Iterator[tuple[str, PkgType, bool]]:
+        requires_python: str | None = None,
+    ) -> Iterator[Entry]:
         for value in generator:
-            yield value, pkg_type, pre_release
+            yield value, pkg_type, pre_release, requires_python
+
+
+__all__ = [
+    "Entry",
+    "Loader",
+]
