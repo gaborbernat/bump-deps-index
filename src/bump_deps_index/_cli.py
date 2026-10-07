@@ -25,12 +25,15 @@ class Options(Namespace):
     """Package names to get latest version for."""
     filenames: list[Path]
     """
-    The file to upload python package version from, can be one of:
+    Files to update, each one of:
 
     - ``pyproject.toml``
+    - ``tox.toml``
     - ``tox.ini``
-    - ``.pre-commit-config.yaml``
     - ``setup.cfg``
+    - ``.pre-commit-config.yaml``
+    - ``requirements*.txt`` and ``requirements*.in``
+    - Python scripts with PEP 723 inline metadata
     """
     pre_release: Literal["yes", "no", "file-default"]
     """Accept pre-releases: yes, no or decide per file type"""
