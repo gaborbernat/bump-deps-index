@@ -167,3 +167,27 @@ def test_run_pre_commit_reports_missing_npm_package(
 
     assert capsys.readouterr().err.startswith("failed nope with HTTPStatusError(")
     assert config.read_text() == dedent(content).lstrip()
+
+
+def test_run_pre_commit_follows_hook_language(index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi["black"] = ["24.1"]
+    config = tmp_path / ".pre-commit-config.yaml"
+    content = """
+    repos:
+      - repo: local
+        hooks:
+          - id: go
+            language: golang
+            additional_dependencies: [github.com/a/b@v1.0.0]
+          - id: rust
+            language: rust
+            additional_dependencies: ["cli:ripgrep:14.0.0"]
+          - id: py
+            language: python
+            additional_dependencies: [black]
+    """
+    config.write_text(dedent(content).lstrip(), encoding="utf-8")
+
+    assert index.run(config)
+
+    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[black]", "[black>=24.1]")
