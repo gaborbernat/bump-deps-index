@@ -78,3 +78,10 @@ def test_cli_pickup_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     options = parse_cli([])
 
     assert set(options.filenames) == files
+
+
+def test_cli_skips_file_discovery_for_packages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("")
+
+    assert parse_cli(["A"]).filenames == []

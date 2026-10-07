@@ -40,9 +40,11 @@ class Options(Namespace):
 
 
 def parse_cli(args: Sequence[str] | None) -> Options:
-    parser = _build_parser()
     res = Options()
-    parser.parse_args(args, namespace=res)
+    _build_parser().parse_args(args, namespace=res)
+    if res.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
+        found = () if res.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
+        res.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
     return res
 
 
@@ -59,16 +61,13 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
-
-    cwd = Path().cwd()
-    filenames = sorted(f.relative_to(cwd) for f in set(chain.from_iterable(i.files for i in get_loaders())))
-    msg = f"update Python version within a file (default: [{', '.join(str(i) for i in filenames)}])"
+    msg = "files to update (default: supported files in the working directory)"
     source.add_argument(
         "--file",
         "-f",
         dest="filenames",
         help=msg,
-        default=filenames,
+        default=None,
         action="store",
         nargs="*",
         metavar="f",
