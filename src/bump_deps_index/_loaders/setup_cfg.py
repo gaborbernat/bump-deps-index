@@ -36,7 +36,7 @@ class SetupCfg(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        # configparser hands every `[DEFAULT]` key to `[options.extras_require]`, which reads each key as an extra
+        # configparser copies the `[DEFAULT]` keys into `[options.extras_require]`, which reads each key as an extra
         extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
         return self._update_ini(
             text,

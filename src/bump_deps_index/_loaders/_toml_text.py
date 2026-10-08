@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from tomllib import loads as load_toml
 from typing import TYPE_CHECKING, Final, NamedTuple
 
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
 _SCALAR_END: Final[frozenset[str]] = frozenset(",]}\n#")
 # the key path marks an array item with `[]`, and an inline table with a string `replace` key as `{<kind>}`
 _ARRAY: Final[str] = "[]"
+_CONTROL: Final[re.Pattern[str]] = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tuple[str, ...]], bool]) -> str:
@@ -25,8 +27,9 @@ def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tup
         encoded = f"{pad}{new}{trail}"
         if string.quote == '"':  # a single-line basic string needs escapes for quotes, backslashes and newlines
             encoded = json.dumps(encoded, ensure_ascii=False)[1:-1]
-        elif string.quote == '"""':
-            encoded = encoded.replace("\\", "\\\\").replace('"', '\\"')
+        elif string.quote == '"""':  # a multi-line basic string takes raw newlines and tabs, and escapes the rest
+            escaped = encoded.replace("\\", "\\\\").replace('"', '\\"')
+            encoded = _CONTROL.sub(lambda match: f"\\u{ord(match[0]):04x}", escaped)
         pieces += [text[last : string.start], lead, encoded]
         last = string.end
     return "".join([*pieces, text[last:]])

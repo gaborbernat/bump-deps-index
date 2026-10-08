@@ -36,16 +36,17 @@ to update.
 
 Without `--index-url` you get the index from `PIP_INDEX_URL`, `UV_DEFAULT_INDEX` or `UV_INDEX_URL`, then the default
 index of the nearest `uv.toml` or `[tool.uv]` table, then `index-url` from your pip configuration, then your user
-`uv.toml`. For a requirements file with an `--index-url` or `-i` line you get updates from that index. For a named uv
-index you send the credentials from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`.
+`uv.toml`. With an `--index-url` or `-i` line in a requirements file, or in a file it includes with `-r`, you get
+updates from that index. For a named uv index you send the credentials from `UV_INDEX_<NAME>_USERNAME` and
+`UV_INDEX_<NAME>_PASSWORD`.
 
 uv reads `[tool.uv.sources]` for the `pyproject.toml` of a project, with the sources of its workspace root, and for a
-PEP 723 script from the script's own `[tool.uv]` table. For a package such a table pins to an index you get updates from
-that index, and for one from git, a path or a URL you keep the spec as you wrote it. pip installs the packages of the
-other Python files, so you get the default index there.
+PEP 723 script from the script's own `[tool.uv]` table. You look up a package such a table pins to an index on that
+index, and keep the spec of one from git, a path or a URL. pip installs the packages of the other Python files, so you
+get the default index there.
 
 Without `--npm-registry` you get `NPM_CONFIG_REGISTRY`, then `registry` from the `.npmrc` in the working directory, then
-from your user `.npmrc`. From those files you also get the `@scope:registry` of a scoped package and the `_authToken` or
+from your user `.npmrc`. From those files you get the `@scope:registry` of a scoped package and the `_authToken` or
 `_auth` credentials of each registry.
 
 Set `[project].requires-python` in a `pyproject.toml` and you get Python updates from distributions that support the
@@ -61,8 +62,8 @@ For an `==` pin you get a newer release or no change, and you keep wildcards at 
 requirements as you wrote them, since you would need new hashes for a new version.
 
 On npm ranges you stay inside the range, so `^1.2.0` goes to the newest `1.x` release and `~1.2.0` to the newest
-`1.2.x`. You get the newest release for `>=1.2.0` and for a full or partial version, and you keep ranges such as
-`1 || 2` or `latest` as you wrote them. In `package.json` you get updates for `dependencies`, `devDependencies` and
+`1.2.x`. You get the newest release for `>=1.2.0` and for a full or partial version, and you leave ranges such as
+`1 || 2` or `latest` untouched. In `package.json` you get updates for `dependencies`, `devDependencies` and
 `optionalDependencies`.
 
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates

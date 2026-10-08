@@ -12,6 +12,7 @@ from bump_deps_index import main
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
 _PYPI: Final[str] = "https://pypi.org/simple"
@@ -99,7 +100,13 @@ _NPM: Final[str] = "https://registry.npmjs.org"
             id="pip-legacy-after-invalid-config",
         ),
         pytest.param(
-            ({}, {"~/.config/pip/pip.conf": "[global]\nindex_url = https://underscore.example/simple"}),
+            (
+                {},
+                {
+                    "~/.pip/pip.conf": "[global]\nindex-url = https://old.example/simple",
+                    "~/.config/pip/pip.conf": "[global]\nindex_url = https://underscore.example/simple",
+                },
+            ),
             ("https://underscore.example/simple", _NPM),
             id="pip-underscore-key",
         ),
@@ -238,7 +245,11 @@ def test_main_sends_npm_credentials_and_routes_scopes(
 
 @pytest.mark.usefixtures("isolated_index_settings")
 def test_main_looks_up_uv_sources_on_their_index(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    capsys: pytest.CaptureFixture[str],
+    httpx_mock: HTTPXMock,
+    index: FakeIndex,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("UV_INDEX_CORP_MIRROR_USERNAME", "user")
@@ -267,12 +278,7 @@ def test_main_looks_up_uv_sources_on_their_index(
         ).lstrip(),
         encoding="utf-8",
     )
-    for url in (
-        "https://user:p%40ss@corp.example/simple/internal/",
-        "https://plain.example/simple/pinned/",
-        "https://user:p%40ss@corp.example/simple/public/",
-    ):
-        httpx_mock.add_response(url=url, text=f"<a>{url.split('/')[-2]}-1.tar.gz</a>")
+    index.pypi.update(internal=["1"], pinned=["1"], public=["1"])
 
     main(["-f", "pyproject.toml"])
 
@@ -296,7 +302,7 @@ def test_main_looks_up_uv_sources_on_their_index(
 
 @pytest.mark.usefixtures("isolated_index_settings")
 def test_main_reads_uv_sources_from_the_workspace_root(
-    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(
         dedent(
@@ -326,8 +332,7 @@ def test_main_reads_uv_sources_from_the_workspace_root(
         encoding="utf-8",
     )
     monkeypatch.chdir(member)
-    httpx_mock.add_response(url="https://corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
-    httpx_mock.add_response(url="https://pypi.example/simple/public/", text="<a>public-1.tar.gz</a>")
+    index.pypi.update(internal=["1"], public=["1"])
 
     main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml"])
 
@@ -344,7 +349,7 @@ def test_main_reads_uv_sources_from_the_workspace_root(
 
 @pytest.mark.usefixtures("isolated_index_settings")
 def test_main_applies_uv_sources_where_uv_reads_them(
-    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
@@ -375,10 +380,7 @@ def test_main_applies_uv_sources_where_uv_reads_them(
         ).lstrip(),
         encoding="utf-8",
     )
-    httpx_mock.add_callback(
-        lambda request: httpx.Response(200, text=f"<a>{request.url.path.split('/')[-2]}-2.tar.gz</a>"),
-        is_reusable=True,
-    )
+    index.pypi.update(torch=["2"], myproj=["2"])
 
     main(["-i", "https://pypi.example/simple", "-f", "requirements.txt", "script.py"])
     main(["-i", "https://pypi.example/simple", "torch"])

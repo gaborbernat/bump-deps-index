@@ -12,6 +12,7 @@ from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode, YAMLEr
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
+from bump_deps_index._parsed import mappings, strings
 from bump_deps_index._spec import PkgType, package_type
 
 from ._base import Loader
@@ -74,8 +75,8 @@ class PreCommitConfig(Loader):
         pre = True if pre_release is None else pre_release
         kept = self._kept_by_file[filename] = []
         # read a malformed entry as a missing one, so one bad hook does not stop the run
-        for repo in _mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
-            hooks = _mappings(repo.get("hooks"))
+        for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
+            hooks = mappings(repo.get("hooks"))
             languages = (
                 _hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
                 if any("language" not in hook and hook.get("additional_dependencies") for hook in hooks)
@@ -91,11 +92,9 @@ class PreCommitConfig(Loader):
                     kept.append(not skip)
                 if skip:
                     continue
-                dependencies = hook.get("additional_dependencies")
-                for pkg in dependencies if isinstance(dependencies, list) else []:
-                    if isinstance(pkg, str):
-                        pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[str(language)]
-                        yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
+                for pkg in strings(hook.get("additional_dependencies")):
+                    pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
+                    yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
 
 
 def _hooks(repos: Node | None) -> Iterator[MappingNode]:
@@ -109,7 +108,8 @@ def _value(node: Node | None, key: str) -> Node | None:
     pairs = node.value if isinstance(node, MappingNode) else []
     if found := next((value for name, value in reversed(pairs) if _is_key(name, key)), None):
         return found
-    merged = (value for name, value in pairs if name.tag == _MERGE)
+    # the last `<<` key wins, and within one `<<` list the first map wins
+    merged = (value for name, value in reversed(pairs) if name.tag == _MERGE)
     bases = (base for value in merged for base in (value.value if isinstance(value, SequenceNode) else [value]))
     return next((found for base in bases if (found := _value(base, key)) is not None), None)
 
@@ -127,14 +127,13 @@ def _encode(value: str, style: str | None) -> str | None:
 
 
 def _scalar_start(text: str, at: int) -> int:
-    # a node starts at its `&anchor` or `!tag`; keep those and replace the value after them
-    while text[at] in {"&", "!"}:
-        at = len(text) - len(text[at:].split(maxsplit=1)[-1])
+    # a node starts at its `&anchor` or `!tag`; keep those, and any comment after them, and replace the value
+    while text[at] in {"&", "!", "#"} or text[at].isspace():
+        if text[at] == "#":
+            at = text.index("\n", at)
+        else:
+            at += 1 if text[at].isspace() else len(text[at:].split(maxsplit=1)[0])
     return at
-
-
-def _mappings(value: Parsed) -> list[dict[str, Parsed]]:
-    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
 def _hook_languages(repo: str, rev: str | None) -> dict[str, str]:

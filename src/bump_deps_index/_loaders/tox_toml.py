@@ -80,7 +80,7 @@ class ToxToml(Loader):
 
 
 def _is_dependency(path: tuple[str, ...]) -> bool:
-    # try each shape in turn: an environment named `deps` has the path `env.deps.deps`
+    # an environment named `deps` has the path `env.deps.deps`, so fall through to the next shape
     match path:
         case ("requires", *rest) | (_, "deps", *rest) if _collected(rest):
             return True

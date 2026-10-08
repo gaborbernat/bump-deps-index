@@ -838,6 +838,11 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
                     additional_dependencies:
                       - foo
                         >=1
+                      - &d # pinned
+                        foo>=1
+                  - <<: *base
+                    <<: {language: python, additional_dependencies: [foo>=1]}
+                    id: last-merge
             """,
             """
             base: &base {language: golang, additional_dependencies: [foo>=1]}
@@ -856,13 +861,18 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
                     language: python
                     additional_dependencies:
                       - foo >=2
+                      - &d # pinned
+                        foo>=2
+                  - <<: *base
+                    <<: {language: python, additional_dependencies: [foo>=2]}
+                    id: last-merge
             """,
             id="pre-commit-anchors-tags-merge-keys-and-folded-scalars",
         ),
         pytest.param(
             "pyproject.toml",
-            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=1", """\\\n  foo>=1\\\n  """]\n',
-            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=2", """foo>=2"""]\n',
+            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=1", """\\\n  foo>=1\\\n  """, """\\ffoo>=1"""]\n',
+            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=2", """foo>=2""", """\\u000cfoo>=2"""]\n',
             id="pyproject-escapes-and-line-ending-backslash",
         ),
         pytest.param(
@@ -888,6 +898,12 @@ def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str,
     [
         pytest.param("requirements.txt", b"foo>=1\r\nbar>=1\r\nbar>=1\n", b"foo>=2\r\nbar>=1\r\nbar>=1\n", id="mixed"),
         pytest.param("tox.ini", b"[testenv]\rdeps = foo>=1\r", b"[testenv]\rdeps = foo>=2\r", id="carriage-return"),
+        pytest.param(
+            "pyproject.toml",
+            b'[project]\nname = "demo"\ndependencies = ["""foo\\\n>=1"""]\n# a\r\n# b\r\n# c\n',
+            b'[project]\nname = "demo"\ndependencies = ["""foo>=2"""]\n# a\r\n# b\r\n# c\n',
+            id="joined-line",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")

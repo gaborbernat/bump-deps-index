@@ -16,6 +16,10 @@ def table(value: Parsed, *keys: str) -> dict[str, Parsed]:
     return value if isinstance(value, dict) else {}
 
 
+def mappings(value: Parsed) -> list[dict[str, Parsed]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
 def strings(value: Parsed) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
@@ -28,6 +32,7 @@ def expand_env(text: str) -> str:
 __all__ = [
     "Parsed",
     "expand_env",
+    "mappings",
     "strings",
     "table",
 ]

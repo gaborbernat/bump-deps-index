@@ -38,7 +38,7 @@ class ToxIni(Loader):
         return self._update_ini(
             text,
             changes,
-            # configparser hands a `[DEFAULT]` key to every section that lacks it
+            # configparser copies a `[DEFAULT]` key into each section that lacks the key
             lambda section, key: (
                 (section in {"tox", "DEFAULT"} and key == "requires")
                 or ((section.startswith("testenv") or section == "DEFAULT") and key == "deps")
@@ -51,9 +51,8 @@ class ToxIni(Loader):
         pre = False if pre_release is None else pre_release
         for section in cfg.sections():
             if section.startswith("testenv"):
-                values = self._ini_values(cfg[section].get("deps", ""))
                 yield from self._generate(
-                    [self._strip_factor(value) for value in values],
+                    [self._strip_factor(value) for value in self._ini_values(cfg[section].get("deps", ""))],
                     pkg_type=PkgType.PYTHON,
                     pre_release=pre,
                 )

@@ -168,13 +168,20 @@ def test_run_requirements_txt_updates_continued_entries(
     assert requirements.read_text(encoding="utf-8") == expected
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("--index-url\thttps://ignored.example/simple\n-r base.txt\nfoo>=1\n", id="included-file"),
+        pytest.param("-i \\\n  'https://${HOST}/simple'\nfoo>=1\n", id="continued-and-quoted"),
+        pytest.param("-i 'unclosed\n--index-url=https://${HOST}/simple # mirror\nfoo>=1\n", id="equals-and-comment"),
+    ],
+)
 def test_run_requirements_txt_looks_up_its_own_index(
-    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
 ) -> None:
     monkeypatch.setenv("HOST", "private.example")
     index.pypi["foo"] = ["2"]
     requirements = tmp_path / "requirements.txt"
-    content = "--index-url\thttps://ignored.example/simple\n-r base.txt\nfoo>=1\n"
     requirements.write_text(content, encoding="utf-8")
     base = "-ihttps://${HOST}/simple  # mirror\n-r requirements.txt\n-r missing.txt\n"
     (tmp_path / "base.txt").write_text(base, encoding="utf-8")

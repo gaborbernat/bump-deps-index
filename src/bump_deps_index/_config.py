@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING, Final
 from urllib.parse import quote, urlsplit
 
 from packaging.utils import canonicalize_name
+from typing_extensions import override
 
-from bump_deps_index._parsed import expand_env, table
+from bump_deps_index._parsed import expand_env, mappings, table
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -43,33 +44,31 @@ def _uv_settings(folder: Path) -> dict[str, Parsed]:
 
 
 def _pip_index() -> str | None:
-    home, config_home = Path.home(), _config_home()
-    # pip skips the user files when `PIP_CONFIG_FILE` names a file, the null device included
     config_file = os.environ.get("PIP_CONFIG_FILE", "")
+    # pip skips the user files when `PIP_CONFIG_FILE` names a file, the null device included
+    skip_user = config_file == os.devnull or (bool(config_file) and Path(config_file).is_file())
+    home, config_home = Path.home(), _config_home()
     user = [
         home / ".pip" / "pip.conf",
         home / "Library" / "Application Support" / "pip" / "pip.conf",
         config_home / "pip" / "pip.conf",
         config_home / "pip" / "pip.ini",
     ]
-    skip_user = config_file == os.devnull or (bool(config_file) and Path(config_file).is_file())
-    # pip lets a later file override an earlier one, and an `[install]` value beat a `[global]` one in any file
-    cfg = ConfigParser(interpolation=None)
+    # pip lets a later file override an earlier one, and an `[install]` value beats a `[global]` one in any file
+    cfg = _PipConfigParser(interpolation=None)
     for file in [*([] if skip_user else user), *filter(None, [config_file])]:
         try:
             cfg.read(file, encoding="utf-8")
         except (ConfigParserError, UnicodeDecodeError):
             continue
-    # pip reads `index_url` as `index-url`
-    return next(
-        (
-            url
-            for section in ("install", "global")
-            for key in ("index-url", "index_url")
-            if (url := cfg.get(section, key, fallback=None))
-        ),
-        None,
-    )
+    return cfg.get("install", "index-url", fallback=None) or cfg.get("global", "index-url", fallback=None)
+
+
+class _PipConfigParser(ConfigParser):
+    @override
+    def optionxform(self, optionstr: str) -> str:
+        """Read `index_url` as `index-url`, as pip does, so the later of the two spellings wins."""
+        return optionstr.lower().replace("_", "-")
 
 
 def _config_home() -> Path:
@@ -202,9 +201,7 @@ def _default_index(uv: dict[str, Parsed]) -> str | None:
 
 
 def _indexes(uv: dict[str, Parsed]) -> list[dict[str, Parsed]]:
-    return (
-        [index for index in indexes if isinstance(index, dict)] if isinstance(indexes := uv.get("index"), list) else []
-    )
+    return mappings(uv.get("index"))
 
 
 def _index_url(index: dict[str, Parsed]) -> str | None:

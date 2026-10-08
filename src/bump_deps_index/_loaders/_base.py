@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Final, NamedTuple
 
 if TYPE_CHECKING:
@@ -40,11 +41,15 @@ class Loader(ABC):
         text = re.sub(r"\r\n?", "\n", raw)
         if (updated := self._update_text(text, changes)) == text:
             return
-        # give each line back its own ending; a rewrite that joins or splits lines takes the most common one
-        lines, endings = updated.split("\n"), re.findall(r"\r\n?|\n", raw)
-        common = max(endings, key=endings.count, default="\n")
-        endings = [*endings[: len(lines) - 1], *[common] * (len(lines) - 1 - len(endings)), ""]
-        content = "".join(f"{line}{end}" for line, end in zip(lines, endings, strict=True))
+        lines, endings = updated.split("\n"), [*re.findall(r"\r\n?|\n", raw), ""]
+        # give each line back its own ending; align the lines when a rewrite joins or splits some of them
+        matcher = SequenceMatcher(None, text.split("\n"), lines, autojunk=False)
+        new_endings = [
+            ending
+            for _, old_start, old_end, new_start, new_end in matcher.get_opcodes()
+            for ending in _fit(endings[old_start:old_end], new_end - new_start)
+        ]
+        content = "".join(f"{line}{end}" for line, end in zip(lines, new_endings, strict=True))
         with filename.open("w", encoding="utf-8", newline="") as file_handler:
             file_handler.write(content)
 
@@ -122,6 +127,12 @@ class Loader(ABC):
             yield Entry(value, pkg_type, pre_release)
 
 
+def _fit(endings: list[str], count: int) -> list[str]:
+    # keep the endings in order and the last one last, so the end of the file keeps its final newline or lack of it
+    first, last = (endings[0], endings[-1]) if endings else ("\n", "\n")  # an inserted line has no old ending
+    return [*[*endings[:-1], *[first] * count][: count - 1], last][:count]
+
+
 class Entry(NamedTuple):
     spec: str
     pkg_type: PkgType
@@ -131,9 +142,6 @@ class Entry(NamedTuple):
     sources: Mapping[str, str | None] | None = None
     # an index the file sets for its own requirements, such as `--index-url` in a requirements file
     index_url: str | None = None
-
-
-# match the factor shape to skip the colons inside URL requirements
 
 
 __all__ = [
