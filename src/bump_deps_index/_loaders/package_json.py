@@ -32,7 +32,12 @@ class PackageJson(Loader):
 
     @staticmethod
     def _update_text(text: str, changes: Mapping[str, str]) -> str:
-        return _SECTION.sub(lambda section: _replace_ranges(section[0], changes), text)
+        return _SECTION.sub(
+            lambda section: (
+                _replace_ranges(section[0], changes) if _depth(text[: section.start()]) == 1 else section[0]
+            ),
+            text,
+        )
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open(encoding="utf-8") as file_handler:
@@ -50,6 +55,22 @@ class PackageJson(Loader):
             pkg_type=PkgType.JS,
             pre_release=False if pre_release is None else pre_release,
         )
+
+
+def _depth(text: str) -> int:
+    # count the braces outside strings to find the sections of the top-level object
+    depth, in_string, escaped = 0, False, False
+    for character in text:
+        if escaped:
+            escaped = False
+        elif in_string:
+            escaped = character == "\\"
+            in_string = character != '"'
+        elif character == '"':
+            in_string = True
+        else:
+            depth += {"{": 1, "}": -1}.get(character, 0)
+    return depth
 
 
 def _replace_ranges(section: str, changes: Mapping[str, str]) -> str:

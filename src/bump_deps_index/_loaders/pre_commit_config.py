@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import re
+import ssl
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, NotRequired, TypedDict, cast
+from urllib.parse import quote, urlsplit
 
+from httpx import Client, HTTPError
+from truststore import SSLContext
+from yaml import YAMLError
 from yaml import safe_load as load_yaml
 
 from bump_deps_index._spec import PkgType, package_type
@@ -53,11 +58,13 @@ class PreCommitConfig(Loader):
                 flow_depth += self._bracket_delta(line)
                 result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes))
                 continue
-            # the key may share its line with the `-` that opens the hook mapping
-            if (key := line.lstrip(" -")).startswith("additional_dependencies:"):
-                dependency_indent = len(line) - len(key)
-                flow_depth = self._bracket_delta(line)
-                result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes))
+            head, key, value = line.partition("additional_dependencies:")
+            if key:
+                # the key may follow the `-` that opens a hook, or sit inside an inline hook mapping
+                dependency_indent = None if head.strip(" -") else len(head)
+                end, flow_depth = _flow_list(self._split_comment(value)[0])
+                updated = self._replace_flow_values(self._replace_quoted(value[:end], changes), changes)
+                result.append(f"{head}{key}{updated}{value[end:]}")
                 continue
             if (
                 dependency_indent is not None
@@ -97,13 +104,56 @@ class PreCommitConfig(Loader):
         pre = True if pre_release is None else pre_release
         repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
         for repo in repos:
+            # a remote hook takes its language from the manifest of its repository
+            languages = (
+                _hook_languages(repo["repo"], repo.get("rev"))
+                if any("language" not in hook and hook.get("additional_dependencies") for hook in repo["hooks"])
+                else {}
+            )
             for hook in repo["hooks"]:
+                language = hook.get("language") or languages.get(hook["id"])
                 # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
-                if (language := hook.get("language")) is not None and language not in _LANGUAGE_TYPES:
+                if language is not None and language not in _LANGUAGE_TYPES:
                     continue
                 for pkg in hook.get("additional_dependencies", []):
                     pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
                     yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
+
+
+def _flow_list(value: str) -> tuple[int, int]:
+    # end at the `]` that closes the list, to leave the keys after it in an inline hook mapping alone
+    depth = 0
+    for at, character in enumerate(value):
+        depth += {"[": 1, "]": -1}.get(character, 0)
+        if character == "]" and depth == 0:
+            return at + 1, 0
+    return len(value), depth
+
+
+def _hook_languages(repo: str, rev: str | None) -> dict[str, str]:
+    if rev is None or (url := _manifest_url(repo, rev)) is None:
+        return {}
+    try:
+        with Client(verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=10) as client:
+            response = client.get(url, follow_redirects=True)
+        manifest = load_yaml(response.raise_for_status().text)
+    except (HTTPError, YAMLError):  # guess from the dependency shape when the manifest is out of reach
+        return {}
+    return {
+        hook["id"]: hook["language"]
+        for hook in (manifest if isinstance(manifest, list) else [])
+        if isinstance(hook, dict) and isinstance(hook.get("id"), str) and isinstance(hook.get("language"), str)
+    }
+
+
+def _manifest_url(repo: str, rev: str) -> str | None:
+    parsed = urlsplit(repo)
+    path = parsed.path.strip("/").removesuffix(".git")
+    if parsed.netloc == "github.com":
+        return f"https://raw.githubusercontent.com/{path}/{quote(rev)}/.pre-commit-hooks.yaml"
+    if parsed.netloc == "gitlab.com":
+        return f"https://gitlab.com/{path}/-/raw/{quote(rev)}/.pre-commit-hooks.yaml"
+    return None
 
 
 __all__ = [

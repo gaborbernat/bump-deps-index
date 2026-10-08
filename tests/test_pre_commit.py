@@ -3,11 +3,14 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+import httpx
+from conftest import FakeIndex
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
-    from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
 def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
@@ -179,3 +182,71 @@ def test_run_pre_commit_follows_hook_language(index: FakeIndex, tmp_path: Path) 
     assert index.run(config)
 
     assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[black]", "[black>=24.1]")
+
+
+def test_run_pre_commit_reads_remote_hook_language(httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    fake = FakeIndex(pypi={"black": ["24.1"]}, npm={"eslint": ["9.0.0"]})
+    manifests = {
+        "https://raw.githubusercontent.com/a/hooks/v1.0/.pre-commit-hooks.yaml": httpx.Response(
+            200, text="- id: go\n  language: golang\n- id: lint\n  language: node\n- not a hook\n"
+        ),
+        "https://gitlab.com/b/hooks/-/raw/v2/.pre-commit-hooks.yaml": httpx.Response(404),
+        "https://raw.githubusercontent.com/c/hooks/v3/.pre-commit-hooks.yaml": httpx.Response(200, text="[invalid"),
+    }
+    httpx_mock.add_callback(lambda request: manifests.get(str(request.url)) or fake.serve(request), is_reusable=True)
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        dedent(
+            """
+            repos:
+              - repo: https://github.com/a/hooks.git
+                rev: v1.0
+                hooks:
+                  - id: go
+                    additional_dependencies: [black==24.0]
+                  - id: lint
+                    additional_dependencies: [eslint]
+              - repo: https://gitlab.com/b/hooks
+                rev: v2
+                hooks: [{id: missing-manifest, additional_dependencies: [black]}]
+              - repo: https://github.com/c/hooks
+                rev: v3
+                hooks: [{id: invalid-manifest, additional_dependencies: [black]}]
+              - repo: https://codeberg.org/d/hooks
+                rev: v4
+                hooks: [{id: other-host, additional_dependencies: [black], args: [black]}]
+              - repo: https://github.com/e/hooks
+                hooks: [{id: unpinned, additional_dependencies: [black]}]
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    assert fake.run(config)
+
+    assert (
+        config.read_text(encoding="utf-8")
+        == dedent(
+            """
+        repos:
+          - repo: https://github.com/a/hooks.git
+            rev: v1.0
+            hooks:
+              - id: go
+                additional_dependencies: [black==24.0]
+              - id: lint
+                additional_dependencies: [eslint@9.0.0]
+          - repo: https://gitlab.com/b/hooks
+            rev: v2
+            hooks: [{id: missing-manifest, additional_dependencies: [black>=24.1]}]
+          - repo: https://github.com/c/hooks
+            rev: v3
+            hooks: [{id: invalid-manifest, additional_dependencies: [black>=24.1]}]
+          - repo: https://codeberg.org/d/hooks
+            rev: v4
+            hooks: [{id: other-host, additional_dependencies: [black>=24.1], args: [black]}]
+          - repo: https://github.com/e/hooks
+            hooks: [{id: unpinned, additional_dependencies: [black>=24.1]}]
+        """
+        ).lstrip()
+    )

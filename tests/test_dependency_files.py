@@ -454,6 +454,46 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             id="package-json",
         ),
         pytest.param("package.json", "[]\n", "[]\n", id="package-json-not-an-object"),
+        pytest.param(
+            "package.json",
+            """
+            {
+              "overrides": {"x": {"dependencies": {"foo": "^1.0.0"}}},
+              "description": "a } brace and a \\" quote",
+              "dependencies": {"foo": "^1.0.0"}
+            }
+            """,
+            """
+            {
+              "overrides": {"x": {"dependencies": {"foo": "^1.0.0"}}},
+              "description": "a } brace and a \\" quote",
+              "dependencies": {"foo": "^1.5.0"}
+            }
+            """,
+            id="package-json-top-level-only",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            '''
+            [project]
+            name = "demo"
+            readme.text = """
+            dependencies = ["foo>=1"]
+            """
+            version = """1"""
+            dependencies = ["foo>=1"]
+            ''',
+            '''
+            [project]
+            name = "demo"
+            readme.text = """
+            dependencies = ["foo>=1"]
+            """
+            version = """1"""
+            dependencies = ["foo>=2"]
+            ''',
+            id="pyproject-multi-line-string",
+        ),
         pytest.param("dev-requirements.txt", "foo>=1\n", "foo>=2\n", id="requirements-any-name"),
     ],
 )

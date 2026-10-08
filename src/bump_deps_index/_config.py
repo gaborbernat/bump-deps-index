@@ -4,12 +4,24 @@ import os
 import re
 from configparser import ConfigParser
 from configparser import Error as ConfigParserError
+from dataclasses import dataclass
 from pathlib import Path
 from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
-from typing import Final
+from typing import TYPE_CHECKING, Final
+from urllib.parse import quote, urlsplit
+
+from packaging.utils import canonicalize_name
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import TypeAlias
+
+    TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue]"
+    TomlTable: TypeAlias = dict[str, TomlValue]
 
 _ENV_REFERENCE: Final = re.compile(r"\$\{(?P<name>\w+)\}")
+_NPM_CREDENTIALS: Final = {":_authToken": "Bearer", ":_auth": "Basic"}
 
 
 def python_index_url() -> str:
@@ -18,37 +30,115 @@ def python_index_url() -> str:
         return env
     # rank the project's uv settings above the user's pip and uv settings, as the more specific choice
     cwd = Path.cwd()
-    project = next(
-        (
-            url
-            for folder in (cwd, *cwd.parents)
-            if (url := _uv_index(folder / "uv.toml") or _uv_index(folder / "pyproject.toml", "tool", "uv"))
-        ),
-        None,
-    )
-    return project or _pip_index() or _uv_index(_config_home() / "uv" / "uv.toml") or "https://pypi.org/simple"
+    project = next((url for folder in (cwd, *cwd.parents) if (url := _default_index(_uv_settings(folder)))), None)
+    user = _default_index(_read_toml(_config_home() / "uv" / "uv.toml"))
+    return project or _pip_index() or user or "https://pypi.org/simple"
 
 
 def npm_registry() -> str:
-    if env := os.environ.get("NPM_CONFIG_REGISTRY"):
-        return env
-    user = Path(os.environ.get("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
-    return _npmrc_registry(Path.cwd() / ".npmrc") or _npmrc_registry(user) or "https://registry.npmjs.org"
+    return os.environ.get("NPM_CONFIG_REGISTRY") or _npmrc().get("registry") or "https://registry.npmjs.org"
 
 
-def _uv_index(path: Path, *table: str) -> str | None:
+def npm_settings() -> NpmSettings:
+    values = _npmrc()
+    return NpmSettings(
+        registry_by_scope={
+            key.removesuffix(":registry"): value
+            for key, value in values.items()
+            if key.startswith("@") and key.endswith(":registry")
+        },
+        authorization_by_prefix={
+            key.removesuffix(suffix): f"{scheme} {value}"
+            for key, value in values.items()
+            for suffix, scheme in _NPM_CREDENTIALS.items()
+            if key.startswith("//") and key.endswith(suffix)
+        },
+    )
+
+
+@dataclass(frozen=True)
+class NpmSettings:
+    registry_by_scope: Mapping[str, str]
+    authorization_by_prefix: Mapping[str, str]
+
+    def registry(self, spec: str, default: str) -> str:
+        return self.registry_by_scope.get(spec.partition("/")[0], default) if spec.startswith("@") else default
+
+    def authorization(self, registry: str) -> str | None:
+        parsed = urlsplit(registry)
+        # npm sends the credential with the longest `//host/path/` key that starts the registry URL
+        key = f"//{parsed.netloc.rpartition('@')[2]}{parsed.path.rstrip('/')}/"
+        prefix = max((prefix for prefix in self.authorization_by_prefix if key.startswith(prefix)), key=len, default="")
+        return self.authorization_by_prefix.get(prefix)
+
+
+def uv_sources(folder: Path, pyproject: TomlTable) -> dict[str, str | None]:
+    uv = _table(pyproject, "tool", "uv")
+    named = {
+        name: url
+        for index in (*_indexes(uv), *_indexes(_read_toml(folder / "uv.toml")))
+        if isinstance(name := index.get("name"), str) and (url := _index_url(index))
+    }
+    sources: dict[str, str | None] = {}
+    for package, source in _table(uv, "sources").items():
+        # a list splits the source by environment markers, take its first entry
+        entry = next(iter(source), None) if isinstance(source, list) else source
+        index = entry.get("index") if isinstance(entry, dict) else None
+        sources[canonicalize_name(package)] = named.get(index) if isinstance(index, str) else None
+    return sources
+
+
+def _uv_settings(folder: Path) -> TomlTable:
+    # uv reads `uv.toml` over the `[tool.uv]` table next to it
+    if (uv_toml := folder / "uv.toml").is_file():
+        return _read_toml(uv_toml)
+    return _table(_read_toml(folder / "pyproject.toml"), "tool", "uv")
+
+
+def _read_toml(path: Path) -> TomlTable:
+    # skip a malformed file like a missing one; a crash here stops the tool before the run starts
     try:
         with path.open("rb") as file_handler:
-            cfg = load_toml(file_handler)
+            return load_toml(file_handler)
     except (OSError, TOMLDecodeError):
+        return {}
+
+
+def _table(value: TomlValue, *keys: str) -> TomlTable:
+    for key in keys:
+        value = value.get(key, {}) if isinstance(value, dict) else {}
+    return value if isinstance(value, dict) else {}
+
+
+def _default_index(uv: TomlTable) -> str | None:
+    default = next((url for index in _indexes(uv) if index.get("default") is True and (url := _index_url(index))), None)
+    return default or (url if isinstance(url := uv.get("index-url"), str) else None)
+
+
+def _indexes(uv: TomlTable) -> list[TomlTable]:
+    return (
+        [index for index in indexes if isinstance(index, dict)] if isinstance(indexes := uv.get("index"), list) else []
+    )
+
+
+def _index_url(index: TomlTable) -> str | None:
+    if not isinstance(url := index.get("url"), str):
         return None
-    # skip a malformed file like a missing one; a crash here stops the tool before the run starts
-    for key in table:
-        cfg = cfg.get(key) if isinstance(cfg, dict) else None
-    if not isinstance(cfg, dict):
-        return None
-    indexes = [index for index in cfg.get("index", []) if isinstance(index, dict)]
-    return next((index.get("url") for index in indexes if index.get("default")), None) or cfg.get("index-url")
+    if not isinstance(name := index.get("name"), str):
+        return url
+    # uv reads the credentials of a named index from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`
+    prefix = f"UV_INDEX_{re.sub(r'[^A-Za-z0-9]', '_', name).upper()}"
+    if not (username := os.environ.get(f"{prefix}_USERNAME")):
+        return url
+    parsed = urlsplit(url)
+    password = quote(os.environ.get(f"{prefix}_PASSWORD", ""), safe="")
+    return parsed._replace(netloc=f"{quote(username, safe='')}:{password}@{parsed.netloc.rpartition('@')[2]}").geturl()
+
+
+def _config_home() -> Path:
+    if "APPDATA" in os.environ:
+        return Path(os.environ["APPDATA"])
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
 
 
 def _pip_index() -> str | None:
@@ -74,25 +164,29 @@ def _pip_index() -> str | None:
     return None
 
 
-def _config_home() -> Path:
-    if "APPDATA" in os.environ:
-        return Path(os.environ["APPDATA"])
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+def _npmrc() -> dict[str, str]:
+    user = Path(os.environ.get("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
+    # the project file overrides the user file
+    return {**_read_npmrc(user), **_read_npmrc(Path.cwd() / ".npmrc")}
 
 
-def _npmrc_registry(path: Path) -> str | None:
+def _read_npmrc(path: Path) -> dict[str, str]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
-        return None
-    # npm reads the last assignment, and substitutes `${NAME}` from the environment
-    values = [value for key, _, value in (line.partition("=") for line in lines) if key.strip() == "registry"]
-    if not values:
-        return None
-    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], ""), values[-1].strip().strip("\"'"))
+        return {}
+    # npm keeps the last assignment of a key, and substitutes `${NAME}` from the environment
+    return {
+        key.strip(): _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], ""), value.strip().strip("\"'"))
+        for key, separator, value in (line.partition("=") for line in lines)
+        if separator and not key.lstrip().startswith(("#", ";"))
+    }
 
 
 __all__ = [
+    "NpmSettings",
     "npm_registry",
+    "npm_settings",
     "python_index_url",
+    "uv_sources",
 ]

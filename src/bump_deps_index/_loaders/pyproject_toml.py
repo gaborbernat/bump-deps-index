@@ -38,17 +38,21 @@ class PyProjectToml(Loader):
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         result_lines: list[str] = []
-        table = ""
+        table = string_quote = ""
         bracket_depth = 0
         for line in text.split("\n"):
             stripped = line.strip()
             if update := bracket_depth > 0:
                 bracket_depth += self._bracket_delta(stripped)
+            elif string_quote:  # skip the text of a multi-line string, it may hold lines that look like keys
+                string_quote = "" if string_quote in stripped else string_quote
             elif header := _TABLE.match(stripped):
                 table = _dotted(header["table"])
             elif (match := _KEY.match(stripped)) and _is_dependency_key(f"{table}.{_dotted(match['key'])}".lstrip(".")):
                 update = True
                 bracket_depth = self._bracket_delta(stripped)
+            else:
+                string_quote = next((quote for quote in ('"""', "'''") if stripped.count(quote) % 2), "")
             result_lines.append(self._replace_quoted(line, changes) if update else line)
         return "\n".join(result_lines)
 

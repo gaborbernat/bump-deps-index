@@ -49,7 +49,7 @@ class PkgType(Enum):
 @dataclass(frozen=True)
 class UpdateConfig:
     index_url: str
-    npm_registry: str
+    authorization: str | None
     pre_release: bool
     python_version: Version | None
 
@@ -57,7 +57,7 @@ class UpdateConfig:
 def update(client: Client, spec: str, pkg_type: PkgType, config: UpdateConfig) -> str:
     if pkg_type is PkgType.PYTHON:
         return _update_python(client, spec, config)
-    return _update_js(client, config.npm_registry, spec, pre_release=config.pre_release)
+    return _update_js(client, spec, config)
 
 
 def _update_python(client: Client, spec: str, config: UpdateConfig) -> str:
@@ -249,10 +249,10 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
     return pattern.sub(lambda match: f"{current.operator}{match['space']}{new_version}", spec, count=1)
 
 
-def _update_js(client: Client, npm_registry: str, spec: str, *, pre_release: bool) -> str:
+def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    versions = _get_js_pkgs(client, npm_registry, package, pre_release=pre_release)
+    versions = _get_js_pkgs(client, package, config)
     if not wanted or _NPM_PIN.fullmatch(wanted):
         return f"{package}@{versions[0][1]}"
     operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
@@ -268,10 +268,11 @@ def _update_js(client: Client, npm_registry: str, spec: str, *, pre_release: boo
     return spec if newest is None else f"{package}@{operator}{newest}"
 
 
-def _get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release: bool) -> list[tuple[_SemverKey, str]]:
+def _get_js_pkgs(client: Client, package: str, config: UpdateConfig) -> list[tuple[_SemverKey, str]]:
+    authorization = {} if config.authorization is None else {"Authorization": config.authorization}
     response = client.get(
-        f"{npm_registry.rstrip('/')}/{quote(package, safe='@')}",
-        headers={"Accept": _NPM_ACCEPT},
+        f"{config.index_url.rstrip('/')}/{quote(package, safe='@')}",
+        headers={"Accept": _NPM_ACCEPT, **authorization},
         follow_redirects=True,
     )
     response.raise_for_status()
@@ -279,7 +280,9 @@ def _get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release
         (
             (key, version)
             for version, meta in response.json()["versions"].items()
-            if (key := _semver_key(version)) is not None and (pre_release or key[3] == 1) and not meta.get("deprecated")
+            if (key := _semver_key(version)) is not None
+            and (config.pre_release or key[3] == 1)
+            and not meta.get("deprecated")
         ),
         reverse=True,
     )

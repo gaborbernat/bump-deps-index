@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 
 def _python(spec: str, *, pre_release: bool = False, python_version: Version | None = None) -> str:
     config = UpdateConfig(
-        index_url="https://I.com", npm_registry="N", pre_release=pre_release, python_version=python_version
+        index_url="https://I.com", authorization=None, pre_release=pre_release, python_version=python_version
     )
     return update(Client(), spec, PkgType.PYTHON, config)
 
 
 def _js(spec: str, *, pre_release: bool = False) -> str:
-    config = UpdateConfig(index_url="I", npm_registry="https://N.com", pre_release=pre_release, python_version=None)
+    config = UpdateConfig(index_url="https://N.com", authorization=None, pre_release=pre_release, python_version=None)
     return update(Client(), spec, PkgType.JS, config)
 
 
@@ -247,7 +247,7 @@ def test_update_python_filters_files(httpx_mock: HTTPXMock, content_type: str, b
 def test_update_python_fetches_each_project_once_per_client(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(url="https://I.com/a/", text="<a>A-2.tar.gz</a>")
     client = Client()
-    config = UpdateConfig(index_url="https://I.com", npm_registry="N", pre_release=False, python_version=None)
+    config = UpdateConfig(index_url="https://I.com", authorization=None, pre_release=False, python_version=None)
 
     results = [update(client, spec, PkgType.PYTHON, config) for spec in ("a", "A>=1")]
 
