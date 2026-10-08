@@ -4,7 +4,7 @@ import os
 import time
 from textwrap import dedent
 from threading import Event
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import pytest
 from conftest import FakeIndex
@@ -495,6 +495,223 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             id="pyproject-multi-line-string",
         ),
         pytest.param("dev-requirements.txt", "foo>=1\n", "foo>=2\n", id="requirements-any-name"),
+        pytest.param(
+            "pyproject.toml",
+            """
+            # use \"\"\" for docstrings
+            [tool.x]
+            a = '''he said \"\"\"hi'''
+            [project]
+            name = "demo"
+            dependencies = ["foo>=1"]  # was "foo>=1"
+            """,
+            """
+            # use \"\"\" for docstrings
+            [tool.x]
+            a = '''he said \"\"\"hi'''
+            [project]
+            name = "demo"
+            dependencies = ["foo>=2"]  # was "foo>=1"
+            """,
+            id="pyproject-triple-quotes-in-comment-and-literal",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            [tool.uv]
+            conflicts = [
+              [{ extra = "a" }, { extra = "b" }],
+            ]
+            dev-dependencies = ["foo>=1"]
+            """,
+            """
+            [project]
+            name = "demo"
+            [tool.uv]
+            conflicts = [
+              [{ extra = "a" }, { extra = "b" }],
+            ]
+            dev-dependencies = ["foo>=2"]
+            """,
+            id="pyproject-nested-array-before-dependencies",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            dependencies = ['foo>=1', "foo>=1; os_name == \\"nt\\""]
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = ['foo>=2', "foo>=2; os_name == \\"nt\\""]
+            """,
+            id="pyproject-literal-and-escaped-strings",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            dependencies = "foo>=1"
+            optional-dependencies = ["foo>=1"]
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = "foo>=1"
+            optional-dependencies = ["foo>=1"]
+            """,
+            id="pyproject-wrong-types",
+        ),
+        pytest.param(
+            "tox.toml",
+            """
+            [env]
+            a = { deps = ["foo>=1"], commands = [["foo>=1"]] }
+            [env.b]
+            deps = ["foo>=1"]
+            requires = ["foo>=1"]
+            description = \"\"\"
+            requires = ["foo>=1"]
+            \"\"\"
+            [env.b.extra]
+            deps = ["foo>=1"]
+            """,
+            """
+            [env]
+            a = { deps = ["foo>=2"], commands = [["foo>=1"]] }
+            [env.b]
+            deps = ["foo>=2"]
+            requires = ["foo>=1"]
+            description = \"\"\"
+            requires = ["foo>=1"]
+            \"\"\"
+            [env.b.extra]
+            deps = ["foo>=1"]
+            """,
+            id="tox-toml-only-paths-the-loader-reads",
+        ),
+        pytest.param(
+            "tox.ini",
+            """
+            [tox] # main
+            requires = foo>=1
+            [testenv]
+              deps = foo>=1
+            [testenv:b]
+            deps =
+                foo>=1  # pinned
+            """,
+            """
+            [tox] # main
+            requires = foo>=2
+            [testenv]
+              deps = foo>=2
+            [testenv:b]
+            deps =
+                foo>=2  # pinned
+            """,
+            id="tox-ini-header-comment-indented-key-inline-comment",
+        ),
+        pytest.param(
+            "setup.cfg",
+            """
+            [options] ; install settings
+            install_requires =
+                foo>=1
+            """,
+            """
+            [options] ; install settings
+            install_requires =
+                foo>=2
+            """,
+            id="setup-cfg-header-comment",
+        ),
+        pytest.param(
+            "requirements.txt",
+            "foo>=1 \\\n  # why\n",
+            "foo>=2 \\\n  # why\n",
+            id="requirements-comment-in-continuation",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: g
+                    entry: "echo additional_dependencies: x"
+                    language: golang
+                    additional_dependencies: [foo>=1]
+                  - id: py
+                    language: python
+                    additional_dependencies:
+                      [foo>=1, "foo>=1",  # not, foo>=1
+                       foo>=1]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: g
+                    entry: "echo additional_dependencies: x"
+                    language: golang
+                    additional_dependencies: [foo>=1]
+                  - id: py
+                    language: python
+                    additional_dependencies:
+                      [foo>=2, "foo>=2",  # not, foo>=1
+                       foo>=2]
+            """,
+            id="pre-commit-key-in-value-and-flow-on-next-line",
+        ),
+        pytest.param(".pre-commit-config.yaml", "repos:\n", "repos:\n", id="pre-commit-null-repos"),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            "repos:\n  - repo: local\n  - 1\n  - repo: local\n    hooks: [{id: x, additional_dependencies: [1]}]\n",
+            "repos:\n  - repo: local\n  - 1\n  - repo: local\n    hooks: [{id: x, additional_dependencies: [1]}]\n",
+            id="pre-commit-repo-without-hooks",
+        ),
+        pytest.param(
+            "package.json",
+            """
+            {
+              "dependencies": {"foo": null, "bar": ["x"]},
+              "devDependencies": {"f\\u006fo": "^1.0.0", "baz": {"nested": "^1.0.0"}},
+              "optionalDependencies": ["foo"]
+            }
+            """,
+            """
+            {
+              "dependencies": {"foo": null, "bar": ["x"]},
+              "devDependencies": {"f\\u006fo": "^1.5.0", "baz": {"nested": "^1.0.0"}},
+              "optionalDependencies": ["foo"]
+            }
+            """,
+            id="package-json-escapes-nesting-and-wrong-types",
+        ),
+        pytest.param(
+            "script.py",
+            """
+            # /// script
+            # dependencies = ["foo>=1"]
+            # [tool.uv]
+            # constraint-dependencies = ["foo>=1"]
+            # ///
+            """,
+            """
+            # /// script
+            # dependencies = ["foo>=2"]
+            # [tool.uv]
+            # constraint-dependencies = ["foo>=1"]
+            # ///
+            """,
+            id="script-only-dependencies",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")
@@ -508,14 +725,14 @@ def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str,
 
 
 @pytest.mark.usefixtures("foo_index")
-def test_requirements_preserves_crlf_line_endings(tmp_path: Path, index: FakeIndex) -> None:
+def test_requirements_preserves_each_line_ending(tmp_path: Path, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
-    requirements.write_bytes(b"foo>=1\r\nbar>=1\r\n")
+    requirements.write_bytes(b"foo>=1\r\nbar>=1\r\nbar>=1\n")
     index.pypi["bar"] = ["1"]
 
     assert index.run(requirements)
 
-    assert requirements.read_bytes() == b"foo>=2\r\nbar>=1\r\n"
+    assert requirements.read_bytes() == b"foo>=2\r\nbar>=1\r\nbar>=1\n"
 
 
 @pytest.mark.usefixtures("foo_index")
@@ -612,6 +829,9 @@ def test_output_redacts_direct_reference_credentials(
     )
 
 
+_NESTED_DEPENDENCIES: Final = ", ".join(['{"dependencies": {"foo": "^1.0.0"}}'] * 8000)
+
+
 @pytest.mark.parametrize(
     ("name", "content", "expected"),
     [
@@ -626,6 +846,12 @@ def test_output_redacts_direct_reference_credentials(
             f'[project]\nname = "demo"\ndependencies = [\n  "foo"{" " * 100_000},\n]\n',
             f'[project]\nname = "demo"\ndependencies = [\n  "foo>=2"{" " * 100_000},\n]\n',
             id="pyproject-long-whitespace",
+        ),
+        pytest.param(
+            "package.json",
+            f'{{"x": [{_NESTED_DEPENDENCIES}], "dependencies": {{"foo": "^1.0.0"}}}}',
+            f'{{"x": [{_NESTED_DEPENDENCIES}], "dependencies": {{"foo": "^1.5.0"}}}}',
+            id="package-json-many-nested-objects",
         ),
     ],
 )

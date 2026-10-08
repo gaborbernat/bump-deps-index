@@ -76,13 +76,15 @@ class Requirements(Loader):
     def _entries(cls, lines: list[str]) -> Iterator[list[tuple[int, str]]]:
         entry: list[tuple[int, str]] = []
         for at, line in enumerate(lines):
-            stripped, _ = cls._split_comment(line.strip())
-            entry.append((at, stripped.removesuffix("\\").rstrip()))
+            # pip drops a comment line inside a `\`-continued requirement
+            stripped = "" if line.lstrip().startswith("#") else cls._split_comment(line.strip())[0]
+            if segment := stripped.removesuffix("\\").rstrip():
+                entry.append((at, segment))
             if stripped.endswith("\\"):
                 continue
             logical = " ".join(segment for _, segment in entry)
             # skip hashed entries; you would need new hashes for a new version
-            if logical and not logical.startswith(("#", "-")) and "--hash" not in logical:
+            if logical and not logical.startswith("-") and "--hash" not in logical:
                 yield entry
             entry = []
 

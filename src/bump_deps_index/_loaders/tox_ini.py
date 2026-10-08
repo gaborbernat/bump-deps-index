@@ -35,29 +35,13 @@ class ToxIni(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
-        result: list[str] = []
-        section = ""
-        dependency_key = ""
-        for line in lines:
-            stripped = line.strip()
-            key_line = False
-            if stripped.startswith("["):
-                section = stripped.strip("[]")
-                dependency_key = ""
-            elif (key := self._ini_key(line)) is not None:
-                dependency_key = key
-                key_line = True
-            update = (section == "tox" and dependency_key == "requires") or (
-                section.startswith("testenv") and dependency_key == "deps"
-            )
-            if not update:
-                result.append(line)
-            elif key_line:
-                result.append(self._replace_key_line(line, changes))
-            else:
-                result.append(self._replace_requirement_line(line, changes))
-        return "\n".join(result)
+        return self._update_ini(
+            text,
+            changes,
+            lambda section, key: (
+                (section, key) == ("tox", "requires") or (section.startswith("testenv") and key == "deps")
+            ),
+        )
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         cfg = NoTransformConfigParser()
@@ -65,15 +49,21 @@ class ToxIni(Loader):
         pre = False if pre_release is None else pre_release
         for section in cfg.sections():
             if section.startswith("testenv"):
-                values = [i for i in cfg[section].get("deps", "").split("\n") if i.strip()[:1] not in {"{", "-"}]
+                values = self._ini_values(cfg[section].get("deps", ""))
                 yield from self._generate(
                     [self._strip_factor(value) for value in values],
                     pkg_type=PkgType.PYTHON,
                     pre_release=pre,
                 )
             elif section == "tox":
-                values = [i for i in cfg[section].get("requires", "").split("\n") if i.strip()[:1] not in {"{", "-"}]
-                yield from self._generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
+                yield from self._generate(
+                    self._ini_values(cfg[section].get("requires", "")), pkg_type=PkgType.PYTHON, pre_release=pre
+                )
+
+    @classmethod
+    def _ini_values(cls, value: str) -> list[str]:
+        # tox drops a `#` comment after a requirement, and expands `{...}` and `-r` lines itself
+        return [line for raw in value.split("\n") if (line := cls._split_comment(raw)[0].strip())[:1] not in {"{", "-"}]
 
 
 __all__ = [

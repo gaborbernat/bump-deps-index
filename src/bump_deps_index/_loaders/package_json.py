@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
@@ -12,11 +11,10 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-    from ._base import Entry
+    from ._base import Entry, Parsed
 
 # skip `peerDependencies`, a raised lower bound there narrows what you declare compatible
 _SECTIONS: Final = ("dependencies", "devDependencies", "optionalDependencies")
-_SECTION: Final = re.compile(rf'"(?:{"|".join(_SECTIONS)})"\s*:\s*\{{[^{{}}]*\}}')
 
 
 class PackageJson(Loader):
@@ -32,53 +30,58 @@ class PackageJson(Loader):
 
     @staticmethod
     def _update_text(text: str, changes: Mapping[str, str]) -> str:
-        return _SECTION.sub(
-            lambda section: (
-                _replace_ranges(section[0], changes) if _depth(text[: section.start()]) == 1 else section[0]
-            ),
-            text,
-        )
+        pieces: list[str] = []
+        last = 0
+        for start, end, path in _json_strings(text):
+            match path:
+                case (section, name) if section in _SECTIONS and (
+                    new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1])}")
+                ):
+                    pieces += [text[last:start], json.dumps(new[len(name) + 1 :])[1:-1]]
+                    last = end
+        return "".join([*pieces, text[last:]])
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open(encoding="utf-8") as file_handler:
-            cfg = json.load(file_handler)
-        if not isinstance(cfg, dict):
-            return
+            cfg: Parsed = json.load(file_handler)
         yield from self._generate(
             [
                 f"{name}@{wanted}"
                 for section in _SECTIONS
-                for name, wanted in cfg.get(section, {}).items()
+                for name, wanted in self._table(cfg, section).items()
                 # skip aliases, paths, URLs and workspace links; the registry has no version for them
-                if ":" not in wanted and "/" not in wanted
+                if isinstance(wanted, str) and ":" not in wanted and "/" not in wanted
             ],
             pkg_type=PkgType.JS,
             pre_release=False if pre_release is None else pre_release,
         )
 
 
-def _depth(text: str) -> int:
-    # count the braces outside strings to find the sections of the top-level object
-    depth, in_string, escaped = 0, False, False
-    for character in text:
-        if escaped:
-            escaped = False
-        elif in_string:
-            escaped = character == "\\"
-            in_string = character != '"'
-        elif character == '"':
-            in_string = True
-        else:
-            depth += {"{": 1, "}": -1}.get(character, 0)
-    return depth
-
-
-def _replace_ranges(section: str, changes: Mapping[str, str]) -> str:
-    for spec, updated in changes.items():
-        at = spec.find("@", 1)
-        pattern = re.compile(rf'(?P<key>"{re.escape(spec[:at])}"\s*:\s*"){re.escape(spec[at + 1 :])}"')
-        section = pattern.sub(lambda match, wanted=updated[at + 1 :]: f'{match["key"]}{wanted}"', section)
-    return section
+def _json_strings(text: str) -> Iterator[tuple[int, int, tuple[str, ...]]]:
+    # walk the JSON the loader parsed, and yield each string value with the object keys above it
+    containers: list[tuple[str, str]] = []
+    expect_key = False
+    at = 0
+    while at < len(text):
+        character = text[at]
+        if character == '"':
+            end = at + 1
+            while text[end] != '"':
+                end += 2 if text[end] == "\\" else 1
+            if expect_key:
+                containers[-1] = (containers[-1][0], json.loads(text[at : end + 1]))
+                expect_key = False
+            else:
+                yield at + 1, end, tuple(key for kind, key in containers if kind == "{")
+            at = end
+        elif character in "{[":
+            containers.append((character, ""))
+            expect_key = character == "{"
+        elif character in "}]":
+            containers.pop()
+        elif character == ",":
+            expect_key = containers[-1][0] == "{"
+        at += 1
 
 
 __all__ = [

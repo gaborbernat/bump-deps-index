@@ -7,16 +7,18 @@ from typing import TYPE_CHECKING, Final, TypeAlias
 from bump_deps_index._spec import PkgType
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping
     from pathlib import Path
 
 Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
+Parsed: TypeAlias = str | int | float | bool | list["Parsed"] | dict[str, "Parsed"] | None
 
 
 # match the factor shape to skip the colons inside URL requirements
 _FACTOR: Final = re.compile(r"^(?P<prefix>[\w!{}.-]+(?:\s*,\s*[\w!{}.-]+)*\s*:\s*)(?P<requirement>\S.*)$")
 # configparser splits a key line at its first `=` or `:`
 _INI_KEY: Final = re.compile(r"^(?P<key>[^=:]*)[=:]")
+_INI_SECTION: Final = re.compile(r"^\[(?P<header>.+)\]")
 
 
 class Loader(ABC):
@@ -38,8 +40,12 @@ class Loader(ABC):
             raw = file_handler.read()
         text = raw.replace("\r\n", "\n")
         if (updated := self._update_text(text, changes)) != text:
+            # the writers keep the line count, so each line gets back its own ending
+            endings = [*re.findall(r"\r?\n", raw), ""]
             with filename.open("w", encoding="utf-8", newline="") as file_handler:
-                file_handler.write(updated.replace("\n", "\r\n" if raw.count("\r\n") * 2 >= raw.count("\n") else "\n"))
+                file_handler.write(
+                    "".join(f"{line}{end}" for line, end in zip(updated.split("\n"), endings, strict=True))
+                )
 
     @abstractmethod
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
@@ -55,11 +61,26 @@ class Loader(ABC):
             lambda match: f"{match['quote']}{match['pad']}{changes[match['value']]}{match['end']}{match['quote']}", text
         )
 
-    @staticmethod
-    def _ini_key(line: str) -> str | None:
-        if not line.strip() or line[:1].isspace() or line[:1] in {"#", ";"}:
-            return None
-        return match["key"].strip() if (match := _INI_KEY.match(line)) else None
+    @classmethod
+    def _update_ini(cls, text: str, changes: Mapping[str, str], wanted: Callable[[str, str], bool]) -> str:
+        # follow configparser: an indented line continues the open key, blank and comment lines keep it open
+        result: list[str] = []
+        section = key = ""
+        key_indent = 0
+        for line in text.split("\n"):
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip())
+            if not stripped or stripped[0] in {"#", ";"}:
+                result.append(line)
+            elif key and indent > key_indent:
+                result.append(cls._replace_requirement_line(line, changes) if wanted(section, key) else line)
+            elif header := _INI_SECTION.match(stripped):
+                section, key = header["header"], ""
+                result.append(line)
+            else:
+                key, key_indent = re.split(r"[=:]", stripped, maxsplit=1)[0].strip(), indent
+                result.append(cls._replace_key_line(line, changes) if wanted(section, key) else line)
+        return "\n".join(result)
 
     @staticmethod
     def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
@@ -87,24 +108,6 @@ class Loader(ABC):
         return factor["requirement"] if (factor := _FACTOR.match(value.strip())) else value.strip()
 
     @staticmethod
-    def _bracket_delta(line: str) -> int:
-        # skip brackets inside strings and comments; `# see [docs` must not keep a dependency array open
-        delta, quote, escaped = 0, "", False
-        for character in line:
-            if escaped:
-                escaped = False
-            elif quote:
-                escaped = character == "\\" and quote == '"'
-                quote = "" if character == quote else quote
-            elif character in {'"', "'"}:
-                quote = character
-            elif character == "#":
-                break
-            else:
-                delta += {"[": 1, "]": -1}.get(character, 0)
-        return delta
-
-    @staticmethod
     def _split_comment(value: str) -> tuple[str, str]:
         quote = ""
         for index, character in enumerate(value):
@@ -116,6 +119,17 @@ class Loader(ABC):
                     start -= 1
                 return value[:start], value[start:]
         return value, ""
+
+    @staticmethod
+    def _strings(value: Parsed) -> list[str]:
+        # read a wrongly typed field as a missing one, so one malformed field does not stop the run
+        return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+    @staticmethod
+    def _table(value: Parsed, *keys: str) -> dict[str, Parsed]:
+        for key in keys:
+            value = value.get(key) if isinstance(value, dict) else None
+        return value if isinstance(value, dict) else {}
 
     @staticmethod
     def _generate(
@@ -132,4 +146,5 @@ class Loader(ABC):
 __all__ = [
     "Entry",
     "Loader",
+    "Parsed",
 ]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import ssl
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, ClassVar, Final
 from urllib.parse import quote, urlsplit
 
 from httpx import Client, HTTPError
@@ -18,22 +18,9 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-    from ._base import Entry
+    from ._base import Entry, Parsed
 
 _LANGUAGE_TYPES: Final = {"python": PkgType.PYTHON, "python_venv": PkgType.PYTHON, "node": PkgType.JS}
-
-
-class Hook(TypedDict):
-    id: str
-    language: NotRequired[str]
-    args: NotRequired[list[str]]
-    additional_dependencies: NotRequired[list[str]]
-
-
-class RepoConfig(TypedDict):
-    repo: str
-    rev: NotRequired[str]
-    hooks: list[Hook]
 
 
 class PreCommitConfig(Loader):
@@ -64,19 +51,19 @@ class PreCommitConfig(Loader):
         for line in text.split("\n"):
             stripped = line.strip()
             indent = len(line) - len(line.lstrip())
-            if flow_depth:
-                flow_depth += self._bracket_delta(line)
-                result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes) if keep else line)
-                continue
             head, key, value = line.partition("additional_dependencies:")
-            if key and "#" not in head:
+            # a key follows the `-` that opens a hook, or the `{` or `,` of an inline hook mapping
+            if not flow_depth and key and (not head.strip(" -") or head.rstrip().endswith(("{", ","))):
                 keep = next(kept_hooks, True)
-                # the key may follow the `-` that opens a hook, or sit inside an inline hook mapping
                 dependency_indent = None if head.strip(" -") or not keep else len(head)
-                end, flow_depth = _flow_list(self._split_comment(value)[0])
-                flow = value[:end]
-                updated = self._replace_flow_values(self._replace_quoted(flow, changes), changes) if keep else flow
-                result.append(f"{head}{key}{updated}{value[end:]}")
+                updated, flow_depth = self._replace_flow(value, changes, keep=keep, depth=0)
+                result.append(f"{head}{key}{updated}")
+                continue
+            # a flow list continues from the line above, or opens on the line after its key
+            if flow_depth or (dependency_indent is not None and indent > dependency_indent and stripped[:1] == "["):
+                updated, flow_depth = self._replace_flow(line, changes, keep=keep, depth=flow_depth)
+                dependency_indent = None
+                result.append(updated)
                 continue
             if (
                 dependency_indent is not None
@@ -90,6 +77,13 @@ class PreCommitConfig(Loader):
                 updated_line = line
             result.append(updated_line)
         return "\n".join(result)
+
+    @classmethod
+    def _replace_flow(cls, part: str, changes: Mapping[str, str], *, keep: bool, depth: int) -> tuple[str, int]:
+        code, comment = cls._split_comment(part)
+        end, depth = _flow_list(code, depth)
+        flow = cls._replace_flow_values(cls._replace_quoted(code[:end], changes), changes) if keep else code[:end]
+        return f"{flow}{code[end:]}{comment}", depth
 
     @classmethod
     def _replace_list_item(cls, line: str, changes: Mapping[str, str]) -> str:
@@ -112,33 +106,39 @@ class PreCommitConfig(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open("rt", encoding="utf-8") as file_handler:
-            cfg = load_yaml(file_handler)
+            cfg: Parsed = load_yaml(file_handler)
         pre = True if pre_release is None else pre_release
-        repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
         kept = self._kept_by_file[filename] = []
-        for repo in repos:
+        # read a malformed entry as a missing one, so one bad hook does not stop the run
+        for repo in _mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
+            hooks = _mappings(repo.get("hooks"))
             # a remote hook takes its language from the manifest of its repository
             languages = (
-                _hook_languages(repo["repo"], repo.get("rev"))
-                if any("language" not in hook and hook.get("additional_dependencies") for hook in repo["hooks"])
+                _hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
+                if any("language" not in hook and hook.get("additional_dependencies") for hook in hooks)
                 else {}
             )
-            for hook in repo["hooks"]:
-                language = hook.get("language") or languages.get(hook["id"])
+            for hook in hooks:
+                language = hook.get("language") or languages.get(str(hook.get("id")))
                 # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
                 skip = language is not None and language not in _LANGUAGE_TYPES
                 if "additional_dependencies" in hook:
                     kept.append(not skip)
                 if skip:
                     continue
-                for pkg in hook.get("additional_dependencies", []):
-                    pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
-                    yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
+                dependencies = hook.get("additional_dependencies")
+                for pkg in dependencies if isinstance(dependencies, list) else []:
+                    if isinstance(pkg, str):
+                        pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[str(language)]
+                        yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
 
 
-def _flow_list(value: str) -> tuple[int, int]:
+def _mappings(value: Parsed) -> list[dict[str, Parsed]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _flow_list(value: str, depth: int) -> tuple[int, int]:
     # end at the `]` that closes the list, to leave the keys after it in an inline hook mapping alone
-    depth = 0
     for at, character in enumerate(value):
         depth += {"[": 1, "]": -1}.get(character, 0)
         if character == "]" and depth == 0:

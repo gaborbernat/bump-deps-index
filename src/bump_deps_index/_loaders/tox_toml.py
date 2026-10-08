@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING, ClassVar, Final
@@ -8,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, Final
 from bump_deps_index._spec import PkgType
 
 from ._base import Loader
+from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
 _NESTED: Final = frozenset({"env", "env_base"})
-_KEY: Final = re.compile(r"^(?P<key>[^=]+)=\s*\[")
+_SUBSTITUTION_KEYS: Final = frozenset({"then", "else", "default"})
 
 
 class ToxToml(Loader):
@@ -32,26 +32,9 @@ class ToxToml(Loader):
     def supports(self, filename: Path) -> bool:
         return filename.name == self._filename
 
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
-        result: list[str] = []
-        in_deps_section = False
-        bracket_depth = 0
-        for line in lines:
-            stripped = line.strip()
-            # a dotted key such as `env.test.deps` names the setting in its last part
-            if (match := _KEY.match(stripped)) and match["key"].rpartition(".")[2].strip(" \"'") in {
-                "requires",
-                "deps",
-            }:
-                in_deps_section = True
-                bracket_depth = self._bracket_delta(stripped)
-            elif in_deps_section:
-                bracket_depth += self._bracket_delta(stripped)
-            result.append(self._replace_quoted(line, changes) if in_deps_section else line)
-            if in_deps_section and bracket_depth == 0:
-                in_deps_section = False
-        return "\n".join(result)
+    @staticmethod
+    def _update_text(text: str, changes: Mapping[str, str]) -> str:
+        return replace_strings(text, changes, _is_dependency)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         pre = False if pre_release is None else pre_release
@@ -95,6 +78,18 @@ class ToxToml(Loader):
                 cls._collect(value.get("else"), found)
             elif replace in {"posargs", "env", "glob"}:
                 cls._collect(value.get("default"), found)
+
+
+def _is_dependency(path: tuple[str, ...]) -> bool:
+    # match the paths the loader reads, through the `then`, `else` and `default` of a substitution
+    while path[-1:] and path[-1] in _SUBSTITUTION_KEYS:
+        path = path[:-1]
+    match path:
+        case ("requires",) | (_, "deps"):
+            return True
+        case (nested, _, "deps"):
+            return nested in _NESTED
+    return False
 
 
 __all__ = [
