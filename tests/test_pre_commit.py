@@ -203,8 +203,9 @@ def test_run_pre_commit_reads_remote_hook_language(httpx_mock: HTTPXMock, tmp_pa
                 rev: v1.0
                 hooks:
                   - id: go
-                    additional_dependencies: [black==24.0]
+                    additional_dependencies: [black]
                   - id: lint
+                    # additional_dependencies: [black]
                     additional_dependencies: [eslint]
               - repo: https://gitlab.com/b/hooks
                 rev: v2
@@ -233,8 +234,9 @@ def test_run_pre_commit_reads_remote_hook_language(httpx_mock: HTTPXMock, tmp_pa
             rev: v1.0
             hooks:
               - id: go
-                additional_dependencies: [black==24.0]
+                additional_dependencies: [black]
               - id: lint
+                # additional_dependencies: [black]
                 additional_dependencies: [eslint@9.0.0]
           - repo: https://gitlab.com/b/hooks
             rev: v2

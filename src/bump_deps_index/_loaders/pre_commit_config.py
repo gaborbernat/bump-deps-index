@@ -39,6 +39,15 @@ class RepoConfig(TypedDict):
 class PreCommitConfig(Loader):
     _filename: ClassVar[str] = ".pre-commit-config.yaml"
 
+    def __init__(self) -> None:
+        # the writer matches text, so it needs to know which hooks the loader skipped to leave their lists alone
+        self._kept_by_file: dict[Path, list[bool]] = {}
+        self._kept: list[bool] = []
+
+    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
+        self._kept = self._kept_by_file.get(filename, [])
+        super().update_file(filename, changes)
+
     @property
     def files(self) -> Iterator[Path]:
         if (path := Path.cwd() / self._filename).exists():
@@ -51,19 +60,22 @@ class PreCommitConfig(Loader):
         result: list[str] = []
         dependency_indent: int | None = None
         flow_depth = 0
+        kept_hooks, keep = iter(self._kept), True
         for line in text.split("\n"):
             stripped = line.strip()
             indent = len(line) - len(line.lstrip())
             if flow_depth:
                 flow_depth += self._bracket_delta(line)
-                result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes))
+                result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes) if keep else line)
                 continue
             head, key, value = line.partition("additional_dependencies:")
-            if key:
+            if key and "#" not in head:
+                keep = next(kept_hooks, True)
                 # the key may follow the `-` that opens a hook, or sit inside an inline hook mapping
-                dependency_indent = None if head.strip(" -") else len(head)
+                dependency_indent = None if head.strip(" -") or not keep else len(head)
                 end, flow_depth = _flow_list(self._split_comment(value)[0])
-                updated = self._replace_flow_values(self._replace_quoted(value[:end], changes), changes)
+                flow = value[:end]
+                updated = self._replace_flow_values(self._replace_quoted(flow, changes), changes) if keep else flow
                 result.append(f"{head}{key}{updated}{value[end:]}")
                 continue
             if (
@@ -103,6 +115,7 @@ class PreCommitConfig(Loader):
             cfg = load_yaml(file_handler)
         pre = True if pre_release is None else pre_release
         repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
+        kept = self._kept_by_file[filename] = []
         for repo in repos:
             # a remote hook takes its language from the manifest of its repository
             languages = (
@@ -113,7 +126,10 @@ class PreCommitConfig(Loader):
             for hook in repo["hooks"]:
                 language = hook.get("language") or languages.get(hook["id"])
                 # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
-                if language is not None and language not in _LANGUAGE_TYPES:
+                skip = language is not None and language not in _LANGUAGE_TYPES
+                if "additional_dependencies" in hook:
+                    kept.append(not skip)
+                if skip:
                     continue
                 for pkg in hook.get("additional_dependencies", []):
                     pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
