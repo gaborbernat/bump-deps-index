@@ -12,6 +12,8 @@ from ._base import Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
+    from ._base import Entry
+
 
 class PyProjectToml(Loader):
     _filename: ClassVar[str] = "pyproject.toml"
@@ -47,15 +49,15 @@ class PyProjectToml(Loader):
                     or current_section in {"project.optional-dependencies", "dependency-groups"}
                 ):
                     in_deps_section = True
-                    bracket_depth = stripped.count("[") - stripped.count("]")
+                    bracket_depth = self._bracket_delta(stripped)
             elif in_deps_section:
-                bracket_depth += stripped.count("[") - stripped.count("]")
+                bracket_depth += self._bracket_delta(stripped)
             result_lines.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
         return "\n".join(result_lines)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open("rb") as file_handler:
             cfg = load_toml(file_handler)
         pre = False if pre_release is None else pre_release

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, TypeAlias
+
+from bump_deps_index._spec import PkgType
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
     from pathlib import Path
 
-    from bump_deps_index._spec import PkgType
+Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
 
 
 # match the factor shape to skip the colons inside URL requirements
@@ -26,7 +28,7 @@ class Loader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         raise NotImplementedError
 
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
@@ -46,8 +48,10 @@ class Loader(ABC):
         if not changes:
             return text
         values = "|".join(re.escape(value) for value in sorted(changes, key=len, reverse=True))
-        pattern = re.compile(rf"(?P<quote>['\"])(?P<value>{values})(?P=quote)")
-        return pattern.sub(lambda match: f"{match['quote']}{changes[match['value']]}{match['quote']}", text)
+        pattern = re.compile(rf"(?P<quote>['\"])(?P<pad>[ \t]*)(?P<value>{values})(?P<end>[ \t]*)(?P=quote)")
+        return pattern.sub(
+            lambda match: f"{match['quote']}{match['pad']}{changes[match['value']]}{match['end']}{match['quote']}", text
+        )
 
     @staticmethod
     def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
@@ -75,6 +79,24 @@ class Loader(ABC):
         return factor["requirement"] if (factor := _FACTOR.match(value.strip())) else value.strip()
 
     @staticmethod
+    def _bracket_delta(line: str) -> int:
+        # skip brackets inside strings and comments; `# see [docs` must not keep a dependency array open
+        delta, quote, escaped = 0, "", False
+        for character in line:
+            if escaped:
+                escaped = False
+            elif quote:
+                escaped = character == "\\" and quote == '"'
+                quote = "" if character == quote else quote
+            elif character in {'"', "'"}:
+                quote = character
+            elif character == "#":
+                break
+            else:
+                delta += {"[": 1, "]": -1}.get(character, 0)
+        return delta
+
+    @staticmethod
     def _split_comment(value: str) -> tuple[str, str]:
         quote = ""
         for index, character in enumerate(value):
@@ -93,6 +115,13 @@ class Loader(ABC):
         pkg_type: PkgType,
         *,
         pre_release: bool = False,
-    ) -> Iterator[tuple[str, PkgType, bool]]:
+        requires_python: str | None = None,
+    ) -> Iterator[Entry]:
         for value in generator:
-            yield value, pkg_type, pre_release
+            yield value, pkg_type, pre_release, requires_python
+
+
+__all__ = [
+    "Entry",
+    "Loader",
+]

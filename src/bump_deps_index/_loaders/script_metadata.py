@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bump_deps_index._spec import PkgType
 
@@ -12,6 +12,8 @@ from ._base import Loader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+
+    from ._base import Entry
 
 
 class ScriptMetadata(Loader):
@@ -44,17 +46,22 @@ class ScriptMetadata(Loader):
         lines[start_idx:end_idx] = block.split("\n")
         return "\n".join(lines)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
+        metadata = self._metadata(filename)
+        yield from self._generate(
+            metadata.get("dependencies", []),
+            pkg_type=PkgType.PYTHON,
+            pre_release=False if pre_release is None else pre_release,
+            requires_python=metadata.get("requires-python"),
+        )
+
+    def _metadata(self, filename: Path) -> dict[str, Any]:
         if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:
-            return
+            return {}
         try:
-            yield from self._generate(
-                load_toml(io.BytesIO(toml_str.encode("utf-8"))).get("dependencies", []),
-                pkg_type=PkgType.PYTHON,
-                pre_release=False if pre_release is None else pre_release,
-            )
+            return load_toml(io.BytesIO(toml_str.encode("utf-8")))
         except TOMLDecodeError:
-            return
+            return {}
 
     @staticmethod
     def _extract_toml_from_comments(content: str) -> str | None:

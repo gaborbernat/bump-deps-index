@@ -5,30 +5,24 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index import Options, run
-
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from pytest_mock import MockerFixture
+    from conftest import FakeIndex
 
 
-def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"A": "A>=1"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_tox_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi.update({"A": ["1"]})
     dest = tmp_path / "tox.toml"
     toml = """
     requires = ["A"]
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"A -> A>=1"}
+    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "A -> A>=1"}
 
     toml = """
     requires = ["A>=1"]
@@ -37,30 +31,25 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp
 
 
 @pytest.mark.parametrize(
-    ("name", "exists", "message"),
+    ("name", "message"),
     [
-        pytest.param("dependencies.json", True, "we do not support {}", id="unsupported"),
-        pytest.param("tox.toml", False, "{} does not exist", id="missing"),
+        pytest.param("dependencies.json", "we do not support {}", id="unsupported"),
+        pytest.param("tox.toml", "{} does not exist", id="missing"),
     ],
 )
 def test_run_rejects_file(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path, name: str, exists: bool, message: str
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, name: str, message: str
 ) -> None:
+    (tmp_path / "dependencies.json").touch()
     filename = tmp_path / name
-    if exists:
-        filename.touch()
 
-    assert not run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[filename], pre_release="no"))
+    assert not index.run(filename)
 
     assert capsys.readouterr().err == f"{message.format(filename)}\n"
 
 
-def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"A": "A>=1", "B": "B>=2", "C": "C>=3", "D": "D>=4"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi.update({"A": ["1"], "B": ["2"], "C": ["3"], "D": ["4"]})
     dest = tmp_path / "tox.toml"
     toml = """
     requires = ["A"]
@@ -78,11 +67,17 @@ def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     deps = ["D"]
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"A -> A>=1", "B -> B>=2", "C -> C>=3", "D -> D>=4"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "A -> A>=1",
+        "B -> B>=2",
+        "C -> C>=3",
+        "D -> D>=4",
+    }
 
     toml = """
     requires = ["A>=1"]
@@ -102,12 +97,9 @@ def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     assert dest.read_text() == dedent(toml).lstrip()
 
 
-def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {n: f"{n}>=1" for n in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    names = ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")
+    index.pypi.update({key: ["1"] for key in names})
     dest = tmp_path / "tox.toml"
     toml = """
     requires = ["alpha"]
@@ -133,11 +125,13 @@ def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], mocker: Mock
     deps = ["hotel"]
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {f"{n} -> {n}>=1" for n in mapping}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+    } | {f"{n} -> {n}>=1" for n in names}
 
     toml = """
     requires = ["alpha>=1"]
@@ -165,14 +159,14 @@ def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], mocker: Mock
     assert dest.read_text() == dedent(toml).lstrip()
 
 
-def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
     dest = tmp_path / "tox.toml"
     toml = """
     [env]
     broken = "not-a-table"
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
@@ -180,12 +174,8 @@ def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_pa
     assert dest.read_text() == dedent(toml).lstrip()
 
 
-def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"pytest>=7.0": "pytest>=8.0", "coverage>=6.0": "coverage>=7.0"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi.update({"pytest": ["8.1"], "coverage": ["7.1"]})
     dest = tmp_path / "tox.toml"
     toml = """
     [env_run_base]
@@ -195,23 +185,14 @@ def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], mocker: MockerFi
     ]
     """
     dest.write_text(dedent(toml).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"pytest>=7.0 -> pytest>=8.0", "coverage>=6.0 -> coverage>=7.0"}
+    assert set(out.splitlines()) == {
+        "Using Python index: https://pypi.example/simple",
+        "pytest>=7.0 -> pytest>=8.1",
+        "coverage>=6.0 -> coverage>=7.1",
+    }
 
-    result = dest.read_text()
-    assert "pytest>=8.0" in result
-    assert "coverage>=7.0" in result
-
-
-def test_run_pyproject_toml_empty(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
-    dest = tmp_path / "tox.ini"
-    dest.write_text("")
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
-
-    out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
-    assert not dest.read_text()
+    assert dest.read_text() == dedent(toml).lstrip().replace("7.0", "8.1").replace("6.0", "7.1")

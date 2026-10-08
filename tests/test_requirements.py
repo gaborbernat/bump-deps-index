@@ -5,33 +5,28 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index import Options, main, run
-from bump_deps_index._loaders import get_loaders
+from bump_deps_index import main
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from pytest_httpx import HTTPXMock
-    from pytest_mock import MockerFixture
+    from conftest import FakeIndex
 
 
-def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path) -> None:
-    mapping = {"A": "A>=1", "B==1": "B==2"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi.update(A=["1"], B=["1", "2"])
     dest = tmp_path / "requirements.txt"
     req_txt = """
     A
     B==1
     """
     dest.write_text(dedent(req_txt).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"B==1 -> B==2", "A -> A>=1"}
+    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
 
     req_txt = """
     A>=1
@@ -41,13 +36,9 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], mocker: Mocker
 
 
 def test_run_requirements_txt_skip_options(
-    capsys: pytest.CaptureFixture[str], mocker: MockerFixture, tmp_path: Path
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
 ) -> None:
-    mapping = {"A": "A>=1"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi["A"] = ["1"]
     dest = tmp_path / "requirements.txt"
     req_txt = """
     -e .[test]
@@ -56,11 +47,12 @@ def test_run_requirements_txt_skip_options(
     A
     """
     dest.write_text(dedent(req_txt).lstrip())
-    run(Options(index_url="https://pypi.org/simple", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+
+    assert index.run(dest)
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"A -> A>=1"}
+    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "A -> A>=1"}
 
     req_txt = """
     -e .[test]
@@ -86,30 +78,24 @@ def test_run_requirements_txt_skip_options(
         ),
     ],
 )
-def test_run_requirements_txt_skips_entries(httpx_mock: HTTPXMock, tmp_path: Path, content: str, expected: str) -> None:
-    httpx_mock.add_response(url="https://I.com/d/", text="<a>D-2.tar.gz</a>")
+def test_run_requirements_txt_skips_entries(index: FakeIndex, tmp_path: Path, content: str, expected: str) -> None:
+    index.pypi["D"] = ["2"]
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(content, encoding="utf-8")
 
-    successful = run(
-        Options(index_url="https://I.com", npm_registry="N", pkgs=[], filenames=[requirements], pre_release="no")
-    )
+    assert index.run(requirements)
 
-    assert successful
     assert requirements.read_text(encoding="utf-8") == expected
 
 
-def test_run_requirements_txt_distinguishes_markers_from_comments(mocker: MockerFixture, tmp_path: Path) -> None:
-    old = 'A; os_name == "foo # bar"'
-    new = 'A>=2; os_name == "foo # bar"'
-    mocker.patch("bump_deps_index._run.update_spec", return_value=new)
+def test_run_requirements_txt_distinguishes_markers_from_comments(index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi["A"] = ["2"]
     requirements = tmp_path / "requirements.txt"
-    requirements.write_text(f"{old}  # keep this reason\n", encoding="utf-8")
+    requirements.write_text('A>=1; os_name == "foo # bar"  # keep this reason\n', encoding="utf-8")
 
-    successful = run(Options(index_url="I", npm_registry="N", pkgs=[], filenames=[requirements], pre_release="no"))
+    assert index.run(requirements)
 
-    assert successful
-    assert requirements.read_text(encoding="utf-8") == f"{new}  # keep this reason\n"
+    assert requirements.read_text(encoding="utf-8") == 'A>=2; os_name == "foo # bar"  # keep this reason\n'
 
 
 @pytest.mark.parametrize(
@@ -122,18 +108,12 @@ def test_run_requirements_txt_distinguishes_markers_from_comments(mocker: Mocker
 )
 def test_run_requirements_txt_in(
     capsys: pytest.CaptureFixture[str],
-    mocker: MockerFixture,
+    index: FakeIndex,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     filename: str,
 ) -> None:
-    get_loaders.cache_clear()
-
-    mapping = {"A": "A>=1", "B==1": "B==2"}
-    mocker.patch(
-        "bump_deps_index._run.update_spec",
-        side_effect=lambda _, spec, __, ___: mapping[spec],
-    )
+    index.pypi.update(A=["1"], B=["1", "2"])
     (tmp_path / f"{filename}.txt").write_text("C")
     dest = tmp_path / f"{filename}.in"
     req_txt = """
@@ -145,11 +125,11 @@ def test_run_requirements_txt_in(
     dest.write_text(dedent(req_txt).lstrip())
     monkeypatch.chdir(tmp_path)
 
-    main(["--index-url", "https://pypi.org/simple", "--pre-release", "no"])
+    main(["--index-url", index.index_url, "--pre-release", "no"])
 
     out, err = capsys.readouterr()
     assert not err
-    assert set(out.splitlines()) == {"B==1 -> B==2", "A -> A>=1"}
+    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
 
     req_txt = """
     A>=1
@@ -158,3 +138,30 @@ def test_run_requirements_txt_in(
     # bad
     """
     assert dest.read_text() == dedent(req_txt).lstrip()
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        pytest.param(
+            "C \\\n  ; python_version > '3'\n",
+            "C>=2 \\\n  ; python_version > '3'\n",
+            id="edit-first-line",
+        ),
+        pytest.param(
+            "C \\\n  >=1 ; python_version > '3'  # why\n",
+            "C \\\n  >=2 ; python_version > '3'  # why\n",
+            id="edit-continuation-line",
+        ),
+    ],
+)
+def test_run_requirements_txt_updates_continued_entries(
+    index: FakeIndex, tmp_path: Path, content: str, expected: str
+) -> None:
+    index.pypi["C"] = ["2"]
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(content, encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert requirements.read_text(encoding="utf-8") == expected

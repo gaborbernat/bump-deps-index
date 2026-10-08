@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, ClassVar, Final, NotRequired, TypedDict, cast
 
 from yaml import safe_load as load_yaml
 
@@ -12,6 +12,10 @@ from ._base import Loader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+
+    from ._base import Entry
+
+_LANGUAGE_TYPES: Final = {"python": PkgType.PYTHON, "python_venv": PkgType.PYTHON, "node": PkgType.JS}
 
 
 class Hook(TypedDict):
@@ -82,16 +86,18 @@ class PreCommitConfig(Loader):
         pattern = re.compile(rf"(?P<prefix>\[\s*|,\s*)(?P<value>{values})(?=\s*(?:,|]))")
         return pattern.sub(lambda match: f"{match['prefix']}{changes[match['value']]}", line)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg = load_yaml(file_handler)
         pre = True if pre_release is None else pre_release
         repos = cast("list[RepoConfig]", cfg.get("repos", []) if isinstance(cfg, dict) else [])
         for repo in repos:
             for hook in repo["hooks"]:
-                node = hook.get("language") == "node"
+                # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
+                if (language := hook.get("language")) is not None and language not in _LANGUAGE_TYPES:
+                    continue
                 for pkg in hook.get("additional_dependencies", []):
-                    pkg_type = PkgType.JS if node else package_type(pkg)
+                    pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
                     yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
 
 

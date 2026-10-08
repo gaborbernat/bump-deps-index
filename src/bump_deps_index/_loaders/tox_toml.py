@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
     from typing import TypeAlias
 
+    from ._base import Entry
+
     TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
 _NESTED: Final = frozenset({"env", "env_base"})
@@ -39,22 +41,22 @@ class ToxToml(Loader):
             stripped = line.strip()
             if deps_pattern.match(stripped):
                 in_deps_section = True
-                bracket_depth = stripped.count("[") - stripped.count("]")
+                bracket_depth = self._bracket_delta(stripped)
             elif in_deps_section:
-                bracket_depth += stripped.count("[") - stripped.count("]")
+                bracket_depth += self._bracket_delta(stripped)
             result.append(self._replace_quoted(line, changes) if in_deps_section else line)
             if in_deps_section and bracket_depth == 0:
                 in_deps_section = False
         return "\n".join(result)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         pre = False if pre_release is None else pre_release
         with filename.open("rb") as file_handler:
             cfg: dict[str, TomlValue] = load_toml(file_handler)
         yield from self._generate(self._specs(cfg.get("requires")), pkg_type=PkgType.PYTHON, pre_release=pre)
         yield from self._extract_deps(cfg, pre_release=pre)
 
-    def _extract_deps(self, cfg: dict[str, TomlValue], *, pre_release: bool) -> Iterator[tuple[str, PkgType, bool]]:
+    def _extract_deps(self, cfg: dict[str, TomlValue], *, pre_release: bool) -> Iterator[Entry]:
         for key, section in cfg.items():
             if not isinstance(section, dict):
                 continue
@@ -64,9 +66,7 @@ class ToxToml(Loader):
                     if isinstance(env_section, dict):
                         yield from self._deps_from_section(env_section, pre_release=pre_release)
 
-    def _deps_from_section(
-        self, section: dict[str, TomlValue], *, pre_release: bool
-    ) -> Iterator[tuple[str, PkgType, bool]]:
+    def _deps_from_section(self, section: dict[str, TomlValue], *, pre_release: bool) -> Iterator[Entry]:
         yield from self._generate(self._specs(section.get("deps")), pkg_type=PkgType.PYTHON, pre_release=pre_release)
 
     @classmethod

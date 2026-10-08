@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -9,6 +10,8 @@ from ._base import Loader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+
+    from ._base import Entry
 
 
 class Requirements(Loader):
@@ -23,13 +26,24 @@ class Requirements(Loader):
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
-        result = [
-            self._replace_requirement_line(line, changes)
-            if line.strip() and not line.strip().startswith(("#", "-"))
-            else line
-            for line in lines
-        ]
-        return "\n".join(result)
+        for entry in self._entries(lines):
+            logical = " ".join(segment for _, segment in entry)
+            if (new := changes.get(logical, logical)) == logical:
+                continue
+            # find the edited span to rewrite the physical line holding it in a `\`-continued requirement
+            start = _common_prefix(logical, new)
+            kept = _common_prefix(logical[start:][::-1], new[start:][::-1])
+            offsets = accumulate((len(segment) + 1 for _, segment in entry), initial=0)
+            at, segment, offset = next(
+                (at, segment, offset)
+                for (at, segment), offset in zip(entry, offsets, strict=False)
+                if offset <= start and len(logical) - kept <= offset + len(segment)
+            )
+            edited = (
+                f"{segment[: start - offset]}{new[start : len(new) - kept]}{segment[len(logical) - kept - offset :]}"
+            )
+            lines[at] = self._replace_requirement_line(lines[at], {segment: edited})
+        return "\n".join(lines)
 
     @property
     def files(self) -> Iterator[Path]:
@@ -52,20 +66,33 @@ class Requirements(Loader):
                 else:
                     yield filename
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[tuple[str, PkgType, bool]]:
-        pre = False if pre_release is None else pre_release
-        requirements: list[str] = []
-        logical, continued = "", False
-        for line in filename.read_text(encoding="utf-8").splitlines():
-            stripped, _ = self._split_comment(line.strip())
-            logical = f"{logical} {stripped}" if continued else stripped
-            if continued := logical.endswith("\\"):
-                logical = logical.removesuffix("\\").rstrip()
+    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
+        lines = filename.read_text(encoding="utf-8").split("\n")
+        requirements = [" ".join(segment for _, segment in entry) for entry in self._entries(lines)]
+        yield from self._generate(
+            requirements, pkg_type=PkgType.PYTHON, pre_release=False if pre_release is None else pre_release
+        )
+
+    @classmethod
+    def _entries(cls, lines: list[str]) -> Iterator[list[tuple[int, str]]]:
+        entry: list[tuple[int, str]] = []
+        for at, line in enumerate(lines):
+            stripped, _ = cls._split_comment(line.strip())
+            entry.append((at, stripped.removesuffix("\\").rstrip()))
+            if stripped.endswith("\\"):
                 continue
+            logical = " ".join(segment for _, segment in entry)
             # skip hashed entries; you would need new hashes for a new version
             if logical and not logical.startswith(("#", "-")) and "--hash" not in logical:
-                requirements.append(logical)
-        yield from self._generate(requirements, pkg_type=PkgType.PYTHON, pre_release=pre)
+                yield entry
+            entry = []
+
+
+def _common_prefix(left: str, right: str) -> int:
+    return next(
+        (at for at, (first, second) in enumerate(zip(left, right, strict=False)) if first != second),
+        min(len(left), len(right)),
+    )
 
 
 __all__ = [

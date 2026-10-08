@@ -19,7 +19,7 @@ from yaml import YAMLError
 
 from bump_deps_index._loaders import get_loaders
 
-from ._spec import PkgType, UpdateConfig, package_type, redact_text
+from ._spec import PkgType, UpdateConfig, package_type, redact_text, redact_url
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
@@ -132,6 +132,12 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
     changes: dict[_Spec, str] = {}
     successful = True
     if specs:
+        for of_type, pkg_type, registry in (
+            ("Python", PkgType.PYTHON, index_url),
+            ("JavaScript", PkgType.JS, npm_registry),
+        ):
+            if any(spec[1] is pkg_type for spec in specs):
+                sys.stdout.write(f"Using {of_type} index: {redact_url(registry)}\n")
         parallel = min(len(specs), 10)
         with (
             Client(
@@ -164,19 +170,21 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
                     sys.stderr.write(f"failed {spec[0]} with {redact_text(repr(exc))}\n")
                 else:
                     changes[spec] = result
-                    sys.stdout.write(f"{spec[0]}{f' -> {result}' if result != spec[0] else ''}\n")
+                    sys.stdout.write(redact_text(f"{spec[0]}{f' -> {result}' if result != spec[0] else ''}\n"))
     return changes, successful
 
 
 def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> list[_Spec] | None:
     try:
         entries = list(loader.load(filename, pre_release=pre_release))
+        # prefer a PEP 723 script's own `requires-python` over the project's, since you run the script outside it
+        floors = {requires: _python_floor(requires) for *_, requires in entries if requires is not None}
     except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
         sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
         return None
-    project, python_version = _get_project(filename.resolve().parent)
+    project, project_floor = _get_project(filename.resolve().parent)
     specs: dict[_Spec, None] = {}
-    for raw, pkg_type, accept_prereleases in entries:
+    for raw, pkg_type, accept_prereleases, requires_python in entries:
         if not (name := raw.strip()):
             continue
         if pkg_type is PkgType.PYTHON:
@@ -186,7 +194,8 @@ def _load_specs(loader: Loader, filename: Path, *, pre_release: bool | None) -> 
                 continue
             if canonicalize_name(requirement.name) == project:
                 continue
-        specs[name, pkg_type, accept_prereleases, python_version] = None
+        floor = project_floor if requires_python is None else floors[requires_python]
+        specs[name, pkg_type, accept_prereleases, floor] = None
     return list(specs)
 
 
