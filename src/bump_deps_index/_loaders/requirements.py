@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
-from bump_deps_index._parsed import expand_env
 from bump_deps_index._spec import PkgType
 
 from ._base import Entry, Loader
@@ -16,9 +16,12 @@ if TYPE_CHECKING:
 
 # pip's comment pattern: a `#` at the start of a line or after whitespace starts a comment
 _COMMENT: Final[re.Pattern[str]] = re.compile(r"(^|\s+)#.*$")
+# pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
+_ENV_REFERENCE: Final[re.Pattern[str]] = re.compile(r"\$\{(?P<name>[A-Z0-9_]+)\}")
 _OPTIONS: Final[dict[str, str]] = {
     "-i": "index",
     "--index-url": "index",
+    "--extra-index-url": "extra",
     "-r": "include",
     "--requirement": "include",
     "-c": "include",
@@ -75,30 +78,15 @@ class Requirements(Loader):
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         lines = filename.read_text(encoding="utf-8").split("\n")
         requirements = [" ".join(segment for _, segment in entry) for entry in self._entries(lines)]
-        index_url = self._index_url(filename, set())
+        options = list(self._index_options(filename, set()))
+        # pip applies the last `--index-url` and every `--extra-index-url`
+        index_url = next((value for name, value in reversed(options) if name == "index"), None)
+        extra_index_urls = tuple(value for name, value in options if name == "extra")
+        pre_release = False if pre_release is None else pre_release
         for requirement in requirements:
-            yield Entry(requirement, PkgType.PYTHON, False if pre_release is None else pre_release, index_url=index_url)
-
-    @classmethod
-    def _index_url(cls, filename: Path, seen: set[Path]) -> str | None:
-        # pip applies the last `--index-url` it reads, including those in files that `-r` or `-c` pulls in
-        seen.add(filename.resolve())
-        try:
-            lines = filename.read_text(encoding="utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):
-            return None
-        found = None
-        for line in _logical_lines(lines):
-            try:
-                words = shlex.split(_COMMENT.sub("", line))
-            except ValueError:
-                continue
-            for name, value in _options(words):
-                if name == "index":
-                    found = expand_env(value)
-                elif (included := filename.parent / expand_env(value)).resolve() not in seen:
-                    found = cls._index_url(included, seen) or found
-        return found
+            yield Entry(
+                requirement, PkgType.PYTHON, pre_release, index_url=index_url, extra_index_urls=extra_index_urls
+            )
 
     @classmethod
     def _entries(cls, lines: list[str]) -> Iterator[list[tuple[int, str]]]:
@@ -115,6 +103,25 @@ class Requirements(Loader):
             if logical and not logical.startswith("-") and "--hash" not in logical:
                 yield entry
             entry = []
+
+    @classmethod
+    def _index_options(cls, filename: Path, seen: set[Path]) -> Iterator[tuple[str, str]]:
+        # pip reads the index options of the files that `-r` or `-c` pulls in, too
+        seen.add(filename.resolve())
+        try:
+            lines = filename.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            return
+        for line in _logical_lines(lines):
+            try:
+                words = shlex.split(_COMMENT.sub("", line))
+            except ValueError:
+                continue
+            for name, value in _options(words):
+                if name != "include":
+                    yield name, _expand_env(value)
+                elif (included := filename.parent / _expand_env(value)).resolve() not in seen:
+                    yield from cls._index_options(included, seen)
 
 
 def _logical_lines(lines: list[str]) -> Iterator[str]:
@@ -141,6 +148,10 @@ def _options(words: list[str]) -> Iterator[tuple[str, str]]:
             yield _OPTIONS[word], words[at + 1]
         elif word[:2] in {"-i", "-r", "-c"} and len(word) > len("-i"):
             yield _OPTIONS[word[:2]], word[2:]
+
+
+def _expand_env(text: str) -> str:
+    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"]) or match[0], text)
 
 
 def _common_prefix(left: str, right: str) -> int:

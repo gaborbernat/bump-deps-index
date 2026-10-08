@@ -44,7 +44,7 @@ class PackageJson(Loader):
                 if not isinstance(span, tuple):
                     continue
                 start, end = span
-                if new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1])}"):
+                if new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1]).strip()}"):
                     edits.append((start, end, json.dumps(new[len(name) + 1 :])[1:-1]))
         for start, end, encoded in sorted(edits, reverse=True):
             text = f"{text[:start]}{encoded}{text[end:]}"
@@ -55,11 +55,12 @@ class PackageJson(Loader):
             cfg: Parsed = json.load(file_handler)
         yield from self._generate(
             [
-                f"{name}@{wanted}"
+                f"{name}@{wanted.strip()}"
                 for section in _SECTIONS
                 for name, wanted in table(cfg, section).items()
-                # skip aliases, paths, URLs and workspace links; the registry has no version for them
-                if isinstance(wanted, str) and ":" not in wanted and "/" not in wanted
+                # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
+                # empty range, which npm reads as `*`
+                if isinstance(wanted, str) and wanted.strip() and ":" not in wanted and "/" not in wanted
             ],
             pkg_type=PkgType.JS,
             pre_release=False if pre_release is None else pre_release,
@@ -82,8 +83,7 @@ def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
     while (at := _skip_blank(text, at)) < len(text) and text[at] != closing:
         if closing == "}":
             key_end = _string_end(text, at)
-            key = json.loads(text[at:key_end])
-            members[key], at = _json_node(text, text.index(":", key_end) + 1)
+            members[json.loads(text[at:key_end])], at = _json_node(text, text.index(":", key_end) + 1)
         else:
             _, at = _json_node(text, at)
         if (at := _skip_blank(text, at)) < len(text) and text[at] == ",":

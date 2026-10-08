@@ -197,3 +197,21 @@ def test_run_requirements_txt_looks_up_its_own_index(
         content.replace("foo>=1", "foo>=2"),
         ["https://private.example/simple/foo/"],
     )
+
+
+def test_run_requirements_txt_keeps_unset_and_empty_variables(
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("UNSET", raising=False)
+    monkeypatch.setenv("EMPTY", "")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(
+        "-i https://a.example/${UNSET}\n--extra-index-url=https://b.example/${EMPTY}\nfoo\n", "utf-8"
+    )
+
+    index.run(requirements)
+
+    assert sorted(str(request.url) for request in httpx_mock.get_requests()) == [
+        "https://a.example/$%7BUNSET%7D/foo/",
+        "https://b.example/$%7BEMPTY%7D/foo/",
+    ]

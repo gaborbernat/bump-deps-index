@@ -50,17 +50,14 @@ class SetupCfg(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         cfg = NoTransformConfigParser()
-        cfg.read(filename)
+        cfg.read(filename, encoding="utf-8")
         pre = False if pre_release is None else pre_release
         if cfg.has_section("options"):
-            yield from self._generate(
-                cfg["options"].get("install_requires", "").split("\n"),
-                pkg_type=PkgType.PYTHON,
-                pre_release=pre,
-            )
+            requires = self._ini_values(cfg["options"].get("install_requires", ""))
+            yield from self._generate(requires, pkg_type=PkgType.PYTHON, pre_release=pre)
         if cfg.has_section("options.extras_require"):
             for group in cfg["options.extras_require"].values():
-                yield from self._generate(group.split("\n"), pkg_type=PkgType.PYTHON, pre_release=pre)
+                yield from self._generate(self._ini_values(group), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 __all__ = [

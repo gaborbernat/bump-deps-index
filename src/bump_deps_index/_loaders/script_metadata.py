@@ -6,7 +6,7 @@ from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
-from bump_deps_index._config import script_uv_settings
+from bump_deps_index._config import script_uv_indexes
 from bump_deps_index._parsed import strings
 from bump_deps_index._spec import PkgType
 
@@ -56,7 +56,7 @@ class ScriptMetadata(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         metadata = self._metadata(filename)
-        sources, index_url = script_uv_settings(metadata)
+        uv, index_url = script_uv_indexes(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
         for dependency in strings(metadata.get("dependencies")):
             yield Entry(
@@ -64,7 +64,7 @@ class ScriptMetadata(Loader):
                 PkgType.PYTHON,
                 False if pre_release is None else pre_release,
                 requires_python,
-                sources,
+                uv,
                 index_url,
             )
 

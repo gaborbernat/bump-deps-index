@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Mapping
     from pathlib import Path
 
+    from bump_deps_index._config import UvIndexes
     from bump_deps_index._spec import PkgType
 
 
@@ -40,19 +41,19 @@ class Loader(ABC):
         text = re.sub(r"\r\n?", "\n", raw)
         if (updated := self._update_text(text, changes)) == text:
             return
-        old, lines, endings = text.split("\n"), updated.split("\n"), [*re.findall(r"\r\n?|\n", raw), ""]
+        old, lines = text.split("\n"), updated.split("\n")
         # give each line back its own ending; the lines around the edits keep theirs when a rewrite joins lines
         head = next((at for at, (left, right) in enumerate(zip(old, lines, strict=False)) if left != right), len(lines))
         pairs = zip(reversed(old[head:]), reversed(lines[head:]), strict=False)
         tail = next((at for at, (left, right) in enumerate(pairs) if left != right), min(len(old), len(lines)) - head)
+        endings = [*re.findall(r"\r\n?|\n", raw), ""]
         new_endings = [
             *endings[:head],
             *_fit(endings[head : len(old) - tail], len(lines) - head - tail),
             *endings[len(old) - tail :],
         ]
-        content = "".join(f"{line}{end}" for line, end in zip(lines, new_endings, strict=True))
         with filename.open("w", encoding="utf-8", newline="") as file_handler:
-            file_handler.write(content)
+            file_handler.write("".join(f"{line}{end}" for line, end in zip(lines, new_endings, strict=True)))
 
     @abstractmethod
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
@@ -104,6 +105,11 @@ class Loader(ABC):
     def _strip_factor(value: str) -> str:
         return factor["requirement"] if (factor := _FACTOR.match(value.strip())) else value.strip()
 
+    @classmethod
+    def _ini_values(cls, value: str) -> list[str]:
+        # tox and setuptools drop a `#` comment after a value
+        return [line for raw in value.split("\n") if (line := cls._split_comment(raw)[0].strip())]
+
     @staticmethod
     def _split_comment(value: str) -> tuple[str, str]:
         quote = ""
@@ -139,10 +145,12 @@ class Entry(NamedTuple):
     pkg_type: PkgType
     pre_release: bool
     requires_python: str | None = None
-    # a PEP 723 script brings its own uv sources, since `uv run --script` resolves it outside the project
-    sources: Mapping[str, str | None] | None = None
+    # a PEP 723 script brings its own uv sources and indexes, since `uv run --script` resolves it outside the project
+    uv: UvIndexes | None = None
     # an index the file sets for its own requirements, such as `--index-url` in a requirements file
     index_url: str | None = None
+    # the extra indexes a requirements file sets with `--extra-index-url`
+    extra_index_urls: tuple[str, ...] = ()
 
 
 __all__ = [

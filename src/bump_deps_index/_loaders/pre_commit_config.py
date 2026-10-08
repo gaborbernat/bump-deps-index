@@ -56,13 +56,15 @@ class PreCommitConfig(Loader):
         edits: dict[int, tuple[int, str]] = {}
         kept = iter(self._kept)
         for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
-            if (dependencies := _value(hook, "additional_dependencies")) is None or not next(kept):
+            if (dependencies := _value(hook, "additional_dependencies")) is None:
                 continue
-            for item in dependencies.value if isinstance(dependencies, SequenceNode) else []:
+            if not next(kept) or not isinstance(dependencies, SequenceNode):
+                continue
+            for item in dependencies.value:
                 if (
                     isinstance(item, ScalarNode)
                     and (new := changes.get(item.value)) is not None
-                    and (encoded := _encode(new, item.style)) is not None
+                    and (encoded := _encode(new, item.style, flow=dependencies.flow_style is True)) is not None
                 ):
                     edits[_scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
         for start, (end, encoded) in sorted(edits.items(), reverse=True):
@@ -74,7 +76,6 @@ class PreCommitConfig(Loader):
             cfg: Parsed = load_yaml(file_handler)
         pre = True if pre_release is None else pre_release
         kept = self._kept_by_file[filename] = []
-        # read a malformed entry as a missing one, so one bad hook does not stop the run
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
             languages = (
@@ -118,11 +119,12 @@ def _is_key(node: Node, key: str) -> bool:
     return isinstance(node, ScalarNode) and node.tag != _MERGE and node.value == key
 
 
-def _encode(value: str, style: str | None) -> str | None:
+def _encode(value: str, style: str | None, *, flow: bool) -> str | None:
     if style == "'":
         return "'{}'".format(value.replace("'", "''"))
-    if style == '"':
-        return json.dumps(value)  # a JSON string is a valid YAML double-quoted scalar
+    # a JSON string is a valid YAML double-quoted scalar; quote a plain one where a `,` would end it, as in `[a, b]`
+    if style == '"' or (style is None and flow and any(character in value for character in ",[]{}")):
+        return json.dumps(value)
     return value if style is None else None  # leave block scalars as written
 
 
@@ -141,8 +143,7 @@ def _hook_languages(repo: str, rev: str | None) -> dict[str, str]:
         return {}
     try:
         with Client(verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=10) as client:
-            response = client.get(url, follow_redirects=True)
-        manifest = load_yaml(response.raise_for_status().text)
+            manifest = load_yaml(client.get(url, follow_redirects=True).raise_for_status().text)
     except (HTTPError, YAMLError):  # guess from the dependency shape when the manifest is out of reach
         return {}
     return {

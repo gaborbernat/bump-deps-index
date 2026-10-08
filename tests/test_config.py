@@ -10,6 +10,7 @@ import pytest
 from bump_deps_index import main
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from conftest import FakeIndex
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
 _PYPI: Final[str] = "https://pypi.org/simple"
 _NPM: Final[str] = "https://registry.npmjs.org"
+
+pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 
 
 @pytest.mark.parametrize(
@@ -211,7 +214,6 @@ def _serve(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json={"versions": {"1.0.0": {}}})
 
 
-@pytest.mark.usefixtures("isolated_index_settings")
 def test_main_sends_npm_credentials_and_routes_scopes(
     httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -244,7 +246,6 @@ def test_main_sends_npm_credentials_and_routes_scopes(
     }
 
 
-@pytest.mark.usefixtures("isolated_index_settings")
 def test_main_looks_up_uv_sources_on_their_index(
     capsys: pytest.CaptureFixture[str],
     httpx_mock: HTTPXMock,
@@ -255,8 +256,7 @@ def test_main_looks_up_uv_sources_on_their_index(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("UV_INDEX_CORP_MIRROR_USERNAME", "user")
     monkeypatch.setenv("UV_INDEX_CORP_MIRROR_PASSWORD", "p@ss")
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
+    (tmp_path / "pyproject.toml").write_text(
         dedent(
             """
             [project]
@@ -275,6 +275,7 @@ def test_main_looks_up_uv_sources_on_their_index(
             [[tool.uv.index]]
             name = "plain"
             url = "https://plain.example/simple"
+            explicit = true
             """
         ).lstrip(),
         encoding="utf-8",
@@ -301,7 +302,6 @@ def test_main_looks_up_uv_sources_on_their_index(
     )
 
 
-@pytest.mark.usefixtures("isolated_index_settings")
 def test_main_reads_uv_sources_from_the_workspace_root(
     index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -348,7 +348,6 @@ def test_main_reads_uv_sources_from_the_workspace_root(
     ).lstrip()
 
 
-@pytest.mark.usefixtures("isolated_index_settings")
 def test_main_applies_uv_sources_where_uv_reads_them(
     httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -392,3 +391,139 @@ def test_main_applies_uv_sources_where_uv_reads_them(
         "https://script.example/simple/myproj/",
         "https://script.example/simple/torch/",
     ]
+
+
+def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
+    # serve one HTML page of file names per project URL, and not found for the rest
+    def serve(request: httpx.Request) -> httpx.Response:
+        url = request.url.copy_with(username=None, password=None)
+        return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)
+
+    return serve
+
+
+def test_main_merges_pip_extra_indexes(
+    httpx_mock: HTTPXMock, isolated_index_settings: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "https://env.example/simple")
+    pip_conf = isolated_index_settings / ".config" / "pip" / "pip.conf"
+    pip_conf.parent.mkdir(parents=True)
+    pip_conf.write_text("[global]\nextra-index-url =\n    https://conf.example/simple\n", encoding="utf-8")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("--extra-index-url https://file.example/simple\nshared>=1\nconf>=1\nfile>=1\n", "utf-8")
+    httpx_mock.add_callback(
+        _project_pages({
+            "https://pypi.example/simple/shared/": "<a>shared-2.tar.gz</a>",
+            "https://env.example/simple/shared/": "<a>shared-5.tar.gz</a>",
+            "https://conf.example/simple/conf/": "<a>conf-3.tar.gz</a>",
+            "https://file.example/simple/file/": "<a>file-4.tar.gz</a>",
+        }),
+        is_reusable=True,
+    )
+
+    main(["-i", "https://pypi.example/simple", "-f", "requirements.txt"])
+
+    assert requirements.read_text(encoding="utf-8").splitlines()[1:] == ["shared>=5", "conf>=3", "file>=4"]
+
+
+def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("UV_INDEX", "team=https://team.example/simple")
+    monkeypatch.setenv("UV_INDEX_TEAM_PASSWORD", "tok")
+    monkeypatch.setenv("UV_EXTRA_INDEX_URL", "https://extra.example/simple")
+    (tmp_path / "pyproject.toml").write_text(
+        dedent(
+            """
+            [project]
+            name = "demo"
+            dependencies = ["internal>=1", "public>=1", "pinned>=1", "team>=1"]
+            [tool.uv]
+            sources.pinned = { index = "pins" }
+            [[tool.uv.index]]
+            name = "corp"
+            url = "https://corp.example/simple"
+            [[tool.uv.index]]
+            name = "pins"
+            url = "https://pins.example/simple"
+            explicit = true
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements.txt").write_text("internal>=1\n", encoding="utf-8")
+    (tmp_path / "script.py").write_text(
+        "# /// script\n# dependencies = ['internal>=1']\n# [[tool.uv.index]]\n"
+        "# url = 'https://script.example/simple'\n# ///\n",
+        encoding="utf-8",
+    )
+    httpx_mock.add_callback(
+        _project_pages({
+            "https://team.example/simple/team/": "<a>team-6.tar.gz</a>",
+            "https://extra.example/simple/public/": "<a>public-7.tar.gz</a>",
+            "https://corp.example/simple/internal/": "<a>internal-3.tar.gz</a>",
+            "https://script.example/simple/internal/": "<a>internal-5.tar.gz</a>",
+            "https://pypi.example/simple/internal/": "<a>internal-99.tar.gz</a>",
+            "https://pypi.example/simple/public/": "<a>public-2.tar.gz</a>",
+            "https://pins.example/simple/pinned/": "<a>pinned-4.tar.gz</a>",
+            "https://pypi.example/simple/pinned/": "<a>pinned-9.tar.gz</a>",
+        }),
+        is_reusable=True,
+    )
+
+    main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml", "requirements.txt", "script.py"])
+
+    assert (
+        [(tmp_path / name).read_text(encoding="utf-8").splitlines()[line] for name, line in _UPDATED_LINES],
+        {
+            request.headers.get("Authorization")
+            for request in httpx_mock.get_requests()
+            if request.url.host == "team.example"
+        },
+    ) == (
+        [
+            'dependencies = ["internal>=3", "public>=7", "pinned>=4", "team>=6"]',
+            "internal>=99",
+            "# dependencies = ['internal>=5']",
+        ],
+        {"Basic OnRvaw=="},
+    )
+
+
+_UPDATED_LINES: Final[list[tuple[str, int]]] = [("pyproject.toml", 2), ("requirements.txt", 0), ("script.py", 1)]
+
+
+def test_main_expands_npmrc_variables_and_sends_basic_credentials(
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MY_REG", "https://npm.example/")
+    monkeypatch.delenv("UNSET", raising=False)
+    (tmp_path / ".npmrc").write_text(
+        "registry=${MY_REG?}\n"
+        "@lit:registry=https://lit.example/${UNSET}\n"
+        "@opt:registry=https://opt.example/${UNSET?}\n"
+        "@tok:registry=https://token.example/\n"
+        "@bad:registry=https://bad.example/\n"
+        "//npm.example/:username=bob\n"
+        "//npm.example/:_password=c2VjcmV0\n"
+        "//token.example/:username=bob\n"
+        "//token.example/:_password=c2VjcmV0\n"
+        "//token.example/:_authToken=tok\n"
+        "//bad.example/:username=bob\n"
+        "//bad.example/:_password=/w==\n",
+        encoding="utf-8",
+    )
+    httpx_mock.add_callback(lambda _: httpx.Response(200, json={"versions": {"1.0.0": {}}}), is_reusable=True)
+
+    main(["a@1", "@lit/b@1", "@opt/c@1", "@tok/d@1", "@bad/e@1"])
+
+    assert {str(request.url): request.headers.get("Authorization") for request in httpx_mock.get_requests()} == {
+        "https://npm.example/a": "Basic Ym9iOnNlY3JldA==",
+        "https://lit.example/$%7BUNSET%7D/@lit%2Fb": None,
+        "https://opt.example/@opt%2Fc": None,
+        "https://token.example/@tok%2Fd": "Bearer tok",
+        "https://bad.example/@bad%2Fe": None,
+    }

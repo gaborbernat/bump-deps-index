@@ -57,7 +57,7 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
     msg = f"NPM registry (default: {redact_url(registry := npm_registry())})"
     parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=registry, help=msg)
-    msg = "accept pre-release versions; file-default accepts them for .pre-commit-config.yaml only"
+    msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import configparser
 import os
 import time
 from textwrap import dedent
@@ -881,6 +882,116 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             '[env.deps]\ndeps = ["foo>=2"]\n',
             id="tox-toml-env-named-deps",
         ),
+        pytest.param(
+            "tox.toml",
+            """
+            [env.a.deps]
+            replace = "posargs"
+            default = ["foo>=1"]
+            [[env.b.deps]]
+            replace = "if"
+            condition = "env.CI"
+            then = ["foo>=1"]
+            [[env.b.deps]]
+            replace = "env"
+            name = "X"
+            default = ["foo>=1"]
+            """,
+            """
+            [env.a.deps]
+            replace = "posargs"
+            default = ["foo>=2"]
+            [[env.b.deps]]
+            replace = "if"
+            condition = "env.CI"
+            then = ["foo>=2"]
+            [[env.b.deps]]
+            replace = "env"
+            name = "X"
+            default = ["foo>=2"]
+            """,
+            id="tox-toml-replace-in-tables",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    additional_dependencies: [foo<3, foo, 'foo<4']
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    additional_dependencies: ["foo<3,>=2", foo>=2, 'foo<4,>=2']
+            """,
+            id="pre-commit-flow-sequence-quotes-comma",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: node
+                    additional_dependencies: [" ", bar@1.0.0]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: node
+                    additional_dependencies: [" ", bar@2.0.0]
+            """,
+            id="pre-commit-blank-dependency",
+        ),
+        pytest.param(
+            "tox.ini",
+            """
+            [testenv]
+            deps =
+                {py312,py311}: foo>=1
+                {[base]deps}
+            """,
+            """
+            [testenv]
+            deps =
+                {py312,py311}: foo>=2
+                {[base]deps}
+            """,
+            id="tox-ini-brace-factor",
+        ),
+        pytest.param(
+            "setup.cfg",
+            """
+            [options]
+            install_requires =
+                foo>=1  # http
+            [options.extras_require]
+            test = foo>=1 # tests
+            """,
+            """
+            [options]
+            install_requires =
+                foo>=2  # http
+            [options.extras_require]
+            test = foo>=2 # tests
+            """,
+            id="setup-cfg-inline-comment",
+        ),
+        pytest.param(
+            "package.json",
+            '{"dependencies": {"foo": " ^1.0.0 ", "bar": ""}}',
+            '{"dependencies": {"foo": "^1.5.0", "bar": ""}}',
+            id="package-json-padded-and-empty-range",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")
@@ -1080,7 +1191,7 @@ def test_empty_file_stays_empty(
     ],
 )
 @pytest.mark.usefixtures("foo_index")
-def test_requirements_next_to_wrongly_typed_pyproject(tmp_path: Path, index: FakeIndex, pyproject: str) -> None:
+def test_requirements_next_to_mistyped_pyproject(tmp_path: Path, index: FakeIndex, pyproject: str) -> None:
     (tmp_path / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo>=1\n", encoding="utf-8")
@@ -1088,6 +1199,28 @@ def test_requirements_next_to_wrongly_typed_pyproject(tmp_path: Path, index: Fak
     assert index.run(requirements)
 
     assert requirements.read_text(encoding="utf-8") == "foo>=2\n"
+
+
+def test_ini_files_read_as_utf8(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, index: FakeIndex) -> None:
+    # stand in for a locale that cannot decode UTF-8, such as the `C` locale or cp1252 on Windows
+    read = configparser.RawConfigParser.read
+    monkeypatch.setattr(
+        configparser.RawConfigParser,
+        "read",
+        lambda self, filenames, encoding=None: read(self, filenames, encoding=encoding or "ascii"),
+    )
+    index.pypi["foo"] = ["2"]
+    (tox_ini := tmp_path / "tox.ini").write_text("[testenv]\ndescription = tëst\ndeps = foo>=1\n", encoding="utf-8")
+    (setup_cfg := tmp_path / "setup.cfg").write_text(
+        "[metadata]\nname = ë\n[options]\ninstall_requires = foo>=1\n", encoding="utf-8"
+    )
+
+    assert index.run(tox_ini, setup_cfg)
+
+    assert [file.read_text(encoding="utf-8").splitlines()[-1] for file in (tox_ini, setup_cfg)] == [
+        "deps = foo>=2",
+        "install_requires = foo>=2",
+    ]
 
 
 @pytest.fixture

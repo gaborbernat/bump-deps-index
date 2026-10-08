@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 import pytest
-from httpx import Client
+from httpx import Client, HTTPStatusError
 from packaging.version import Version
 
 from bump_deps_index._spec import PkgType, UpdateConfig, redact_text, update
@@ -132,6 +133,11 @@ def test_update_python_accepts_release_without_requires_python(httpx_mock: HTTPX
         pytest.param("A >= 1.0 , <3", False, [Version("2.5")], "A >= 2.5 , <3", id="keeps-format"),
         pytest.param("A>=1.2,!=1.2.5,<3", False, [Version("1.9")], "A>=1.9,!=1.2.5,<3", id="keeps-order"),
         pytest.param("A>=1.2,<=1.2.5", False, [Version("1.2.4")], "A>=1.2.4,<=1.2.5", id="no-substring-match"),
+        pytest.param("A==1.0,<3", False, [Version("3.0"), Version("2.5")], "A==2.5,<3", id="eq-inside-upper-bound"),
+        pytest.param("A==1.0,<2", False, [Version("2.1"), Version("1.0")], "A==1.0,<2", id="eq-upper-bound-same"),
+        pytest.param("A==1.*,!=2.*", False, [Version("2.1")], "A==1.*,!=2.*", id="eq-wildcard-excluded"),
+        pytest.param("A==1.0+cpu", False, [Version("1.0+cu118"), Version("1.0+cpu")], "A==1.0+cpu", id="eq-local"),
+        pytest.param("A==1.0+cpu", False, [Version("2.0+cu118"), Version("2.0+cpu")], "A==2+cpu", id="eq-local-newer"),
     ],
 )
 def test_update_python(
@@ -177,6 +183,30 @@ def test_update_js(httpx_mock: HTTPXMock, spec: str, versions: list[str], pre_re
     httpx_mock.add_response(url="https://N.com/a", json={"versions": {key: {} for key in versions}})
 
     assert _js(spec, pre_release=pre_release) == result
+
+
+@pytest.mark.parametrize(
+    ("spec", "result"),
+    [
+        pytest.param("a", "a@1.4.0", id="bare"),
+        pytest.param("a@1.0.0", "a@1.4.0", id="pin"),
+        pytest.param("a@^1.0.0", "a@^1.4.0", id="range"),
+        pytest.param("a@^1.5.0", "a@^1.5.0", id="range-above-latest"),
+        pytest.param("a@~1.0.0", "a@~1.0.0", id="range-below-latest"),
+    ],
+)
+def test_update_js_prefers_latest_tag_inside_range(httpx_mock: HTTPXMock, spec: str, result: str) -> None:
+    versions = {key: {} for key in ("1.0.0", "1.4.0", "1.5.0", "2.0.0")}
+    httpx_mock.add_response(url="https://N.com/a", json={"dist-tags": {"latest": "1.4.0"}, "versions": versions})
+
+    assert _js(spec) == result
+
+
+def test_update_python_skips_files_of_other_projects(httpx_mock: HTTPXMock) -> None:
+    files = "<a>foo-2.0.tar.gz</a><a>foo_bar-9.0.tar.gz</a><a>foo.bar-8.0-py3-none-any.whl</a><a>foo-bar-7.tar.bz2</a>"
+    httpx_mock.add_response(url="https://I.com/foo/", text=files)
+
+    assert _python("foo>=1") == "foo>=2"
 
 
 def test_update_js_encodes_scoped_package(httpx_mock: HTTPXMock) -> None:
@@ -294,3 +324,25 @@ def test_update_python_skips_malformed_json_files(httpx_mock: HTTPXMock) -> None
     )
 
     assert _python("a") == "a>=2"
+
+
+@pytest.mark.parametrize(
+    ("extra_status", "raised"),
+    [
+        pytest.param(404, "Client error '404 Not Found' for url 'https://i.com/a/'", id="missing-everywhere"),
+        pytest.param(500, "Server error '500 Internal Server Error' for url 'https://e.com/a/'", id="extra-fails"),
+    ],
+)
+def test_update_python_reports_index_errors(httpx_mock: HTTPXMock, extra_status: int, raised: str) -> None:
+    httpx_mock.add_response(url="https://I.com/a/", status_code=404)
+    httpx_mock.add_response(url="https://E.com/a/", status_code=extra_status)
+    config = UpdateConfig(
+        index_url="https://I.com",
+        authorization=None,
+        pre_release=False,
+        python_version=None,
+        extra_index_urls=("https://E.com",),
+    )
+
+    with pytest.raises(HTTPStatusError, match=re.escape(raised)):
+        update(Client(), "A", PkgType.PYTHON, config)

@@ -47,24 +47,20 @@ class ToxIni(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         cfg = NoTransformConfigParser()
-        cfg.read(filename)
+        cfg.read(filename, encoding="utf-8")
         pre = False if pre_release is None else pre_release
         for section in cfg.sections():
             if section.startswith("testenv"):
-                yield from self._generate(
-                    [self._strip_factor(value) for value in self._ini_values(cfg[section].get("deps", ""))],
-                    pkg_type=PkgType.PYTHON,
-                    pre_release=pre,
-                )
+                deps = [self._strip_factor(value) for value in self._ini_values(cfg[section].get("deps", ""))]
+                yield from self._generate(_requirements(deps), pkg_type=PkgType.PYTHON, pre_release=pre)
             elif section == "tox":
-                yield from self._generate(
-                    self._ini_values(cfg[section].get("requires", "")), pkg_type=PkgType.PYTHON, pre_release=pre
-                )
+                requires = _requirements(self._ini_values(cfg[section].get("requires", "")))
+                yield from self._generate(requires, pkg_type=PkgType.PYTHON, pre_release=pre)
 
-    @classmethod
-    def _ini_values(cls, value: str) -> list[str]:
-        # tox drops a `#` comment after a requirement, and expands `{...}` and `-r` lines itself
-        return [line for raw in value.split("\n") if (line := cls._split_comment(raw)[0].strip())[:1] not in {"{", "-"}]
+
+def _requirements(values: list[str]) -> list[str]:
+    # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311,py312}:`
+    return [value for value in values if value[:1] not in {"{", "-"}]
 
 
 __all__ = [

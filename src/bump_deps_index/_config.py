@@ -2,26 +2,29 @@ from __future__ import annotations
 
 import os
 import re
+from base64 import b64decode, b64encode
 from configparser import ConfigParser
 from configparser import Error as ConfigParserError
 from dataclasses import dataclass
 from pathlib import Path
 from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, NamedTuple
 from urllib.parse import quote, urlsplit
 
 from packaging.utils import canonicalize_name
 from typing_extensions import override
 
-from bump_deps_index._parsed import expand_env, mappings, table
+from bump_deps_index._parsed import mappings, strings, table
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from bump_deps_index._parsed import Parsed
 
-# npm prefers a token over a basic credential for the same registry, so the token comes last to override it
+# npm reads `${NAME}` from the environment and keeps it as written when unset, and reads `${NAME?}` as empty then
+_NPM_ENV_REFERENCE: Final[re.Pattern[str]] = re.compile(r"\$\{(?P<name>[^${}?]+)(?P<optional>\?)?\}")
+# the token comes last to override a basic credential for the same registry
 _NPM_CREDENTIALS: Final[dict[str, str]] = {":_auth": "Basic", ":_authToken": "Bearer"}
 
 
@@ -33,7 +36,11 @@ def python_index_url() -> str:
     cwd = Path.cwd()
     project = next((url for folder in (cwd, *cwd.parents) if (url := _default_index(_uv_settings(folder)))), None)
     user = _default_index(_read_toml(_config_home() / "uv" / "uv.toml"))
-    return project or _pip_index() or user or "https://pypi.org/simple"
+    return project or _pip_setting("index-url") or user or "https://pypi.org/simple"
+
+
+def pip_extra_indexes() -> tuple[str, ...]:
+    return (*os.environ.get("PIP_EXTRA_INDEX_URL", "").split(), *_pip_setting("extra-index-url").split())
 
 
 def _uv_settings(folder: Path) -> dict[str, Parsed]:
@@ -43,7 +50,7 @@ def _uv_settings(folder: Path) -> dict[str, Parsed]:
     return table(_read_toml(folder / "pyproject.toml"), "tool", "uv")
 
 
-def _pip_index() -> str | None:
+def _pip_setting(name: str) -> str:
     config_file = os.environ.get("PIP_CONFIG_FILE", "")
     # pip skips the user files when `PIP_CONFIG_FILE` names a file, the null device included
     skip_user = config_file == os.devnull or (bool(config_file) and Path(config_file).is_file())
@@ -61,7 +68,7 @@ def _pip_index() -> str | None:
             cfg.read(file, encoding="utf-8")
         except (ConfigParserError, UnicodeDecodeError):
             continue
-    return cfg.get("install", "index-url", fallback=None) or cfg.get("global", "index-url", fallback=None)
+    return cfg.get("install", name, fallback="") or cfg.get("global", name, fallback="")
 
 
 class _PipConfigParser(ConfigParser):
@@ -89,18 +96,12 @@ def npm_settings() -> NpmSettings:
             for key, value in values.items()
             if key.startswith("@") and key.endswith(":registry")
         },
-        authorization_by_key={
-            key.removesuffix(suffix): f"{scheme} {value}"
-            for suffix, scheme in _NPM_CREDENTIALS.items()
-            for key, value in values.items()
-            if key.startswith("//") and key.endswith(suffix)
-        },
+        authorization_by_key=_npm_authorizations(values),
     )
 
 
 def _npmrc() -> dict[str, str]:
     user = Path(_npm_env("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
-    # the project file overrides the user file
     return {**_read_npmrc(user), **_read_npmrc(Path.cwd() / ".npmrc")}
 
 
@@ -129,7 +130,33 @@ def _npmrc_value(raw: str) -> str:
         value = value[1:-1]
     else:
         value = re.split(r"[;#]", value, maxsplit=1)[0].rstrip()
-    return expand_env(value)
+    return _NPM_ENV_REFERENCE.sub(
+        lambda match: os.environ.get(match["name"], "" if match["optional"] else match[0]), value
+    )
+
+
+def _npm_authorizations(values: dict[str, str]) -> dict[str, str]:
+    # npm sends a token over a `_auth` value, and that over a `username` with a base64 `_password`
+    found: dict[str, str] = {}
+    for key, username in values.items():
+        prefix = key.removesuffix(":username")
+        if key.startswith("//") and key != prefix and (basic := _basic(username, values.get(f"{prefix}:_password"))):
+            found[prefix] = f"Basic {basic}"
+    for suffix, scheme in _NPM_CREDENTIALS.items():
+        found |= {
+            key.removesuffix(suffix): f"{scheme} {value}"
+            for key, value in values.items()
+            if key.startswith("//") and key.endswith(suffix)
+        }
+    return found
+
+
+def _basic(username: str, encoded_password: str | None) -> str | None:
+    try:
+        password = b64decode(encoded_password or "").decode()
+    except ValueError:  # skip a password that is not base64, as you could not log in with it
+        return None
+    return b64encode(f"{username}:{password}".encode()).decode() if password else None
 
 
 @dataclass(frozen=True)
@@ -151,10 +178,12 @@ class NpmSettings:
         return None
 
 
-def uv_sources(folder: Path, pyproject: dict[str, Parsed]) -> dict[str, str | None]:
+def uv_project_indexes(folder: Path, pyproject: dict[str, Parsed]) -> UvIndexes:
     # a workspace member inherits the sources and indexes of the workspace root, and overrides them
-    layers = [*_workspace_root(folder), (folder, table(pyproject, "tool", "uv"))]
-    return _sources([(uv, _read_toml(path / "uv.toml")) for path, uv in layers])
+    folders = [*_workspace_root(folder), (folder, table(pyproject, "tool", "uv"))]
+    layers = [(uv, _read_toml(path / "uv.toml")) for path, uv in folders]
+    # uv reads `uv.toml` over the `[tool.uv]` table next to it
+    return UvIndexes(_sources(layers), _first_indexes([uv for layer in reversed(layers) for uv in reversed(layer)]))
 
 
 def _workspace_root(folder: Path) -> list[tuple[Path, dict[str, Parsed]]]:
@@ -173,12 +202,6 @@ def _read_toml(path: Path) -> dict[str, Parsed]:
         return {}
 
 
-def script_uv_settings(metadata: dict[str, Parsed]) -> tuple[dict[str, str | None], str | None]:
-    # `uv run --script` reads the `[tool.uv]` table of the script, outside any project
-    uv = table(metadata, "tool", "uv")
-    return _sources([(uv, {})]), _default_index(uv)
-
-
 def _sources(layers: list[tuple[dict[str, Parsed], dict[str, Parsed]]]) -> dict[str, str | None]:
     named = {
         name: url
@@ -188,11 +211,53 @@ def _sources(layers: list[tuple[dict[str, Parsed], dict[str, Parsed]]]) -> dict[
     }
     sources: dict[str, str | None] = {}
     for package, source in (item for uv, _ in layers for item in table(uv, "sources").items()):
-        # a list splits the source by environment markers, take its first entry
+        # a list splits the source by environment markers
         entry = next(iter(source), None) if isinstance(source, list) else source
         index = entry.get("index") if isinstance(entry, dict) else None
         sources[canonicalize_name(package)] = named.get(index) if isinstance(index, str) else None
     return sources
+
+
+def _first_indexes(settings: list[dict[str, Parsed]]) -> tuple[str, ...]:
+    # uv ranks the indexes of the environment above those of the project, and those above the user's
+    env = [
+        _env_index(entry) for name in ("UV_INDEX", "UV_EXTRA_INDEX_URL") for entry in os.environ.get(name, "").split()
+    ]
+    user = _read_toml(_config_home() / "uv" / "uv.toml")
+    return tuple(dict.fromkeys([*env, *(url for uv in [*settings, user] for url in _extra_indexes(uv))]))
+
+
+def _env_index(entry: str) -> str:
+    # `UV_INDEX` takes `<name>=<url>` entries, and a named index reads its credentials from the environment
+    if "=" not in entry.partition("://")[0]:
+        return entry
+    name, _, url = entry.partition("=")
+    return _with_credentials(name, url)
+
+
+def _extra_indexes(uv: dict[str, Parsed]) -> list[str]:
+    # uv reads an explicit index only for the packages a source pins to it
+    return [
+        *(
+            url
+            for index in _indexes(uv)
+            if index.get("default") is not True and index.get("explicit") is not True and (url := _index_url(index))
+        ),
+        *strings(uv.get("extra-index-url")),
+    ]
+
+
+class UvIndexes(NamedTuple):
+    sources: dict[str, str | None]
+    """The index each source pins a package to, or None for a package from git, a path or a URL."""
+    first: tuple[str, ...]
+    """The indexes uv checks before its default one; it takes a package from the first that has it."""
+
+
+def script_uv_indexes(metadata: dict[str, Parsed]) -> tuple[UvIndexes, str | None]:
+    # `uv run --script` reads the `[tool.uv]` table of the script, outside any project
+    uv = table(metadata, "tool", "uv")
+    return UvIndexes(_sources([(uv, {})]), _first_indexes([uv])), _default_index(uv)
 
 
 def _default_index(uv: dict[str, Parsed]) -> str | None:
@@ -207,22 +272,27 @@ def _indexes(uv: dict[str, Parsed]) -> list[dict[str, Parsed]]:
 def _index_url(index: dict[str, Parsed]) -> str | None:
     if not isinstance(url := index.get("url"), str):
         return None
-    if not isinstance(name := index.get("name"), str):
-        return url
+    return _with_credentials(name, url) if isinstance(name := index.get("name"), str) else url
+
+
+def _with_credentials(name: str, url: str) -> str:
     # uv reads the credentials of a named index from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`
     prefix = f"UV_INDEX_{re.sub(r'[^A-Za-z0-9]', '_', name).upper()}"
-    if not (username := os.environ.get(f"{prefix}_USERNAME")):
+    username, password = (os.environ.get(f"{prefix}_{part}", "") for part in ("USERNAME", "PASSWORD"))
+    if not (username or password):
         return url
     parsed = urlsplit(url)
-    password = quote(os.environ.get(f"{prefix}_PASSWORD", ""), safe="")
-    return parsed._replace(netloc=f"{quote(username, safe='')}:{password}@{parsed.netloc.rpartition('@')[2]}").geturl()
+    userinfo = f"{quote(username, safe='')}:{quote(password, safe='')}"
+    return parsed._replace(netloc=f"{userinfo}@{parsed.netloc.rpartition('@')[2]}").geturl()
 
 
 __all__ = [
     "NpmSettings",
+    "UvIndexes",
     "npm_registry",
     "npm_settings",
+    "pip_extra_indexes",
     "python_index_url",
-    "script_uv_settings",
-    "uv_sources",
+    "script_uv_indexes",
+    "uv_project_indexes",
 ]

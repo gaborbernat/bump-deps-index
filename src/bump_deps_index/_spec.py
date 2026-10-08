@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final, TypeAlias, TypeVar
 from urllib.parse import quote, urlsplit, urlunsplit
 from weakref import WeakKeyDictionary
 
+from httpx import HTTPStatusError, codes
 from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, Specifier, SpecifierSet
 from packaging.utils import (
@@ -22,10 +23,12 @@ from packaging.utils import (
 )
 from packaging.version import InvalidVersion, Version
 
+from bump_deps_index._parsed import Parsed, mappings, table
+
 if TYPE_CHECKING:
     from httpx import Client, Response
 
-# userinfo may hold quotes, so stop only at the characters that end it
+# userinfo may hold quotes, so stop at the characters that end it
 _URL_CREDENTIALS: Final[re.Pattern[str]] = re.compile(r"(?<=://)[^/\s@]+@")
 _NAME_AND_EXTRAS: Final = re.compile(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?")
 _SIMPLE_JSON: Final = "application/vnd.pypi.simple.v1+json"
@@ -37,7 +40,7 @@ _SEMVER: Final = re.compile(
 )
 # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
 _NPM_PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
-_JsonField = TypeVar("_JsonField", list, dict)
+_JsonField = TypeVar("_JsonField", list[Parsed], dict[str, Parsed])
 _SemverKey: TypeAlias = tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]
 _INDEX_CACHE: Final[WeakKeyDictionary[Client, dict[str, _IndexEntry]]] = WeakKeyDictionary()
 _INDEX_CACHE_LOCK: Final[Lock] = Lock()
@@ -54,6 +57,8 @@ class UpdateConfig:
     authorization: str | None
     pre_release: bool
     python_version: Version | None
+    first_index_urls: tuple[str, ...] = ()
+    extra_index_urls: tuple[str, ...] = ()
 
 
 def update(client: Client, spec: str, pkg_type: PkgType, config: UpdateConfig) -> str:
@@ -68,54 +73,73 @@ def _update_python(client: Client, spec: str, config: UpdateConfig) -> str:
         return spec
     specifiers = list(requirement.specifier)
     exact = next((specifier for specifier in specifiers if specifier.operator in {"==", "==="}), None)
-    versions = _get_pkgs(
-        client,
-        config.index_url,
-        requirement.name,
-        pre_release=config.pre_release,
-        python_version=config.python_version,
-    )
-    if exact is None:
-        version = next((v for v in versions if requirement.specifier.contains(v, prereleases=config.pre_release)), None)
-    else:
-        version = versions[0] if versions and not _is_downgrade(exact.version, versions[0]) else None
-    if version is None:
-        return spec
     current = exact or next(
         (specifier for operator in (">=", "~=") for specifier in specifiers if specifier.operator == operator), None
     )
-    if current is None:
-        return _add_lower_bound(spec, _trim_version(version))
-    new_version = _format_version(version, current)
-    if _same_version(current, new_version):
-        return spec
-    return _replace_specifier(spec, current, new_version)
+    local = _local_label(exact)
+    for version in _get_pkgs(client, config, requirement.name):
+        if exact is None and not requirement.specifier.contains(version, prereleases=config.pre_release):
+            continue
+        if exact is not None and _is_downgrade(exact.version, version):
+            break
+        if local is not None and version.local != local:  # a local label, such as `+cpu`, names a build you keep
+            continue
+        if current is None:
+            return _add_lower_bound(spec, _trim_version(version))
+        new_version = _format_version(version, current)
+        if _same_version(current, new_version):
+            break
+        new = _replace_specifier(spec, current, new_version)
+        # the other specifiers may exclude the new pin, such as `<2` next to `==1.0`
+        if Requirement(new).specifier.contains(version, prereleases=True):
+            return new
+    return spec
 
 
-def _get_pkgs(
-    client: Client,
-    index_url: str,
-    package: str,
-    *,
-    pre_release: bool,
-    python_version: Version | None,
-) -> list[Version]:
+def _local_label(exact: Specifier | None) -> str | None:
+    if exact is None or exact.version.endswith(".*"):
+        return None
+    try:
+        return Version(exact.version).local
+    except InvalidVersion:
+        return None
+
+
+def _get_pkgs(client: Client, config: UpdateConfig, package: str) -> list[Version]:
+    name = canonicalize_name(package)
     versions: set[Version] = set()
-    for raw_file, requires_python in _index_files(client, f"{index_url.rstrip('/')}/{canonicalize_name(package)}/"):
+    for raw_file, requires_python in _project_files(client, config, name):
         if (
-            python_version is not None
+            config.python_version is not None
             and requires_python is not None
             and (specifier := _requires_python(requires_python)) is not None
-            and not specifier.contains(python_version)
+            and not specifier.contains(config.python_version)
         ):
             continue
         try:
-            version = _version_from_file(raw_file)
+            project, version = _parse_filename(raw_file)
         except (InvalidSdistFilename, InvalidWheelFilename, IndexError, ValueError):
             continue
-        else:
+        if project == name:  # an index page may list files of other projects, as pip and uv skip them
             versions.add(version)
-    return sorted((v for v in versions if (True if pre_release else not v.is_prerelease)), reverse=True)
+    return sorted((v for v in versions if config.pre_release or not v.is_prerelease), reverse=True)
+
+
+def _project_files(client: Client, config: UpdateConfig, name: str) -> list[tuple[str, str | None]]:
+    # uv takes a package from the first of its indexes that has it; pip merges its index with the extra indexes
+    for urls in [*((url,) for url in config.first_index_urls), (config.index_url, *config.extra_index_urls)]:
+        pages: list[list[tuple[str, str | None]]] = []
+        missing: list[HTTPStatusError] = []
+        for url in urls:
+            try:
+                pages.append(_index_files(client, f"{url.rstrip('/')}/{name}/"))
+            except HTTPStatusError as exc:
+                if exc.response.status_code != codes.NOT_FOUND:
+                    raise
+                missing.append(exc)
+        if pages:
+            return [file for page in pages for file in page]
+    raise missing[0]  # no index has the package; report the not found answer of the main index
 
 
 def _index_files(client: Client, url: str) -> list[tuple[str, str | None]]:
@@ -140,12 +164,9 @@ def _fetch_index_files(client: Client, url: str) -> list[tuple[str, str | None]]
     if response.headers.get("content-type", "").startswith(_SIMPLE_JSON):
         # skip malformed entries the way the HTML parser skips malformed links
         return [
-            (
-                file["filename"],
-                requires_python if isinstance(requires_python := file.get("requires-python"), str) else None,
-            )
-            for file in _json_field(response, "files", list)
-            if isinstance(file, dict) and isinstance(file.get("filename"), str) and not file.get("yanked")
+            (filename, requires_python if isinstance(requires_python := file.get("requires-python"), str) else None)
+            for file in mappings(_json_field(response, "files", list))
+            if isinstance(filename := file.get("filename"), str) and not file.get("yanked")
         ]
     parser = _IndexParser()
     parser.feed(response.text)
@@ -191,13 +212,14 @@ def _requires_python(value: str) -> SpecifierSet | None:
         return None
 
 
-def _version_from_file(filename: str) -> Version:
+def _parse_filename(filename: str) -> tuple[str, Version]:
     if filename.endswith(".whl"):
-        return parse_wheel_filename(filename)[1]
+        name, version, *_ = parse_wheel_filename(filename)
+        return name, version
     if filename.endswith((".tar.gz", ".zip")):
-        return parse_sdist_filename(filename)[1]
-    file = filename.removesuffix(".tar.bz2").removesuffix(".whl")
-    return Version(file.rsplit("-", 1)[1])
+        return parse_sdist_filename(filename)
+    name, _, version = filename.removesuffix(".tar.bz2").rpartition("-")
+    return canonicalize_name(name), Version(version)
 
 
 def _is_downgrade(pinned: str, version: Version) -> bool:
@@ -234,7 +256,9 @@ def _format_version(version: Version, current: Specifier) -> str:
         if version.is_prerelease:
             return str(version).partition("+")[0]
         return _release_prefix(version, max(2, len(Version(current.version).release)))
-    return _trim_version(version)
+    trimmed = _trim_version(version)
+    # keep the local label of a pin such as `==1.0+cpu`
+    return f"{trimmed}+{version.local}" if "+" in current.version else trimmed
 
 
 def _release_prefix(version: Version, depth: int) -> str:
@@ -258,22 +282,25 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
 def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    if not (versions := _get_js_pkgs(client, package, config)):
-        return spec  # the registry has no release you accept, such as only pre-releases
+    versions, latest = _get_js_pkgs(client, package, config)
     if not wanted or _NPM_PIN.fullmatch(wanted):
-        pinned = _semver_key(_pad_version(wanted)) if wanted else None
-        return spec if pinned is not None and versions[0][0] < pinned else f"{package}@{versions[0][1]}"
-    operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
-    # keep ranges this tool cannot compare, such as `<2` or a dist-tag
-    if operator not in {"^", "~", ">="} or (current := _semver_key(wanted[len(operator) :])) is None:
+        operator, pinned = "", _semver_key(_pad_version(wanted)) if wanted else None
+        candidates = [version for key, version in versions if pinned is None or key >= pinned]
+    else:
+        operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
+        # keep ranges this tool cannot compare, such as `<2` or a dist-tag
+        if operator not in {"^", "~", ">="} or (current := _semver_key(wanted[len(operator) :])) is None:
+            return spec
+        # `^1.2.3` keeps the major inside its range, `^0.2.3` and `~1.2.3` keep the minor
+        depth = {"~": 2, ">=": 0}.get(operator, next((at for at, part in enumerate(current[:2]) if part), 2) + 1)
+        candidates = [version for key, version in versions if key >= current and key[:depth] == current[:depth]]
+    if not candidates:  # the registry has no release you accept, such as only pre-releases
         return spec
-    # `^1.2.3` keeps the major inside its range, `^0.2.3` and `~1.2.3` keep the minor
-    depth = {"~": 2, ">=": 0}.get(operator, next((at for at, part in enumerate(current[:2]) if part), 2) + 1)
-    newest = next((version for key, version in versions if key >= current and key[:depth] == current[:depth]), None)
-    return spec if newest is None else f"{package}@{operator}{newest}"
+    # npm installs the `latest` dist-tag when it fits the range, and the highest version otherwise
+    return f"{package}@{operator}{latest if latest in candidates else candidates[0]}"
 
 
-def _get_js_pkgs(client: Client, package: str, config: UpdateConfig) -> list[tuple[_SemverKey, str]]:
+def _get_js_pkgs(client: Client, package: str, config: UpdateConfig) -> tuple[list[tuple[_SemverKey, str]], Parsed]:
     authorization = {} if config.authorization is None else {"Authorization": config.authorization}
     response = client.get(
         f"{config.index_url.rstrip('/')}/{quote(package, safe='@')}",
@@ -290,7 +317,7 @@ def _get_js_pkgs(client: Client, package: str, config: UpdateConfig) -> list[tup
             and not (isinstance(meta, dict) and meta.get("deprecated"))
         ),
         reverse=True,
-    )
+    ), table(response.json(), "dist-tags").get("latest")
 
 
 def _json_field(response: Response, name: str, kind: type[_JsonField]) -> _JsonField:
