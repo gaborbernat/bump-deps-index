@@ -104,7 +104,8 @@ _NPM: Final[str] = "https://registry.npmjs.org"
                 {},
                 {
                     "~/.pip/pip.conf": "[global]\nindex-url = https://old.example/simple",
-                    "~/.config/pip/pip.conf": "[global]\nindex_url = https://underscore.example/simple",
+                    "~/.config/pip/pip.conf": "[global]\nindex-url = https://dash.example/simple\n"
+                    "index_url = https://underscore.example/simple",
                 },
             ),
             ("https://underscore.example/simple", _NPM),

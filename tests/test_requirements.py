@@ -174,6 +174,11 @@ def test_run_requirements_txt_updates_continued_entries(
         pytest.param("--index-url\thttps://ignored.example/simple\n-r base.txt\nfoo>=1\n", id="included-file"),
         pytest.param("-i \\\n  'https://${HOST}/simple'\nfoo>=1\n", id="continued-and-quoted"),
         pytest.param("-i 'unclosed\n--index-url=https://${HOST}/simple # mirror\nfoo>=1\n", id="equals-and-comment"),
+        pytest.param(
+            "-i https://private.\\\nexample/simple\n# try -i https://ignored.example/simple \\\n"
+            "  # -r other.txt\nfoo>=1\n",
+            id="joined-without-space-and-comment-lines",
+        ),
     ],
 )
 def test_run_requirements_txt_looks_up_its_own_index(

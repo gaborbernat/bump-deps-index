@@ -55,7 +55,7 @@ def _pip_index() -> str | None:
         config_home / "pip" / "pip.ini",
     ]
     # pip lets a later file override an earlier one, and an `[install]` value beats a `[global]` one in any file
-    cfg = _PipConfigParser(interpolation=None)
+    cfg = _PipConfigParser(interpolation=None, strict=False)
     for file in [*([] if skip_user else user), *filter(None, [config_file])]:
         try:
             cfg.read(file, encoding="utf-8")

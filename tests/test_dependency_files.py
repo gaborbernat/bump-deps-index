@@ -1036,6 +1036,12 @@ _NESTED_DEPENDENCIES: Final[str] = ", ".join(['{"dependencies": {"foo": "^1.0.0"
             f'{{"x": [{_NESTED_DEPENDENCIES}], "dependencies": {{"foo": "^1.5.0"}}}}',
             id="package-json-many-nested-objects",
         ),
+        pytest.param(
+            "pyproject.toml",
+            '[project]\nname = "demo"\ndependencies = ["""foo\\\n>=1"""]\n' + "#\n" * 20_000,
+            '[project]\nname = "demo"\ndependencies = ["""foo>=2"""]\n' + "#\n" * 20_000,
+            id="joined-line-before-many-equal-lines",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")

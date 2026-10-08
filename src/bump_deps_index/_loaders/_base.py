@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Final, NamedTuple
 
 if TYPE_CHECKING:
@@ -41,13 +40,15 @@ class Loader(ABC):
         text = re.sub(r"\r\n?", "\n", raw)
         if (updated := self._update_text(text, changes)) == text:
             return
-        lines, endings = updated.split("\n"), [*re.findall(r"\r\n?|\n", raw), ""]
-        # give each line back its own ending; align the lines when a rewrite joins or splits some of them
-        matcher = SequenceMatcher(None, text.split("\n"), lines, autojunk=False)
+        old, lines, endings = text.split("\n"), updated.split("\n"), [*re.findall(r"\r\n?|\n", raw), ""]
+        # give each line back its own ending; the lines around the edits keep theirs when a rewrite joins lines
+        head = next((at for at, (left, right) in enumerate(zip(old, lines, strict=False)) if left != right), len(lines))
+        pairs = zip(reversed(old[head:]), reversed(lines[head:]), strict=False)
+        tail = next((at for at, (left, right) in enumerate(pairs) if left != right), min(len(old), len(lines)) - head)
         new_endings = [
-            ending
-            for _, old_start, old_end, new_start, new_end in matcher.get_opcodes()
-            for ending in _fit(endings[old_start:old_end], new_end - new_start)
+            *endings[:head],
+            *_fit(endings[head : len(old) - tail], len(lines) - head - tail),
+            *endings[len(old) - tail :],
         ]
         content = "".join(f"{line}{end}" for line, end in zip(lines, new_endings, strict=True))
         with filename.open("w", encoding="utf-8", newline="") as file_handler:

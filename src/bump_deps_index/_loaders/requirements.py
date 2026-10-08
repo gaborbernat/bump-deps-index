@@ -14,6 +14,8 @@ from ._base import Entry, Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
+# pip's comment pattern: a `#` at the start of a line or after whitespace starts a comment
+_COMMENT: Final[re.Pattern[str]] = re.compile(r"(^|\s+)#.*$")
 _OPTIONS: Final[dict[str, str]] = {
     "-i": "index",
     "--index-url": "index",
@@ -86,10 +88,9 @@ class Requirements(Loader):
         except (OSError, UnicodeDecodeError):
             return None
         found = None
-        # pip joins `\`-continued lines, then splits each line into shell words before it reads the options
-        for line in re.sub(r"\\\n", " ", "\n".join(lines)).split("\n"):
+        for line in _logical_lines(lines):
             try:
-                words = shlex.split(cls._split_comment(line.strip())[0])
+                words = shlex.split(_COMMENT.sub("", line))
             except ValueError:
                 continue
             for name, value in _options(words):
@@ -114,6 +115,21 @@ class Requirements(Loader):
             if logical and not logical.startswith("-") and "--hash" not in logical:
                 yield entry
             entry = []
+
+
+def _logical_lines(lines: list[str]) -> Iterator[str]:
+    # follow pip's `join_lines`: a comment line ends a `\` continuation, and the parts join without a space
+    joined: list[str] = []
+    for line in lines:
+        if _COMMENT.match(line):
+            yield "".join(joined)
+            joined = []
+        elif line.endswith("\\"):
+            joined.append(line.removesuffix("\\"))
+        else:
+            yield "".join([*joined, line])
+            joined = []
+    yield "".join(joined)
 
 
 def _options(words: list[str]) -> Iterator[tuple[str, str]]:
