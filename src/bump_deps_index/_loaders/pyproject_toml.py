@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from tomllib import load as load_toml
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
 
 from bump_deps_index._spec import PkgType
 
@@ -13,6 +13,16 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
     from ._base import Entry
+
+_TABLE: Final = re.compile(r"^\[(?P<table>[^]]+)]")
+_KEY: Final = re.compile(r"^(?P<key>[^=]*)=\s*[\[{]")
+_DEPENDENCY_KEYS: Final = frozenset({
+    "build-system.requires",
+    "dependency-groups",
+    "project.dependencies",
+    "project.optional-dependencies",
+    "tool.uv.dev-dependencies",
+})
 
 
 class PyProjectToml(Loader):
@@ -27,34 +37,19 @@ class PyProjectToml(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
-        in_deps_section = False
-        bracket_depth = 0
         result_lines: list[str] = []
-        current_section = ""
-        section_pattern = re.compile(r"^\[(?P<section>[^]]+)]")
-        key_pattern = re.compile(r"^(?P<key>[^=]*)=\s*[\[{]")
-        for line in lines:
+        table = ""
+        bracket_depth = 0
+        for line in text.split("\n"):
             stripped = line.strip()
-            if section_match := section_pattern.match(stripped):
-                current_section = section_match["section"]
-            if match := key_pattern.match(stripped):
-                key = match["key"].strip().strip("\"'")
-                project_dependency = current_section == "project" and (
-                    key in {"dependencies", "optional-dependencies"} or key.startswith("optional-dependencies.")
-                )
-                if (
-                    (current_section == "build-system" and key == "requires")
-                    or project_dependency
-                    or current_section in {"project.optional-dependencies", "dependency-groups"}
-                ):
-                    in_deps_section = True
-                    bracket_depth = self._bracket_delta(stripped)
-            elif in_deps_section:
+            if update := bracket_depth > 0:
                 bracket_depth += self._bracket_delta(stripped)
-            result_lines.append(self._replace_quoted(line, changes) if in_deps_section else line)
-            if in_deps_section and bracket_depth == 0:
-                in_deps_section = False
+            elif header := _TABLE.match(stripped):
+                table = _dotted(header["table"])
+            elif (match := _KEY.match(stripped)) and _is_dependency_key(f"{table}.{_dotted(match['key'])}".lstrip(".")):
+                update = True
+                bracket_depth = self._bracket_delta(stripped)
+            result_lines.append(self._replace_quoted(line, changes) if update else line)
         return "\n".join(result_lines)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
@@ -69,12 +64,23 @@ class PyProjectToml(Loader):
         )
         for entries in cfg.get("project", {}).get("optional-dependencies", {}).values():
             yield from self._generate(entries, pkg_type=PkgType.PYTHON, pre_release=pre)
+        yield from self._generate(
+            cfg.get("tool", {}).get("uv", {}).get("dev-dependencies", []), pkg_type=PkgType.PYTHON, pre_release=pre
+        )
         for values in cfg.get("dependency-groups", {}).values():
             yield from self._generate(
                 [value for value in values if not isinstance(value, dict)],
                 pkg_type=PkgType.PYTHON,
                 pre_release=pre,
             )
+
+
+def _dotted(key: str) -> str:
+    return ".".join(part.strip(" \"'") for part in key.split("."))
+
+
+def _is_dependency_key(key: str) -> bool:
+    return key in _DEPENDENCY_KEYS or key.startswith(("project.optional-dependencies.", "dependency-groups."))
 
 
 __all__ = [

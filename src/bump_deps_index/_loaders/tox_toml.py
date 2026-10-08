@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
 _NESTED: Final = frozenset({"env", "env_base"})
+_KEY: Final = re.compile(r"^(?P<key>[^=]+)=\s*\[")
 
 
 class ToxToml(Loader):
@@ -36,10 +37,13 @@ class ToxToml(Loader):
         result: list[str] = []
         in_deps_section = False
         bracket_depth = 0
-        deps_pattern = re.compile(r"^(requires|deps)\s*=\s*\[")
         for line in lines:
             stripped = line.strip()
-            if deps_pattern.match(stripped):
+            # a dotted key such as `env.test.deps` names the setting in its last part
+            if (match := _KEY.match(stripped)) and match["key"].rpartition(".")[2].strip(" \"'") in {
+                "requires",
+                "deps",
+            }:
                 in_deps_section = True
                 bracket_depth = self._bracket_delta(stripped)
             elif in_deps_section:

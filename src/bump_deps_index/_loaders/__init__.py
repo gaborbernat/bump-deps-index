@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import cache
 
 from ._base import Loader
+from .package_json import PackageJson
 from .pre_commit_config import PreCommitConfig
 from .pyproject_toml import PyProjectToml
 from .requirements import Requirements
@@ -16,6 +17,7 @@ from .tox_toml import ToxToml
 def get_loaders() -> list[Loader]:
     return [
         PreCommitConfig(),
+        PackageJson(),
         PyProjectToml(),
         ToxToml(),
         Requirements(),

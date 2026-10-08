@@ -43,21 +43,26 @@ class PreCommitConfig(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
         result: list[str] = []
         dependency_indent: int | None = None
-        for line in lines:
+        flow_depth = 0
+        for line in text.split("\n"):
             stripped = line.strip()
             indent = len(line) - len(line.lstrip())
-            if stripped.startswith("additional_dependencies:"):
-                dependency_indent = indent
+            if flow_depth:
+                flow_depth += self._bracket_delta(line)
+                result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes))
+                continue
+            # the key may share its line with the `-` that opens the hook mapping
+            if (key := line.lstrip(" -")).startswith("additional_dependencies:"):
+                dependency_indent = len(line) - len(key)
+                flow_depth = self._bracket_delta(line)
                 result.append(self._replace_flow_values(self._replace_quoted(line, changes), changes))
                 continue
             if (
                 dependency_indent is not None
                 and stripped
-                and indent <= dependency_indent
-                and not stripped.startswith("-")
+                and (indent < dependency_indent or (indent == dependency_indent and not stripped.startswith("-")))
             ):
                 dependency_indent = None
             if dependency_indent is not None and stripped.startswith("-"):
@@ -83,7 +88,7 @@ class PreCommitConfig(Loader):
         if not changes:
             return line
         values = "|".join(re.escape(value) for value in sorted(changes, key=len, reverse=True))
-        pattern = re.compile(rf"(?P<prefix>\[\s*|,\s*)(?P<value>{values})(?=\s*(?:,|]))")
+        pattern = re.compile(rf"(?P<prefix>^\s*|\[\s*|,\s*)(?P<value>{values})(?=\s*(?:,|]|#|$))")
         return pattern.sub(lambda match: f"{match['prefix']}{changes[match['value']]}", line)
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:

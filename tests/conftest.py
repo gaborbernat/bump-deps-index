@@ -19,6 +19,25 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
+def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    home = tmp_path / "home"
+    for name in ("HOME", "USERPROFILE"):  # Windows reads the home folder from `USERPROFILE`
+        monkeypatch.setenv(name, str(home))
+    for name in (
+        "APPDATA",
+        "NPM_CONFIG_REGISTRY",
+        "NPM_CONFIG_USERCONFIG",
+        "PIP_CONFIG_FILE",
+        "PIP_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+        "UV_INDEX_URL",
+        "XDG_CONFIG_HOME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return home
+
+
+@pytest.fixture
 def index(httpx_mock: HTTPXMock) -> FakeIndex:
     fake = FakeIndex()
     httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)

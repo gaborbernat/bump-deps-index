@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ssl
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from configparser import Error as ConfigParserError
 from itertools import chain
 from pathlib import Path
@@ -161,8 +161,8 @@ def _calculate_update(index_url: str, npm_registry: str, specs: Sequence[_Spec])
                 ): spec
                 for spec in specs
             }
-            for future in as_completed(future_to_spec):
-                spec = future_to_spec[future]
+            # report in submission order to keep the output stable between runs
+            for future, spec in future_to_spec.items():
                 try:
                     result = future.result()
                 except (HTTPError, IndexError, KeyError, ValueError) as exc:

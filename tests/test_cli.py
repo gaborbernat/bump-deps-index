@@ -8,11 +8,11 @@ import pytest
 
 from bump_deps_index._cli import Options, parse_cli
 
+pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+
 
 def test_cli_ok_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
-    monkeypatch.delenv("NPM_CONFIG_REGISTRY", raising=False)
     options = parse_cli([])
 
     assert isinstance(options, Options)

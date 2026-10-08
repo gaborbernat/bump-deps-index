@@ -45,8 +45,8 @@ class SetupCfg(Loader):
             if stripped.startswith("["):
                 section = stripped.strip("[]")
                 dependency_key = ""
-            elif stripped and not line[:1].isspace() and "=" in line:
-                dependency_key = line.partition("=")[0].strip()
+            elif (key := self._ini_key(line)) is not None:
+                dependency_key = key
                 key_line = True
             update = (
                 section == "options" and dependency_key == "install_requires"

@@ -29,7 +29,14 @@ bump-deps-index 'httpx>=0.27' prettier@3.0.0
 ```
 
 Use `--file` to limit updates. Supported inputs include `pyproject.toml`, `tox.toml`, `tox.ini`, `setup.cfg`,
-requirements files, `.pre-commit-config.yaml`, and Python scripts with PEP 723 metadata.
+`package.json`, `.pre-commit-config.yaml`, Python scripts with PEP 723 metadata, and requirements files. Without
+`--file` you get the `requirements*` and `constraints*` files ending in `.txt` or `.in`; with `--file` you can name any
+such file, such as `dev-requirements.txt`.
+
+Without `--index-url` you get the index from `PIP_INDEX_URL`, `UV_DEFAULT_INDEX` or `UV_INDEX_URL`, then the default
+index of the nearest `uv.toml` or `[tool.uv]` table, then `index-url` from your pip configuration, then your user
+`uv.toml`. Without `--npm-registry` you get `NPM_CONFIG_REGISTRY`, then `registry` from the `.npmrc` in the working
+directory, then from your user `.npmrc`.
 
 Set `[project].requires-python` in a `pyproject.toml` and you get Python updates from distributions that support the
 oldest interpreter you allow there, for files in that directory and its subdirectories. For a PEP 723 script with its
@@ -38,6 +45,10 @@ own `requires-python`, you get updates for that range. Without either field, you
 For an `==` pin you get a newer release or no change, and you keep wildcards at their depth, so you go from `==1.*` to
 `==2.*`. On `~=` bounds you keep the precision you wrote, so you go from `~=1.4` to `~=1.9`. You keep hashed
 requirements as you wrote them, since you would need new hashes for a new version.
+
+On npm ranges you stay inside the range, so `^1.2.0` goes to the newest `1.x` release and `~1.2.0` to the newest
+`1.2.x`. You get the newest release for `>=1.2.0` and for an exact version, and you keep ranges such as `<2` or `latest`
+as you wrote them. In `package.json` you get updates for `dependencies`, `devDependencies` and `optionalDependencies`.
 
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates
 for hooks in other languages. You see changes on disk for files with a new version, with their line endings intact.

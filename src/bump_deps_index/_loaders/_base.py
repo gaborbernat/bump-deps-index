@@ -15,6 +15,8 @@ Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
 
 # match the factor shape to skip the colons inside URL requirements
 _FACTOR: Final = re.compile(r"^(?P<prefix>[\w!{}.-]+(?:\s*,\s*[\w!{}.-]+)*\s*:\s*)(?P<requirement>\S.*)$")
+# configparser splits a key line at its first `=` or `:`
+_INI_KEY: Final = re.compile(r"^(?P<key>[^=:]*)[=:]")
 
 
 class Loader(ABC):
@@ -54,9 +56,15 @@ class Loader(ABC):
         )
 
     @staticmethod
+    def _ini_key(line: str) -> str | None:
+        if not line.strip() or line[:1].isspace() or line[:1] in {"#", ";"}:
+            return None
+        return match["key"].strip() if (match := _INI_KEY.match(line)) else None
+
+    @staticmethod
     def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
-        key, separator, value = line.partition("=")
-        return f"{key}{separator}{Loader._replace_requirement_line(value, changes)}"
+        value = _INI_KEY.sub("", line, count=1)
+        return f"{line[: len(line) - len(value)]}{Loader._replace_requirement_line(value, changes)}"
 
     @staticmethod
     def _replace_requirement_line(line: str, changes: Mapping[str, str]) -> str:

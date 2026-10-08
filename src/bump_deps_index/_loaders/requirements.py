@@ -15,13 +15,12 @@ if TYPE_CHECKING:
 
 
 class Requirements(Loader):
-    _base: ClassVar[str] = "requirements"
+    _bases: ClassVar[frozenset[str]] = frozenset({"requirements", "constraints"})
 
-    def supports(self, filename: Path) -> bool:
-        return (
-            filename.suffix in {".in", ".txt"}
-            and (filename.stem.split(".")[0] == self._base or filename.stem.split("-")[0] == self._base)
-            and not (filename.suffix == ".txt" and filename.with_suffix(".in").exists())
+    @staticmethod
+    def supports(filename: Path) -> bool:
+        return filename.suffix in {".in", ".txt"} and not (
+            filename.suffix == ".txt" and filename.with_suffix(".in").exists()
         )
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
@@ -51,7 +50,7 @@ class Requirements(Loader):
         found = {
             f
             for f in Path.cwd().iterdir()
-            if (f.stem.split(".")[0] == self._base or f.stem.split("-")[0] == self._base)
+            if (f.stem.split(".")[0] in self._bases or f.stem.split("-")[0] in self._bases)
             and f.suffix in {".in", ".txt"}
         }
         existing_names = {f.name for f in found}

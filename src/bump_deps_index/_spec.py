@@ -7,7 +7,7 @@ from enum import Enum, auto
 from functools import cache
 from html.parser import HTMLParser
 from threading import Lock
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, TypeAlias
 from urllib.parse import quote, urlsplit, urlunsplit
 from weakref import WeakKeyDictionary
 
@@ -34,6 +34,9 @@ _SEMVER: Final = re.compile(
     r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
+# a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
+_NPM_PIN: Final = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
+_SemverKey: TypeAlias = tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]
 _INDEX_CACHE: Final[WeakKeyDictionary[Client, dict[str, _IndexEntry]]] = WeakKeyDictionary()
 _INDEX_CACHE_LOCK: Final[Lock] = Lock()
 
@@ -247,32 +250,49 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
 
 
 def _update_js(client: Client, npm_registry: str, spec: str, *, pre_release: bool) -> str:
-    ver_at = spec.rfind("@")
-    package = spec[: len(spec) if ver_at in {-1, 0} else ver_at]
-    version = _get_js_pkgs(client, npm_registry, package, pre_release=pre_release)[0]
-    return f"{package}@{version}"
+    at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
+    package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
+    versions = _get_js_pkgs(client, npm_registry, package, pre_release=pre_release)
+    if not wanted or _NPM_PIN.fullmatch(wanted):
+        return f"{package}@{versions[0][1]}"
+    operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
+    # keep ranges this tool cannot compare, such as `<2` or a dist-tag
+    if operator not in {"^", "~", ">="} or (current := _semver_key(wanted[len(operator) :])) is None:
+        return spec
+    # `^1.2.3` keeps the major inside its range, `^0.2.3` and `~1.2.3` keep the minor
+    depth = {"~": 2, ">=": 0}.get(operator, next((at for at, part in enumerate(current[:2]) if part), 2) + 1)
+    newest = next(
+        (version for key, version in versions if key >= current and key[:depth] == current[:depth]),
+        None,
+    )
+    return spec if newest is None else f"{package}@{operator}{newest}"
 
 
-def _get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release: bool) -> list[str]:
+def _get_js_pkgs(client: Client, npm_registry: str, package: str, *, pre_release: bool) -> list[tuple[_SemverKey, str]]:
     response = client.get(
         f"{npm_registry.rstrip('/')}/{quote(package, safe='@')}",
         headers={"Accept": _NPM_ACCEPT},
         follow_redirects=True,
     )
     response.raise_for_status()
-    found = [
-        (key, version)
-        for version, meta in response.json()["versions"].items()
-        if (key := _semver_key(version)) is not None and (pre_release or key[3] == 1) and not meta.get("deprecated")
-    ]
-    return [version for _, version in sorted(found, reverse=True)]
+    return sorted(
+        (
+            (key, version)
+            for version, meta in response.json()["versions"].items()
+            if (key := _semver_key(version)) is not None and (pre_release or key[3] == 1) and not meta.get("deprecated")
+        ),
+        reverse=True,
+    )
 
 
-def _semver_key(version: str) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]] | None:
+def _semver_key(version: str) -> _SemverKey | None:
     if (match := _SEMVER.fullmatch(version)) is None:
         return None
     pre = match["pre"]
-    identifiers = tuple((0, int(value)) if value.isdecimal() else (1, value) for value in pre.split(".")) if pre else ()
+    # semver ranks numeric identifiers below alphanumeric ones
+    identifiers = (
+        tuple((0, int(part), "") if part.isdecimal() else (1, 0, part) for part in pre.split(".")) if pre else ()
+    )
     return int(match["major"]), int(match["minor"]), int(match["patch"]), int(pre is None), identifiers
 
 
