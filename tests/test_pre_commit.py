@@ -35,14 +35,16 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "Using JavaScript index: https://npm.example",
-        "black==22.6.0 -> black==22.8",
-        "flake8-bugbear==22.7.1 -> flake8-bugbear==22.7.2",
-        "prettier@2.7.0 -> prettier@2.8.0",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "Using JavaScript index: https://npm.example",
+            "black==22.6.0 -> black==22.8",
+            "flake8-bugbear==22.7.1 -> flake8-bugbear==22.7.2",
+            "prettier@2.7.0 -> prettier@2.8.0",
+        },
+    )
 
     setup_cfg = """
     repos:

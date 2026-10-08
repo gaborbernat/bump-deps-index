@@ -1099,13 +1099,13 @@ def test_failure_message_redacts_index_credentials(
 ) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo\n", encoding="utf-8")
-    index.index_url = "https://user:s3cret@pypi.example/simple"
+    index.index_url = "https://user:s3c'ret@pypi.example/simple"
 
     assert not index.run(requirements)
 
-    err = capsys.readouterr().err
-    assert "https://pypi.example/simple/foo/" in err
-    assert "s3cret" not in err
+    assert capsys.readouterr().err.startswith(
+        "failed foo with HTTPStatusError(\"Client error '404 Not Found' for url 'https://pypi.example/simple/foo/'"
+    )
 
 
 def test_output_redacts_direct_reference_credentials(

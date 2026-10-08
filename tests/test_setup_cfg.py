@@ -27,13 +27,15 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "B -> B>=1",
-        "A -> A>=1",
-        "C -> C>=3",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "B -> B>=1",
+            "A -> A>=1",
+            "C -> C>=3",
+        },
+    )
 
     setup_cfg = """
     [options]

@@ -32,13 +32,15 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_p
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "A -> A>=1",
-        "B==2 -> B==3",
-        "C -> C>=3",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "A -> A>=1",
+            "B==2 -> B==3",
+            "C -> C>=3",
+        },
+    )
 
     tox_ini = """
     [tox]

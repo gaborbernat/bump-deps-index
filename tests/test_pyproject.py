@@ -3,15 +3,13 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
-
-from bump_deps_index import Options, run
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from conftest import FakeIndex
-    from pytest_httpx import HTTPXMock
 
 
 def test_run_args(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
@@ -101,7 +99,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex
     ],
 )
 def test_run_pyproject_toml_respects_requires_python(
-    httpx_mock: HTTPXMock,
+    index: FakeIndex,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     requires_python: str | None,
@@ -117,8 +115,8 @@ def test_run_pyproject_toml_respects_requires_python(
     dependencies = ["A"]
     """
     dest.write_text(dedent(toml).lstrip())
-    httpx_mock.add_response(
-        url="https://I.com/a/",
+    index.responses["https://pypi.example/simple/a/"] = httpx.Response(
+        200,
         text="""
         <a data-requires-python="&gt;=3.10">A-2.tar.gz</a>
         <a data-requires-python="&gt;=3.10">A-1-py3-none-any.whl</a>
@@ -127,7 +125,7 @@ def test_run_pyproject_toml_respects_requires_python(
         """,
     )
 
-    assert run(Options(index_url="https://I.com", npm_registry="", pkgs=[], filenames=[dest], pre_release="no"))
+    assert index.run(dest)
 
     assert dest.read_text() == dedent(toml).lstrip().replace('dependencies = ["A"]', f'dependencies = ["{expected}"]')
 
@@ -149,12 +147,14 @@ def test_run_pyproject_toml_multiline(capsys: pytest.CaptureFixture[str], index:
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "requests>=2.28 -> requests>=2.30",
-        "httpx>=0.27 -> httpx>=0.28",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "requests>=2.28 -> requests>=2.30",
+            "httpx>=0.27 -> httpx>=0.28",
+        },
+    )
     assert dest.read_text() == dedent(toml).lstrip().replace("2.28", "2.30").replace("0.27", "0.28")
 
 

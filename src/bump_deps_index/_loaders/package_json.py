@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
+
+from typing_extensions import override
 
 from bump_deps_index._parsed import table
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
     from typing import TypeAlias
 
     from bump_deps_index._parsed import Parsed
-
-    from ._base import Entry
 
     _JsonNode: TypeAlias = dict[str, "_JsonNode"] | tuple[int, int] | None
 
@@ -23,19 +23,24 @@ if TYPE_CHECKING:
 _SECTIONS: Final[tuple[str, ...]] = ("dependencies", "devDependencies", "optionalDependencies")
 
 
-class PackageJson(Loader):
-    _filename: ClassVar[str] = "package.json"
+class PackageJson(SingleFileLoader):
+    filename: ClassVar[str] = "package.json"
 
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
+    @override
+    def load(self, filename: Path) -> Iterator[Entry]:
+        with filename.open(encoding="utf-8") as file_handler:
+            cfg: Parsed = json.load(file_handler)
+        for section in _SECTIONS:
+            yield from (
+                Entry(f"{name}@{wanted.strip()}", PkgType.JS)
+                for name, wanted in table(cfg, section).items()
+                # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
+                # empty range, which npm reads as `*`
+                if isinstance(wanted, str) and wanted.strip() and ":" not in wanted and "/" not in wanted
+            )
 
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    @staticmethod
-    def _update_text(text: str, changes: Mapping[str, str]) -> str:
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         tree, _ = _json_node(text, 0)
         edits: list[tuple[int, int, str]] = []
         for section in _SECTIONS:
@@ -49,22 +54,6 @@ class PackageJson(Loader):
         for start, end, encoded in sorted(edits, reverse=True):
             text = f"{text[:start]}{encoded}{text[end:]}"
         return text
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        with filename.open(encoding="utf-8") as file_handler:
-            cfg: Parsed = json.load(file_handler)
-        yield from self._generate(
-            [
-                f"{name}@{wanted.strip()}"
-                for section in _SECTIONS
-                for name, wanted in table(cfg, section).items()
-                # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
-                # empty range, which npm reads as `*`
-                if isinstance(wanted, str) and wanted.strip() and ":" not in wanted and "/" not in wanted
-            ],
-            pkg_type=PkgType.JS,
-            pre_release=False if pre_release is None else pre_release,
-        )
 
 
 def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:

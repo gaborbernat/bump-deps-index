@@ -21,8 +21,7 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", "A -> A>=1"})
 
     toml = """
     requires = ["A>=1"]
@@ -70,14 +69,16 @@ def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "A -> A>=1",
-        "B -> B>=2",
-        "C -> C>=3",
-        "D -> D>=4",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "A -> A>=1",
+            "B -> B>=2",
+            "C -> C>=3",
+            "D -> D>=4",
+        },
+    )
 
     toml = """
     requires = ["A>=1"]
@@ -128,10 +129,13 @@ def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], index: FakeI
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-    } | {f"{n} -> {n}>=1" for n in names}
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+        }
+        | {f"{n} -> {n}>=1" for n in names},
+    )
 
     toml = """
     requires = ["alpha>=1"]
@@ -169,8 +173,7 @@ def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_pa
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert not set(out.splitlines())
+    assert (err, out) == ("", "")
     assert dest.read_text() == dedent(toml).lstrip()
 
 
@@ -188,11 +191,13 @@ def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], index: FakeIndex
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "pytest>=7.0 -> pytest>=8.1",
-        "coverage>=6.0 -> coverage>=7.1",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "pytest>=7.0 -> pytest>=8.1",
+            "coverage>=6.0 -> coverage>=7.1",
+        },
+    )
 
     assert dest.read_text() == dedent(toml).lstrip().replace("7.0", "8.1").replace("6.0", "7.1")

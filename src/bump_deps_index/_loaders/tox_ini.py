@@ -1,41 +1,39 @@
 from __future__ import annotations
 
-from configparser import RawConfigParser
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
+from ._ini import ini_values, read_ini, update_ini
+from ._lines import strip_factor
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
-    from ._base import Entry
 
+class ToxIni(SingleFileLoader):
+    filename: ClassVar[str] = "tox.ini"
 
-class NoTransformConfigParser(RawConfigParser):
     @override
-    def optionxform(self, optionstr: str) -> str:
-        """Preserve dependency names because package indexes treat punctuation as significant."""
-        return optionstr
+    def load(self, filename: Path) -> Iterator[Entry]:
+        cfg = read_ini(filename)
+        for section in cfg.sections():
+            if section.startswith("testenv"):
+                values = [strip_factor(value) for value in ini_values(cfg[section].get("deps", ""))]
+            elif section == "tox":
+                values = ini_values(cfg[section].get("requires", ""))
+            else:
+                continue
+            # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311}:`
+            yield from (Entry(value, PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"})
 
-
-class ToxIni(Loader):
-    _filename: ClassVar[str] = "tox.ini"
-
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        return self._update_ini(
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+        return update_ini(
             text,
             changes,
             # configparser copies a `[DEFAULT]` key into each section that lacks the key
@@ -44,23 +42,6 @@ class ToxIni(Loader):
                 or ((section.startswith("testenv") or section == "DEFAULT") and key == "deps")
             ),
         )
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        cfg = NoTransformConfigParser()
-        cfg.read(filename, encoding="utf-8")
-        pre = False if pre_release is None else pre_release
-        for section in cfg.sections():
-            if section.startswith("testenv"):
-                deps = [self._strip_factor(value) for value in self._ini_values(cfg[section].get("deps", ""))]
-                yield from self._generate(_requirements(deps), pkg_type=PkgType.PYTHON, pre_release=pre)
-            elif section == "tox":
-                requires = _requirements(self._ini_values(cfg[section].get("requires", "")))
-                yield from self._generate(requires, pkg_type=PkgType.PYTHON, pre_release=pre)
-
-
-def _requirements(values: list[str]) -> list[str]:
-    # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311,py312}:`
-    return [value for value in values if value[:1] not in {"{", "-"}]
 
 
 __all__ = [

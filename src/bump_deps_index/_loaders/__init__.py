@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import cache
 
-from ._base import Loader
+from ._base import Entry, Loader
 from .package_json import PackageJson
 from .pre_commit_config import PreCommitConfig
 from .pyproject_toml import PyProjectToml
@@ -28,6 +28,7 @@ def get_loaders() -> list[Loader]:
 
 
 __all__ = [
+    "Entry",
     "Loader",
     "get_loaders",
 ]

@@ -1,44 +1,38 @@
 from __future__ import annotations
 
 import re
-from configparser import RawConfigParser
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
+from ._ini import ini_values, read_ini, update_ini
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
-    from ._base import Entry
 
+class SetupCfg(SingleFileLoader):
+    filename: ClassVar[str] = "setup.cfg"
 
-class NoTransformConfigParser(RawConfigParser):
     @override
-    def optionxform(self, optionstr: str) -> str:
-        """Preserve dependency names because package indexes treat punctuation as significant."""
-        return optionstr
+    def load(self, filename: Path) -> Iterator[Entry]:
+        cfg = read_ini(filename)
+        groups = [
+            *([cfg["options"].get("install_requires", "")] if cfg.has_section("options") else []),
+            *(cfg["options.extras_require"].values() if cfg.has_section("options.extras_require") else []),
+        ]
+        for group in groups:
+            yield from (Entry(value, PkgType.PYTHON) for value in ini_values(group))
 
-
-class SetupCfg(Loader):
-    _filename: ClassVar[str] = "setup.cfg"
-
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         # configparser copies the `[DEFAULT]` keys into `[options.extras_require]`, which reads each key as an extra
         extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
-        return self._update_ini(
+        return update_ini(
             text,
             changes,
             lambda section, key: (
@@ -47,17 +41,6 @@ class SetupCfg(Loader):
                 or (section == "DEFAULT" and extras)
             ),
         )
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        cfg = NoTransformConfigParser()
-        cfg.read(filename, encoding="utf-8")
-        pre = False if pre_release is None else pre_release
-        if cfg.has_section("options"):
-            requires = self._ini_values(cfg["options"].get("install_requires", ""))
-            yield from self._generate(requires, pkg_type=PkgType.PYTHON, pre_release=pre)
-        if cfg.has_section("options.extras_require"):
-            for group in cfg["options.extras_require"].values():
-                yield from self._generate(self._ini_values(group), pkg_type=PkgType.PYTHON, pre_release=pre)
 
 
 __all__ = [

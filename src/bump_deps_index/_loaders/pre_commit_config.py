@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import ssl
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 from urllib.parse import quote, urlsplit
 
 from httpx import Client, HTTPError
 from truststore import SSLContext
+from typing_extensions import override
 from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode, YAMLError
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
@@ -15,14 +15,13 @@ from yaml import safe_load as load_yaml
 from bump_deps_index._parsed import mappings, strings
 from bump_deps_index._spec import PkgType, package_type
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
     from bump_deps_index._parsed import Parsed
-
-    from ._base import Entry
 
 _MERGE: Final[str] = "tag:yaml.org,2002:merge"
 _LANGUAGE_TYPES: Final[dict[str, PkgType]] = {
@@ -32,49 +31,18 @@ _LANGUAGE_TYPES: Final[dict[str, PkgType]] = {
 }
 
 
-class PreCommitConfig(Loader):
-    _filename: ClassVar[str] = ".pre-commit-config.yaml"
+class PreCommitConfig(SingleFileLoader):
+    filename: ClassVar[str] = ".pre-commit-config.yaml"
+    default_pre_release: ClassVar[bool] = True
 
     def __init__(self) -> None:
         # the writer reuses the loader's verdict per hook, since the language may come from a remote manifest
         self._kept_by_file: dict[Path, list[bool]] = {}
-        self._kept: list[bool] = []
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
-        self._kept = self._kept_by_file[filename]
-        super().update_file(filename, changes)
-
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        edits: dict[int, tuple[int, str]] = {}
-        kept = iter(self._kept)
-        for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
-            if (dependencies := _value(hook, "additional_dependencies")) is None:
-                continue
-            if not next(kept) or not isinstance(dependencies, SequenceNode):
-                continue
-            for item in dependencies.value:
-                if (
-                    isinstance(item, ScalarNode)
-                    and (new := changes.get(item.value)) is not None
-                    and (encoded := _encode(new, item.style, flow=dependencies.flow_style is True)) is not None
-                ):
-                    edits[_scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
-        for start, (end, encoded) in sorted(edits.items(), reverse=True):
-            text = f"{text[:start]}{encoded}{text[end:]}"
-        return text
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
+    @override
+    def load(self, filename: Path) -> Iterator[Entry]:
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg: Parsed = load_yaml(file_handler)
-        pre = True if pre_release is None else pre_release
         kept = self._kept_by_file[filename] = []
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
@@ -94,8 +62,27 @@ class PreCommitConfig(Loader):
                 if skip:
                     continue
                 for pkg in strings(hook.get("additional_dependencies")):
-                    pkg_type = package_type(pkg) if language is None else _LANGUAGE_TYPES[language]
-                    yield from self._generate([pkg], pkg_type=pkg_type, pre_release=pre)
+                    yield Entry(pkg, package_type(pkg) if language is None else _LANGUAGE_TYPES[language])
+
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+        edits: dict[int, tuple[int, str]] = {}
+        kept = iter(self._kept_by_file[filename])
+        for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
+            if (dependencies := _value(hook, "additional_dependencies")) is None:
+                continue
+            if not next(kept) or not isinstance(dependencies, SequenceNode):
+                continue
+            for item in dependencies.value:
+                if (
+                    isinstance(item, ScalarNode)
+                    and (new := changes.get(item.value)) is not None
+                    and (encoded := _encode(new, item.style, flow=dependencies.flow_style is True)) is not None
+                ):
+                    edits[_scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
+        for start, (end, encoded) in sorted(edits.items(), reverse=True):
+            text = f"{text[:start]}{encoded}{text[end:]}"
+        return text
 
 
 def _hooks(repos: Node | None) -> Iterator[MappingNode]:

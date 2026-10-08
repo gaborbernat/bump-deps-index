@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from tomllib import TOMLDecodeError
-from tomllib import load as load_toml
-from typing import TYPE_CHECKING
+from tomllib import loads as load_toml
+from typing import TYPE_CHECKING, Final
+
+from typing_extensions import override
 
 from bump_deps_index._config import script_uv_indexes
 from bump_deps_index._parsed import strings
@@ -18,92 +19,72 @@ if TYPE_CHECKING:
 
     from bump_deps_index._parsed import Parsed
 
+_START: Final[str] = "# /// script"
+
 
 class ScriptMetadata(Loader):
     @property
+    @override
     def files(self) -> Iterator[Path]:
-        for path in Path.cwd().iterdir():
-            if path.is_file() and path.suffix == ".py":
-                try:
-                    if "# /// script" in path.read_text(encoding="utf-8"):
-                        yield path
-                except (OSError, UnicodeDecodeError):
-                    continue
+        yield from (path for path in Path.cwd().iterdir() if self.supports(path))
 
+    @override
     def supports(self, filename: Path) -> bool:
-        return filename.suffix == ".py" and self._has_script_metadata(filename)
+        try:
+            return filename.suffix == ".py" and _START in filename.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return False
 
-    @staticmethod
-    def _update_text(text: str, changes: Mapping[str, str]) -> str:
+    @override
+    def load(self, filename: Path) -> Iterator[Entry]:
+        metadata = _metadata(filename.read_text(encoding="utf-8"))
+        uv, index_url = script_uv_indexes(metadata)
+        requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
+        for dependency in strings(metadata.get("dependencies")):
+            yield Entry(dependency, PkgType.PYTHON, requires_python=requires_python, uv=uv, index_url=index_url)
+
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
-        start_idx = end_idx = None
-        for i, line in enumerate(lines):
-            if line.rstrip() == "# /// script":
-                start_idx = i
-            elif line.rstrip() == "# ///" and start_idx is not None:
-                end_idx = i + 1
-                break
-        if start_idx is None or end_idx is None:
+        if (span := _block(lines)) is None:
             return text
-        block = lines[start_idx + 1 : end_idx - 1]
+        block = lines[span[0] : span[1]]
         toml = replace_strings(
             "\n".join(line[2:] for line in block), changes, lambda path: path == ("dependencies", "[]")
         )
-        lines[start_idx + 1 : end_idx - 1] = [
+        lines[span[0] : span[1]] = [
             f"# {new}" if line.startswith("# ") else line for line, new in zip(block, toml.split("\n"), strict=True)
         ]
         return "\n".join(lines)
 
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        metadata = self._metadata(filename)
-        uv, index_url = script_uv_indexes(metadata)
-        requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
-        for dependency in strings(metadata.get("dependencies")):
-            yield Entry(
-                dependency,
-                PkgType.PYTHON,
-                False if pre_release is None else pre_release,
-                requires_python,
-                uv,
-                index_url,
-            )
 
-    def _metadata(self, filename: Path) -> dict[str, Parsed]:
-        if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:
+def _metadata(content: str) -> dict[str, Parsed]:
+    lines = content.split("\n")
+    if (span := _block(lines)) is None:
+        return {}
+    toml_lines: list[str] = []
+    for line in lines[span[0] : span[1]]:
+        if line.startswith("# "):
+            toml_lines.append(line[2:])
+        elif line.rstrip() == "#":
+            toml_lines.append("")
+        else:
             return {}
-        try:
-            return load_toml(io.BytesIO(toml_str.encode("utf-8")))
-        except TOMLDecodeError:
-            return {}
+    try:
+        return load_toml("\n".join(toml_lines))
+    except TOMLDecodeError:
+        return {}
 
-    @staticmethod
-    def _extract_toml_from_comments(content: str) -> str | None:
-        lines = content.split("\n")
-        start_idx = end_idx = None
-        for i, line in enumerate(lines):
-            if line.rstrip() == "# /// script":
-                start_idx = i + 1
-            elif line.rstrip() == "# ///" and start_idx is not None:
-                end_idx = i
-                break
-        if start_idx is None or end_idx is None:
-            return None
-        toml_lines: list[str] = []
-        for line in lines[start_idx:end_idx]:
-            if line.startswith("# "):
-                toml_lines.append(line[2:])
-            elif line.rstrip() == "#":
-                toml_lines.append("")
-            else:
-                return None
-        return "\n".join(toml_lines)
 
-    @staticmethod
-    def _has_script_metadata(file_path: Path) -> bool:
-        try:
-            return "# /// script" in file_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            return False
+def _block(lines: list[str]) -> tuple[int, int] | None:
+    # the lines between the `# /// script` and `# ///` markers
+    start = None
+    for at, line in enumerate(lines):
+        if line.rstrip() == _START:
+            start = at + 1
+        elif line.rstrip() == "# ///" and start is not None:
+            return start, at
+    return None
 
 
 __all__ = [

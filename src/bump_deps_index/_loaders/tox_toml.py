@@ -1,82 +1,61 @@
 from __future__ import annotations
 
-from pathlib import Path
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING, ClassVar, Final
 
+from typing_extensions import override
+
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
     from bump_deps_index._parsed import Parsed
-
-    from ._base import Entry
 
 
 _NESTED: Final[frozenset[str]] = frozenset({"env", "env_base"})
 
 
-class ToxToml(Loader):
-    _filename: ClassVar[str] = "tox.toml"
+class ToxToml(SingleFileLoader):
+    filename: ClassVar[str] = "tox.toml"
 
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    @staticmethod
-    def _update_text(text: str, changes: Mapping[str, str]) -> str:
-        return replace_strings(text, changes, _is_dependency)
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        pre = False if pre_release is None else pre_release
+    @override
+    def load(self, filename: Path) -> Iterator[Entry]:
         with filename.open("rb") as file_handler:
             cfg: dict[str, Parsed] = load_toml(file_handler)
-        yield from self._generate(self._specs(cfg.get("requires")), pkg_type=PkgType.PYTHON, pre_release=pre)
-        yield from self._extract_deps(cfg, pre_release=pre)
+        for value in (cfg.get("requires"), *(section.get("deps") for section in _sections(cfg))):
+            yield from (Entry(spec, PkgType.PYTHON) for spec in _requirements(value))
 
-    def _extract_deps(self, cfg: dict[str, Parsed], *, pre_release: bool) -> Iterator[Entry]:
-        for key, section in cfg.items():
-            if not isinstance(section, dict):
-                continue
-            yield from self._deps_from_section(section, pre_release=pre_release)
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+        return replace_strings(text, changes, _is_dependency)
+
+
+def _sections(cfg: dict[str, Parsed]) -> Iterator[dict[str, Parsed]]:
+    for key, section in cfg.items():
+        if isinstance(section, dict):
+            yield section
             if key in _NESTED:
-                for env_section in section.values():
-                    if isinstance(env_section, dict):
-                        yield from self._deps_from_section(env_section, pre_release=pre_release)
+                yield from (env for env in section.values() if isinstance(env, dict))
 
-    def _deps_from_section(self, section: dict[str, Parsed], *, pre_release: bool) -> Iterator[Entry]:
-        yield from self._generate(self._specs(section.get("deps")), pkg_type=PkgType.PYTHON, pre_release=pre_release)
 
-    @classmethod
-    def _specs(cls, value: Parsed) -> list[str]:
-        """Collect dependencies from nested tox substitution fallbacks."""
-        found: list[str] = []
-        cls._collect(value, found)
-        return found
-
-    @classmethod
-    def _collect(cls, value: Parsed, found: list[str]) -> None:
-        if isinstance(value, str):
-            if value and value[0] not in {"-", "{"}:
-                found.append(value)
-        elif isinstance(value, list):
+def _requirements(value: Parsed) -> Iterator[str]:
+    # follow lists and the branches of a tox substitution that can hold requirements
+    match value:
+        case str() if value and value[0] not in {"-", "{"}:
+            yield value
+        case list():
             for item in value:
-                cls._collect(item, found)
-        elif isinstance(value, dict):
-            replace = value.get("replace")
-            if replace == "if":
-                cls._collect(value.get("then"), found)
-                cls._collect(value.get("else"), found)
-            elif replace in {"posargs", "env", "glob"}:
-                cls._collect(value.get("default"), found)
+                yield from _requirements(item)
+        case dict() if value.get("replace") == "if":
+            yield from _requirements(value.get("then"))
+            yield from _requirements(value.get("else"))
+        case dict() if value.get("replace") in {"posargs", "env", "glob"}:
+            yield from _requirements(value.get("default"))
 
 
 def _is_dependency(path: tuple[str, ...]) -> bool:
@@ -90,7 +69,7 @@ def _is_dependency(path: tuple[str, ...]) -> bool:
 
 
 def _collected(path: list[str]) -> bool:
-    # follow the value the way `_collect` does: into lists, and into the branches of a substitution
+    # follow the value the way `_requirements` does
     while path:
         match path:
             case (

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 
 from bump_deps_index._config import npm_registry, python_index_url
 from bump_deps_index._loaders import get_loaders
-from bump_deps_index._spec import redact_url
+from bump_deps_index._redact import redact_url
 from bump_deps_index.version import version
 
 if TYPE_CHECKING:

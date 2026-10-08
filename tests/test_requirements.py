@@ -26,8 +26,10 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeInd
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == (
+        "",
+        {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
+    )
 
     req_txt = """
     A>=1
@@ -52,8 +54,7 @@ def test_run_requirements_txt_skip_options(
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", "A -> A>=1"})
 
     req_txt = """
     -e .[test]
@@ -129,8 +130,10 @@ def test_run_requirements_txt_in(
     main(["--index-url", index.index_url, "--pre-release", "no"])
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == (
+        "",
+        {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
+    )
 
     req_txt = """
     A>=1
