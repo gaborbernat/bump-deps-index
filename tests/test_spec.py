@@ -167,6 +167,8 @@ def test_update_python(
         pytest.param("a@latest", ["1.0.0"], False, "a@latest", id="dist-tag"),
         pytest.param("a@1.2", ["1.0.0", "2.0.0"], False, "a@2.0.0", id="partial-pin"),
         pytest.param("a@1 || 2", ["1.0.0", "3.0.0"], False, "a@1 || 2", id="union-range"),
+        pytest.param("a@2.0.0-beta.1", ["1.9.0", "2.0.0-beta.1"], False, "a@2.0.0-beta.1", id="pin-no-downgrade"),
+        pytest.param("a@3", ["2.0.0"], False, "a@3", id="partial-pin-no-downgrade"),
         pytest.param("a@1.x", ["1.0.0", "2.0.0"], False, "a@1.x", id="x-range"),
     ],
 )
@@ -255,6 +257,39 @@ def test_update_python_fetches_each_project_once_per_client(httpx_mock: HTTPXMoc
 
 
 def test_redact_text() -> None:
-    message = "for url 'https://user:s3cret@index.example/simple/a/' and http://token@npm.example/a"
+    message = "for url 'https://user:s3c'ret@index.example/simple/a/' and http://token@npm.example/a"
 
     assert redact_text(message) == "for url 'https://index.example/simple/a/' and http://npm.example/a"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"versions": None}, id="null-versions"),
+        pytest.param({"versions": ["1.0.0"]}, id="list-versions"),
+        pytest.param(["1.0.0"], id="list-payload"),
+    ],
+)
+def test_update_js_rejects_malformed_metadata(
+    httpx_mock: HTTPXMock, payload: dict[str, list[str] | None] | list[str]
+) -> None:
+    httpx_mock.add_response(url="https://N.com/a", json=payload)
+
+    with pytest.raises(TypeError, match="has no versions dict"):
+        _js("a")
+
+
+def test_update_js_skips_malformed_version_metadata(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(url="https://N.com/a", json={"versions": {"1.0.0": "x", "2.0.0": {"deprecated": "y"}}})
+
+    assert _js("a") == "a@1.0.0"
+
+
+def test_update_python_skips_malformed_json_files(httpx_mock: HTTPXMock) -> None:
+    httpx_mock.add_response(
+        url="https://I.com/a/",
+        headers={"Content-Type": "application/vnd.pypi.simple.v1+json"},
+        json={"files": [{"filename": 5}, "a-3.tar.gz", {"filename": "a-2.tar.gz", "requires-python": 3}]},
+    )
+
+    assert _python("a") == "a>=2"

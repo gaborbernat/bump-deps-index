@@ -656,6 +656,25 @@ def test_empty_file_stays_empty(
     assert (*capsys.readouterr(), dest.read_text()) == ("", "", "")
 
 
+@pytest.mark.parametrize(
+    "pyproject",
+    [
+        pytest.param('project = "x"', id="project-not-a-table"),
+        pytest.param("[project]\nname = 1", id="name-not-a-string"),
+        pytest.param('[project]\nname = "demo"\nrequires-python = 3', id="requires-python-not-a-string"),
+    ],
+)
+@pytest.mark.usefixtures("foo_index")
+def test_requirements_next_to_wrongly_typed_pyproject(tmp_path: Path, index: FakeIndex, pyproject: str) -> None:
+    (tmp_path / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("foo>=1\n", encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert requirements.read_text(encoding="utf-8") == "foo>=2\n"
+
+
 @pytest.fixture
 def foo_index(index: FakeIndex) -> None:
     index.pypi["foo"] = ["2"]

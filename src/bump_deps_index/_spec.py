@@ -7,7 +7,7 @@ from enum import Enum, auto
 from functools import cache
 from html.parser import HTMLParser
 from threading import Lock
-from typing import TYPE_CHECKING, Final, TypeAlias
+from typing import TYPE_CHECKING, Final, TypeAlias, TypeVar
 from urllib.parse import quote, urlsplit, urlunsplit
 from weakref import WeakKeyDictionary
 
@@ -23,9 +23,10 @@ from packaging.utils import (
 from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
-    from httpx import Client
+    from httpx import Client, Response
 
-_URL_CREDENTIALS: Final = re.compile(r"(?<=://)[^/\s@'\"]+@")
+# userinfo may hold quotes, so stop only at the characters that end it
+_URL_CREDENTIALS: Final = re.compile(r"(?<=://)[^/\s@]+@")
 _NAME_AND_EXTRAS: Final = re.compile(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?")
 _SIMPLE_JSON: Final = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
@@ -36,6 +37,7 @@ _SEMVER: Final = re.compile(
 )
 # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
 _NPM_PIN: Final = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
+_JsonField = TypeVar("_JsonField", list, dict)
 _SemverKey: TypeAlias = tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]
 _INDEX_CACHE: Final[WeakKeyDictionary[Client, dict[str, _IndexEntry]]] = WeakKeyDictionary()
 _INDEX_CACHE_LOCK: Final[Lock] = Lock()
@@ -136,10 +138,14 @@ def _fetch_index_files(client: Client, url: str) -> list[tuple[str, str | None]]
     response = client.get(url, headers={"Accept": _SIMPLE_ACCEPT}, follow_redirects=True)
     response.raise_for_status()
     if response.headers.get("content-type", "").startswith(_SIMPLE_JSON):
+        # skip malformed entries the way the HTML parser skips malformed links
         return [
-            (file["filename"], file.get("requires-python"))
-            for file in response.json()["files"]
-            if not file.get("yanked")
+            (
+                file["filename"],
+                requires_python if isinstance(requires_python := file.get("requires-python"), str) else None,
+            )
+            for file in _json_field(response, "files", list)
+            if isinstance(file, dict) and isinstance(file.get("filename"), str) and not file.get("yanked")
         ]
     parser = _IndexParser()
     parser.feed(response.text)
@@ -254,7 +260,9 @@ def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
     versions = _get_js_pkgs(client, package, config)
     if not wanted or _NPM_PIN.fullmatch(wanted):
-        return f"{package}@{versions[0][1]}"
+        # a pin moves to the newest release, unless that release sorts below the pin
+        pinned = _semver_key(_pad_version(wanted)) if wanted else None
+        return spec if pinned is not None and versions[0][0] < pinned else f"{package}@{versions[0][1]}"
     operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
     # keep ranges this tool cannot compare, such as `<2` or a dist-tag
     if operator not in {"^", "~", ">="} or (current := _semver_key(wanted[len(operator) :])) is None:
@@ -279,13 +287,26 @@ def _get_js_pkgs(client: Client, package: str, config: UpdateConfig) -> list[tup
     return sorted(
         (
             (key, version)
-            for version, meta in response.json()["versions"].items()
+            for version, meta in _json_field(response, "versions", dict).items()
             if (key := _semver_key(version)) is not None
             and (config.pre_release or key[3] == 1)
-            and not meta.get("deprecated")
+            and not (isinstance(meta, dict) and meta.get("deprecated"))
         ),
         reverse=True,
     )
+
+
+def _json_field(response: Response, name: str, kind: type[_JsonField]) -> _JsonField:
+    if not isinstance(payload := response.json(), dict) or not isinstance(value := payload.get(name), kind):
+        msg = f"{response.url} has no {name} {kind.__name__}"
+        raise TypeError(msg)
+    return value
+
+
+def _pad_version(version: str) -> str:
+    release, dash, pre = version.partition("-")
+    parts = release.split(".")
+    return f"{'.'.join([*parts, *['0'] * (3 - len(parts))])}{dash}{pre}"
 
 
 def _semver_key(version: str) -> _SemverKey | None:

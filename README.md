@@ -36,8 +36,8 @@ such file, such as `dev-requirements.txt`.
 Without `--index-url` you get the index from `PIP_INDEX_URL`, `UV_DEFAULT_INDEX` or `UV_INDEX_URL`, then the default
 index of the nearest `uv.toml` or `[tool.uv]` table, then `index-url` from your pip configuration, then your user
 `uv.toml`. For a named uv index you send the credentials from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`.
-For a package that `[tool.uv.sources]` pins to an index you get updates from that index, and for one from git, a path or
-a URL you keep the spec as you wrote it.
+For a package that `[tool.uv.sources]` of the project or its workspace root pins to an index you get updates from that
+index, and for one from git, a path or a URL you keep the spec as you wrote it.
 
 Without `--npm-registry` you get `NPM_CONFIG_REGISTRY`, then `registry` from the `.npmrc` in the working directory, then
 from your user `.npmrc`. From those files you also get the `@scope:registry` of a scoped package and the `_authToken` or

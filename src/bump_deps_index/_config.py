@@ -21,7 +21,8 @@ if TYPE_CHECKING:
     TomlTable: TypeAlias = dict[str, TomlValue]
 
 _ENV_REFERENCE: Final = re.compile(r"\$\{(?P<name>\w+)\}")
-_NPM_CREDENTIALS: Final = {":_authToken": "Bearer", ":_auth": "Basic"}
+# npm prefers a token over a basic credential for the same registry, so the token comes last to override it
+_NPM_CREDENTIALS: Final = {":_auth": "Basic", ":_authToken": "Bearer"}
 
 
 def python_index_url() -> str:
@@ -36,7 +37,7 @@ def python_index_url() -> str:
 
 
 def npm_registry() -> str:
-    return os.environ.get("NPM_CONFIG_REGISTRY") or _npmrc().get("registry") or "https://registry.npmjs.org"
+    return _npm_env("NPM_CONFIG_REGISTRY") or _npmrc().get("registry") or "https://registry.npmjs.org"
 
 
 def npm_settings() -> NpmSettings:
@@ -47,10 +48,10 @@ def npm_settings() -> NpmSettings:
             for key, value in values.items()
             if key.startswith("@") and key.endswith(":registry")
         },
-        authorization_by_prefix={
+        authorization_by_key={
             key.removesuffix(suffix): f"{scheme} {value}"
-            for key, value in values.items()
             for suffix, scheme in _NPM_CREDENTIALS.items()
+            for key, value in values.items()
             if key.startswith("//") and key.endswith(suffix)
         },
     )
@@ -59,33 +60,45 @@ def npm_settings() -> NpmSettings:
 @dataclass(frozen=True)
 class NpmSettings:
     registry_by_scope: Mapping[str, str]
-    authorization_by_prefix: Mapping[str, str]
+    authorization_by_key: Mapping[str, str]
 
     def registry(self, spec: str, default: str) -> str:
         return self.registry_by_scope.get(spec.partition("/")[0], default) if spec.startswith("@") else default
 
     def authorization(self, registry: str) -> str | None:
         parsed = urlsplit(registry)
-        # npm sends the credential with the longest `//host/path/` key that starts the registry URL
-        key = f"//{parsed.netloc.rpartition('@')[2]}{parsed.path.rstrip('/')}/"
-        prefix = max((prefix for prefix in self.authorization_by_prefix if key.startswith(prefix)), key=len, default="")
-        return self.authorization_by_prefix.get(prefix)
+        host, parts = parsed.netloc.rpartition("@")[2], [part for part in parsed.path.split("/") if part]
+        # npm walks up the registry path one segment at a time and sends the first credential it finds
+        for depth in range(len(parts), -1, -1):
+            key = "".join((f"//{host}", *(f"/{part}" for part in parts[:depth])))
+            if value := self.authorization_by_key.get(f"{key}/") or self.authorization_by_key.get(key):
+                return value
+        return None
 
 
 def uv_sources(folder: Path, pyproject: TomlTable) -> dict[str, str | None]:
-    uv = _table(pyproject, "tool", "uv")
+    # a workspace member inherits the sources and indexes of the workspace root, and overrides them
+    layers = [*_workspace_root(folder), (folder, _table(pyproject, "tool", "uv"))]
     named = {
         name: url
-        for index in (*_indexes(uv), *_indexes(_read_toml(folder / "uv.toml")))
+        for path, uv in layers
+        for index in (*_indexes(uv), *_indexes(_read_toml(path / "uv.toml")))
         if isinstance(name := index.get("name"), str) and (url := _index_url(index))
     }
     sources: dict[str, str | None] = {}
-    for package, source in _table(uv, "sources").items():
+    for package, source in (item for _, uv in layers for item in _table(uv, "sources").items()):
         # a list splits the source by environment markers, take its first entry
         entry = next(iter(source), None) if isinstance(source, list) else source
         index = entry.get("index") if isinstance(entry, dict) else None
         sources[canonicalize_name(package)] = named.get(index) if isinstance(index, str) else None
     return sources
+
+
+def _workspace_root(folder: Path) -> list[tuple[Path, TomlTable]]:
+    for parent in folder.parents:
+        if "workspace" in (uv := _table(_read_toml(parent / "pyproject.toml"), "tool", "uv")):
+            return [(parent, uv)]
+    return []
 
 
 def _uv_settings(folder: Path) -> TomlTable:
@@ -142,12 +155,15 @@ def _config_home() -> Path:
 
 
 def _pip_index() -> str | None:
+    # pip reads no config file at all when `PIP_CONFIG_FILE` points at the null device
+    if (config_file := os.environ.get("PIP_CONFIG_FILE", "")) == os.devnull:
+        return None
     home, config_home = Path.home(), _config_home()
     # pip lets later files override earlier ones, so check them from the last loaded to the first
     for file in filter(
         None,
         [
-            os.environ.get("PIP_CONFIG_FILE", ""),
+            config_file,
             config_home / "pip" / "pip.ini",
             home / "Library" / "Application Support" / "pip" / "pip.conf",
             config_home / "pip" / "pip.conf",
@@ -165,7 +181,7 @@ def _pip_index() -> str | None:
 
 
 def _npmrc() -> dict[str, str]:
-    user = Path(os.environ.get("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
+    user = Path(_npm_env("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
     # the project file overrides the user file
     return {**_read_npmrc(user), **_read_npmrc(Path.cwd() / ".npmrc")}
 
@@ -175,12 +191,27 @@ def _read_npmrc(path: Path) -> dict[str, str]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return {}
-    # npm keeps the last assignment of a key, and substitutes `${NAME}` from the environment
+    # npm keeps the last assignment of a key
     return {
-        key.strip(): _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], ""), value.strip().strip("\"'"))
+        key.strip(): _npmrc_value(value)
         for key, separator, value in (line.partition("=") for line in lines)
         if separator and not key.lstrip().startswith(("#", ";"))
     }
+
+
+def _npmrc_value(raw: str) -> str:
+    value = raw.strip()
+    # npm drops a `;` or `#` comment after an unquoted value, and substitutes `${NAME}` from the environment
+    if len(value) > 1 and value[0] in {"'", '"'} and value.endswith(value[0]):
+        value = value[1:-1]
+    else:
+        value = re.split(r"[;#]", value, maxsplit=1)[0].rstrip()
+    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], ""), value)
+
+
+def _npm_env(name: str) -> str | None:
+    # npm reads its settings from the environment in any letter case, such as `npm_config_registry`
+    return next((value for key, value in os.environ.items() if key.upper() == name and value), None)
 
 
 __all__ = [

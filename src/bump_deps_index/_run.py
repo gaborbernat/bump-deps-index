@@ -100,11 +100,12 @@ def _get_project(directory: Path) -> _Project:
     try:
         with pyproject.open("rb") as file_handler:
             cfg = load_toml(file_handler)
-        project = cfg.get("project", {})
-        name = project.get("name")
+        # treat a wrongly typed field as missing; the run still works for the files around it
+        project = project if isinstance(project := cfg.get("project"), dict) else {}
+        name, requires_python = project.get("name"), project.get("requires-python")
         return _Project(
-            canonicalize_name(name) if name is not None else None,
-            _python_floor(project.get("requires-python")),
+            canonicalize_name(name) if isinstance(name, str) else None,
+            _python_floor(requires_python if isinstance(requires_python, str) else None),
             uv_sources(pyproject.parent, cfg),
         )
     except (OSError, ValueError) as exc:
@@ -191,7 +192,7 @@ def _calculate_update(opt: Options, npm: NpmSettings, specs: Sequence[_Spec]) ->
             for future, spec in future_to_spec.items():
                 try:
                     result = future.result()
-                except (HTTPError, IndexError, KeyError, ValueError) as exc:
+                except (HTTPError, IndexError, KeyError, TypeError, ValueError) as exc:
                     successful = False
                     sys.stderr.write(f"failed {spec.requirement} with {redact_text(repr(exc))}\n")
                 else:

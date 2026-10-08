@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from textwrap import dedent
 from typing import TYPE_CHECKING, Final
 
@@ -131,6 +132,14 @@ _NPM: Final = "https://registry.npmjs.org"
         ),
         pytest.param(
             (
+                {"PIP_CONFIG_FILE": "{devnull}", "npm_config_registry": "https://lower.example"},
+                {"~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple"},
+            ),
+            (_PYPI, "https://lower.example"),
+            id="pip-config-disabled-and-lowercase-npm-variable",
+        ),
+        pytest.param(
+            (
                 {"NPM_CONFIG_USERCONFIG": "{tmp}/npmrc"},
                 {"npmrc": "registry=https://user.example", "~/.npmrc": "registry=https://home.example"},
             ),
@@ -162,7 +171,7 @@ def workspace(
 ) -> None:
     env, files = request.param
     for name, value in env.items():
-        monkeypatch.setenv(name, value.format(tmp=tmp_path))
+        monkeypatch.setenv(name, value.format(tmp=tmp_path, devnull=os.devnull))
     for name, content in files.items():
         path = isolated_index_settings / name[2:] if name.startswith("~/") else tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,26 +196,27 @@ def test_main_sends_npm_credentials_and_routes_scopes(
     (tmp_path / ".npmrc").write_text(
         "registry=https://npm.corp/api/\n"
         "@corp:registry=https://corp.example/npm/\n"
+        "@other:registry=https://corp.example/npmx/  ; mirror for the other team\n"
         "//npm.corp/:_authToken=wrong\n"
         "//npm.corp/api/:_authToken=${TOKEN}\n"
-        "//corp.example/:_auth=dXNlcjpwYXNz\n",
+        "//corp.example/npm/:_authToken=token\n"
+        "//corp.example/npm/:_auth=dXNlcjpwYXNz\n"
+        "//corp.example/np:_authToken=leak\n",
         encoding="utf-8",
     )
     versions = {"versions": {"1.0.0": {}}}
     httpx_mock.add_response(
         url="https://npm.corp/api/left-pad", match_headers={"Authorization": "Bearer secret"}, json=versions
     )
-    httpx_mock.add_response(
-        url="https://corp.example/npm/@corp%2Fx", match_headers={"Authorization": "Basic dXNlcjpwYXNz"}, json=versions
-    )
-    httpx_mock.add_response(url="https://npm.corp/api/@other%2Fy", json=versions)
+    httpx_mock.add_response(url="https://corp.example/npm/@corp%2Fx", json=versions)
+    httpx_mock.add_response(url="https://corp.example/npmx/@other%2Fy", json=versions)
 
     main(["left-pad@0", "@corp/x@0", "@other/y@0"])
 
     assert {str(request.url): request.headers.get("Authorization") for request in httpx_mock.get_requests()} == {
         "https://npm.corp/api/left-pad": "Bearer secret",
-        "https://corp.example/npm/@corp%2Fx": "Basic dXNlcjpwYXNz",
-        "https://npm.corp/api/@other%2Fy": "Bearer secret",
+        "https://corp.example/npm/@corp%2Fx": "Bearer token",
+        "https://corp.example/npmx/@other%2Fy": None,
     }
 
 
@@ -266,3 +276,51 @@ def test_main_looks_up_uv_sources_on_their_index(
             "https://user:p%40ss@corp.example/simple/public/": "Basic dXNlcjpwQHNz",
         },
     )
+
+
+@pytest.mark.usefixtures("isolated_index_settings")
+def test_main_reads_uv_sources_from_the_workspace_root(
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        dedent(
+            """
+            [tool.uv]
+            workspace.members = ["member"]
+            sources.internal = { index = "corp" }
+            sources.pinned = { index = "corp" }
+            [[tool.uv.index]]
+            name = "corp"
+            url = "https://corp.example/simple"
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    (member := tmp_path / "member").mkdir()
+    (member / "pyproject.toml").write_text(
+        dedent(
+            """
+            [project]
+            name = "member"
+            dependencies = ["internal", "pinned", "public"]
+            [tool.uv]
+            sources.pinned = { git = "https://github.com/a/pinned" }
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(member)
+    httpx_mock.add_response(url="https://corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/public/", text="<a>public-1.tar.gz</a>")
+
+    main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml"])
+
+    assert (member / "pyproject.toml").read_text(encoding="utf-8") == dedent(
+        """
+        [project]
+        name = "member"
+        dependencies = ["internal>=1", "pinned", "public>=1"]
+        [tool.uv]
+        sources.pinned = { git = "https://github.com/a/pinned" }
+        """
+    ).lstrip()
