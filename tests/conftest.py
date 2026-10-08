@@ -12,10 +12,32 @@ from packaging.utils import canonicalize_name
 from bump_deps_index import Options, run
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from pytest_httpx import HTTPXMock
+
+
+@pytest.fixture
+def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    home = tmp_path / "home"
+    for name in ("HOME", "USERPROFILE"):  # Windows reads the home folder from `USERPROFILE`
+        monkeypatch.setenv(name, str(home))
+    for name in (
+        "APPDATA",
+        "NPM_CONFIG_REGISTRY",
+        "NPM_CONFIG_USERCONFIG",
+        "PIP_CONFIG_FILE",
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+        "UV_EXTRA_INDEX_URL",
+        "UV_INDEX",
+        "UV_INDEX_URL",
+        "XDG_CONFIG_HOME",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return home
 
 
 @pytest.fixture
@@ -32,6 +54,8 @@ class FakeIndex:
     requires_python: dict[str, str] = field(default_factory=dict)
     index_url: str = "https://pypi.example/simple"
     npm_registry: str = "https://npm.example"
+    responses: dict[str, httpx.Response] = field(default_factory=dict)
+    hooks: list[Callable[[httpx.Request], None]] = field(default_factory=list)
 
     def run(
         self,
@@ -50,6 +74,10 @@ class FakeIndex:
         )
 
     def serve(self, request: httpx.Request) -> httpx.Response:
+        for hook in self.hooks:
+            hook(request)
+        if (response := self.responses.get(str(request.url))) is not None:
+            return response
         if request.url.host == "npm.example":
             if (versions := self.npm.get(unquote(request.url.path.removeprefix("/")))) is None:
                 return httpx.Response(404)

@@ -3,6 +3,8 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+import httpx
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -33,14 +35,16 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {
-        "Using Python index: https://pypi.example/simple",
-        "Using JavaScript index: https://npm.example",
-        "black==22.6.0 -> black==22.8",
-        "flake8-bugbear==22.7.1 -> flake8-bugbear==22.7.2",
-        "prettier@2.7.0 -> prettier@2.8.0",
-    }
+    assert (err, set(out.splitlines())) == (
+        "",
+        {
+            "Using Python index: https://pypi.example/simple",
+            "Using JavaScript index: https://npm.example",
+            "black==22.6.0 -> black==22.8",
+            "flake8-bugbear==22.7.1 -> flake8-bugbear==22.7.2",
+            "prettier@2.7.0 -> prettier@2.8.0",
+        },
+    )
 
     setup_cfg = """
     repos:
@@ -112,11 +116,9 @@ def test_run_pre_commit_keeps_filtered_inline_dependencies(
 
 
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
-    assert index.run()
+    assert not index.run()
 
-    out, err = capsys.readouterr()
-    assert err == "no supported dependency files found\n"
-    assert not out
+    assert capsys.readouterr() == ("", "no supported dependency files found\n")
 
 
 def test_run_pre_commit_node_hook_dependencies_are_javascript(index: FakeIndex, tmp_path: Path) -> None:
@@ -179,3 +181,73 @@ def test_run_pre_commit_follows_hook_language(index: FakeIndex, tmp_path: Path) 
     assert index.run(config)
 
     assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[black]", "[black>=24.1]")
+
+
+def test_run_pre_commit_reads_remote_hook_language(index: FakeIndex, tmp_path: Path) -> None:
+    index.pypi["black"] = ["24.1"]
+    index.npm["eslint"] = ["9.0.0"]
+    index.responses.update({
+        "https://raw.githubusercontent.com/a/hooks/v1.0/.pre-commit-hooks.yaml": httpx.Response(
+            200, text="- id: go\n  language: golang\n- id: lint\n  language: node\n- not a hook\n"
+        ),
+        "https://gitlab.com/b/hooks/-/raw/v2/.pre-commit-hooks.yaml": httpx.Response(404),
+        "https://raw.githubusercontent.com/c/hooks/v3/.pre-commit-hooks.yaml": httpx.Response(200, text="[invalid"),
+    })
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        dedent(
+            """
+            repos:
+              - repo: https://github.com/a/hooks.git
+                rev: v1.0
+                hooks:
+                  - id: go
+                    additional_dependencies: [black]
+                  - id: lint
+                    # additional_dependencies: [black]
+                    additional_dependencies: [eslint]
+              - repo: https://gitlab.com/b/hooks
+                rev: v2
+                hooks: [{id: missing-manifest, additional_dependencies: [black]}]
+              - repo: https://github.com/c/hooks
+                rev: v3
+                hooks: [{id: invalid-manifest, additional_dependencies: [black]}]
+              - repo: https://codeberg.org/d/hooks
+                rev: v4
+                hooks: [{id: other-host, additional_dependencies: [black], args: [black]}]
+              - repo: https://github.com/e/hooks
+                hooks: [{id: unpinned, additional_dependencies: [black]}]
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    assert index.run(config)
+
+    assert (
+        config.read_text(encoding="utf-8")
+        == dedent(
+            """
+        repos:
+          - repo: https://github.com/a/hooks.git
+            rev: v1.0
+            hooks:
+              - id: go
+                additional_dependencies: [black]
+              - id: lint
+                # additional_dependencies: [black]
+                additional_dependencies: [eslint@9.0.0]
+          - repo: https://gitlab.com/b/hooks
+            rev: v2
+            hooks: [{id: missing-manifest, additional_dependencies: [black>=24.1]}]
+          - repo: https://github.com/c/hooks
+            rev: v3
+            hooks: [{id: invalid-manifest, additional_dependencies: [black>=24.1]}]
+          - repo: https://codeberg.org/d/hooks
+            rev: v4
+            hooks: [{id: other-host, additional_dependencies: [black>=24.1], args: [black]}]
+          - repo: https://github.com/e/hooks
+            hooks: [{id: unpinned, additional_dependencies: [black>=24.1]}]
+        """
+        ).lstrip()
+    )

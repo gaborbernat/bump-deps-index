@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
 def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
@@ -25,8 +26,10 @@ def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeInd
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == (
+        "",
+        {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
+    )
 
     req_txt = """
     A>=1
@@ -51,8 +54,7 @@ def test_run_requirements_txt_skip_options(
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", "A -> A>=1"})
 
     req_txt = """
     -e .[test]
@@ -128,8 +130,10 @@ def test_run_requirements_txt_in(
     main(["--index-url", index.index_url, "--pre-release", "no"])
 
     out, err = capsys.readouterr()
-    assert not err
-    assert set(out.splitlines()) == {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"}
+    assert (err, set(out.splitlines())) == (
+        "",
+        {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
+    )
 
     req_txt = """
     A>=1
@@ -165,3 +169,52 @@ def test_run_requirements_txt_updates_continued_entries(
     assert index.run(requirements)
 
     assert requirements.read_text(encoding="utf-8") == expected
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("--index-url\thttps://ignored.example/simple\n-r base.txt\nfoo>=1\n", id="included-file"),
+        pytest.param("-i \\\n  'https://${HOST}/simple'\nfoo>=1\n", id="continued-and-quoted"),
+        pytest.param("-i 'unclosed\n--index-url=https://${HOST}/simple # mirror\nfoo>=1\n", id="equals-and-comment"),
+        pytest.param(
+            "-i https://private.\\\nexample/simple\n# try -i https://ignored.example/simple \\\n"
+            "  # -r other.txt\nfoo>=1\n",
+            id="joined-without-space-and-comment-lines",
+        ),
+    ],
+)
+def test_run_requirements_txt_looks_up_its_own_index(
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+) -> None:
+    monkeypatch.setenv("HOST", "private.example")
+    index.pypi["foo"] = ["2"]
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(content, encoding="utf-8")
+    base = "-ihttps://${HOST}/simple  # mirror\n-r requirements.txt\n-r missing.txt\n"
+    (tmp_path / "base.txt").write_text(base, encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert (requirements.read_text(encoding="utf-8"), [str(request.url) for request in httpx_mock.get_requests()]) == (
+        content.replace("foo>=1", "foo>=2"),
+        ["https://private.example/simple/foo/"],
+    )
+
+
+def test_run_requirements_txt_keeps_unset_and_empty_variables(
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("UNSET", raising=False)
+    monkeypatch.setenv("EMPTY", "")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(
+        "-i https://a.example/${UNSET}\n--extra-index-url=https://b.example/${EMPTY}\nfoo\n", "utf-8"
+    )
+
+    index.run(requirements)
+
+    assert sorted(str(request.url) for request in httpx_mock.get_requests()) == [
+        "https://a.example/$%7BUNSET%7D/foo/",
+        "https://b.example/$%7BEMPTY%7D/foo/",
+    ]

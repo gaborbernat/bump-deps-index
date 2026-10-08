@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import os
 from argparse import ArgumentParser, Namespace, RawDescriptionHelpFormatter
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from bump_deps_index._config import npm_registry, python_index_url
 from bump_deps_index._loaders import get_loaders
-from bump_deps_index._spec import redact_url
+from bump_deps_index._redact import redact_url
 from bump_deps_index.version import version
 
 if TYPE_CHECKING:
@@ -31,8 +31,9 @@ class Options(Namespace):
     - ``tox.toml``
     - ``tox.ini``
     - ``setup.cfg``
+    - ``package.json``
     - ``.pre-commit-config.yaml``
-    - ``requirements*.txt`` and ``requirements*.in``
+    - requirements and constraints files, ending in ``.txt`` or ``.in``
     - Python scripts with PEP 723 inline metadata
     """
     pre_release: Literal["yes", "no", "file-default"]
@@ -51,13 +52,12 @@ def parse_cli(args: Sequence[str] | None) -> Options:
 def _build_parser() -> ArgumentParser:
     epilog = f"running {version} at {Path(__file__).parent}"
     parser = ArgumentParser(prog="bump-deps-index", formatter_class=_HelpFormatter, epilog=epilog)
-    index_url = os.environ.get("PIP_INDEX_URL", "https://pypi.org/simple")
+    index_url = python_index_url()
     msg = f"PyPI index URL to target (default: {redact_url(index_url)})"
     parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
-    npm_registry = os.environ.get("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
-    msg = f"NPM registry (default: {redact_url(npm_registry)})"
-    parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=npm_registry, help=msg)
-    msg = "accept pre-release versions"
+    msg = f"NPM registry (default: {redact_url(registry := npm_registry())})"
+    parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=registry, help=msg)
+    msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")

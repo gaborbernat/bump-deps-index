@@ -1,80 +1,56 @@
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING, ClassVar
 
+from typing_extensions import override
+
+from bump_deps_index._parsed import strings, table
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
+from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
-    from ._base import Entry
+    from bump_deps_index._parsed import Parsed
 
 
-class PyProjectToml(Loader):
-    _filename: ClassVar[str] = "pyproject.toml"
+class PyProjectToml(SingleFileLoader):
+    filename: ClassVar[str] = "pyproject.toml"
 
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
-        in_deps_section = False
-        bracket_depth = 0
-        result_lines: list[str] = []
-        current_section = ""
-        section_pattern = re.compile(r"^\[(?P<section>[^]]+)]")
-        key_pattern = re.compile(r"^(?P<key>[^=]*)=\s*[\[{]")
-        for line in lines:
-            stripped = line.strip()
-            if section_match := section_pattern.match(stripped):
-                current_section = section_match["section"]
-            if match := key_pattern.match(stripped):
-                key = match["key"].strip().strip("\"'")
-                project_dependency = current_section == "project" and (
-                    key in {"dependencies", "optional-dependencies"} or key.startswith("optional-dependencies.")
-                )
-                if (
-                    (current_section == "build-system" and key == "requires")
-                    or project_dependency
-                    or current_section in {"project.optional-dependencies", "dependency-groups"}
-                ):
-                    in_deps_section = True
-                    bracket_depth = self._bracket_delta(stripped)
-            elif in_deps_section:
-                bracket_depth += self._bracket_delta(stripped)
-            result_lines.append(self._replace_quoted(line, changes) if in_deps_section else line)
-            if in_deps_section and bracket_depth == 0:
-                in_deps_section = False
-        return "\n".join(result_lines)
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
+    @override
+    def load(self, filename: Path) -> Iterator[Entry]:
         with filename.open("rb") as file_handler:
-            cfg = load_toml(file_handler)
-        pre = False if pre_release is None else pre_release
-        yield from self._generate(
-            cfg.get("build-system", {}).get("requires", []), pkg_type=PkgType.PYTHON, pre_release=pre
-        )
-        yield from self._generate(
-            cfg.get("project", {}).get("dependencies", []), pkg_type=PkgType.PYTHON, pre_release=pre
-        )
-        for entries in cfg.get("project", {}).get("optional-dependencies", {}).values():
-            yield from self._generate(entries, pkg_type=PkgType.PYTHON, pre_release=pre)
-        for values in cfg.get("dependency-groups", {}).values():
-            yield from self._generate(
-                [value for value in values if not isinstance(value, dict)],
-                pkg_type=PkgType.PYTHON,
-                pre_release=pre,
-            )
+            cfg: Parsed = load_toml(file_handler)
+        project = table(cfg, "project")
+        for value in (
+            table(cfg, "build-system").get("requires"),
+            project.get("dependencies"),
+            *table(project, "optional-dependencies").values(),
+            table(cfg, "tool", "uv").get("dev-dependencies"),
+            *table(cfg, "dependency-groups").values(),
+        ):
+            yield from (Entry(spec, PkgType.PYTHON) for spec in strings(value))
+
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+        return replace_strings(text, changes, _is_dependency)
+
+
+def _is_dependency(path: tuple[str, ...]) -> bool:
+    match path:
+        case (
+            ("build-system", "requires", "[]")
+            | ("project", "dependencies", "[]")
+            | ("project", "optional-dependencies", _, "[]")
+            | ("dependency-groups", _, "[]")
+            | ("tool", "uv", "dev-dependencies", "[]")
+        ):
+            return True
+    return False
 
 
 __all__ = [

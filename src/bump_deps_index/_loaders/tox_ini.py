@@ -1,79 +1,47 @@
 from __future__ import annotations
 
-from configparser import RawConfigParser
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, SingleFileLoader
+from ._ini import ini_values, read_ini, update_ini
+from ._lines import strip_factor
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from pathlib import Path
 
-    from ._base import Entry
 
+class ToxIni(SingleFileLoader):
+    filename: ClassVar[str] = "tox.ini"
 
-class NoTransformConfigParser(RawConfigParser):
     @override
-    def optionxform(self, optionstr: str) -> str:
-        """Preserve dependency names because package indexes treat punctuation as significant."""
-        return optionstr
-
-
-class ToxIni(Loader):
-    _filename: ClassVar[str] = "tox.ini"
-
-    @property
-    def files(self) -> Iterator[Path]:
-        if (path := Path.cwd() / self._filename).exists():
-            yield path
-
-    def supports(self, filename: Path) -> bool:
-        return filename.name == self._filename
-
-    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        lines = text.split("\n")
-        result: list[str] = []
-        section = ""
-        dependency_key = ""
-        for line in lines:
-            stripped = line.strip()
-            key_line = False
-            if stripped.startswith("["):
-                section = stripped.strip("[]")
-                dependency_key = ""
-            elif stripped and not line[:1].isspace() and "=" in line:
-                dependency_key = line.partition("=")[0].strip()
-                key_line = True
-            update = (section == "tox" and dependency_key == "requires") or (
-                section.startswith("testenv") and dependency_key == "deps"
-            )
-            if not update:
-                result.append(line)
-            elif key_line:
-                result.append(self._replace_key_line(line, changes))
-            else:
-                result.append(self._replace_requirement_line(line, changes))
-        return "\n".join(result)
-
-    def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
-        cfg = NoTransformConfigParser()
-        cfg.read(filename)
-        pre = False if pre_release is None else pre_release
+    def load(self, filename: Path) -> Iterator[Entry]:
+        cfg = read_ini(filename)
         for section in cfg.sections():
             if section.startswith("testenv"):
-                values = [i for i in cfg[section].get("deps", "").split("\n") if i.strip()[:1] not in {"{", "-"}]
-                yield from self._generate(
-                    [self._strip_factor(value) for value in values],
-                    pkg_type=PkgType.PYTHON,
-                    pre_release=pre,
-                )
+                values = [strip_factor(value) for value in ini_values(cfg[section].get("deps", ""))]
             elif section == "tox":
-                values = [i for i in cfg[section].get("requires", "").split("\n") if i.strip()[:1] not in {"{", "-"}]
-                yield from self._generate(values, pkg_type=PkgType.PYTHON, pre_release=pre)
+                values = ini_values(cfg[section].get("requires", ""))
+            else:
+                continue
+            # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311}:`
+            yield from (Entry(value, PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"})
+
+    @override
+    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+        return update_ini(
+            text,
+            changes,
+            # configparser copies a `[DEFAULT]` key into each section that lacks the key
+            lambda section, key: (
+                (section in {"tox", "DEFAULT"} and key == "requires")
+                or ((section.startswith("testenv") or section == "DEFAULT") and key == "deps")
+            ),
+        )
 
 
 __all__ = [
