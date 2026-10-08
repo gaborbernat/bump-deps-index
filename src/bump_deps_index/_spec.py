@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from httpx import Client, Response
 
 # userinfo may hold quotes, so stop only at the characters that end it
-_URL_CREDENTIALS: Final = re.compile(r"(?<=://)[^/\s@]+@")
+_URL_CREDENTIALS: Final[re.Pattern[str]] = re.compile(r"(?<=://)[^/\s@]+@")
 _NAME_AND_EXTRAS: Final = re.compile(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?")
 _SIMPLE_JSON: Final = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
@@ -36,7 +36,7 @@ _SEMVER: Final = re.compile(
     r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
-_NPM_PIN: Final = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
+_NPM_PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
 _JsonField = TypeVar("_JsonField", list, dict)
 _SemverKey: TypeAlias = tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]
 _INDEX_CACHE: Final[WeakKeyDictionary[Client, dict[str, _IndexEntry]]] = WeakKeyDictionary()
@@ -261,7 +261,6 @@ def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
     if not (versions := _get_js_pkgs(client, package, config)):
         return spec  # the registry has no release you accept, such as only pre-releases
     if not wanted or _NPM_PIN.fullmatch(wanted):
-        # a pin moves to the newest release, unless that release sorts below the pin
         pinned = _semver_key(_pad_version(wanted)) if wanted else None
         return spec if pinned is not None and versions[0][0] < pinned else f"{package}@{versions[0][1]}"
     operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
@@ -270,10 +269,7 @@ def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
         return spec
     # `^1.2.3` keeps the major inside its range, `^0.2.3` and `~1.2.3` keep the minor
     depth = {"~": 2, ">=": 0}.get(operator, next((at for at, part in enumerate(current[:2]) if part), 2) + 1)
-    newest = next(
-        (version for key, version in versions if key >= current and key[:depth] == current[:depth]),
-        None,
-    )
+    newest = next((version for key, version in versions if key >= current and key[:depth] == current[:depth]), None)
     return spec if newest is None else f"{package}@{operator}{newest}"
 
 

@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
     from pytest_httpx import HTTPXMock
 
-_PYPI: Final = "https://pypi.org/simple"
-_NPM: Final = "https://registry.npmjs.org"
+_PYPI: Final[str] = "https://pypi.org/simple"
+_NPM: Final[str] = "https://registry.npmjs.org"
 
 
 @pytest.mark.parametrize(
@@ -97,6 +97,11 @@ _NPM: Final = "https://registry.npmjs.org"
             ),
             ("https://legacy.example/simple", _NPM),
             id="pip-legacy-after-invalid-config",
+        ),
+        pytest.param(
+            ({}, {"~/.config/pip/pip.conf": "[global]\nindex_url = https://underscore.example/simple"}),
+            ("https://underscore.example/simple", _NPM),
+            id="pip-underscore-key",
         ),
         pytest.param(
             ({}, {"~/.config/uv/uv.toml": 'index-url = "https://uv-user.example/simple"'}),

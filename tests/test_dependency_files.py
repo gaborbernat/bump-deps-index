@@ -7,12 +7,12 @@ from threading import Event
 from typing import TYPE_CHECKING, Final
 
 import pytest
-from conftest import FakeIndex
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import httpx
+    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
 
@@ -818,6 +818,59 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             "[DEFAULT]\ninstall_requires = foo>=2\ntest = foo>=2\n[options]\n[options.extras_require]\n",
             id="setup-cfg-default-section",
         ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            base: &base {language: golang, additional_dependencies: [foo>=1]}
+            repos:
+              - repo: local
+                hooks:
+                  - <<: *base
+                    id: merged
+                  - id: a
+                    language: python
+                    additional_dependencies: [&pin foo>=1, !!str "foo>=1"]
+                  - id: b
+                    language: [python]
+                    additional_dependencies: [*pin]
+                  - id: c
+                    language: python
+                    additional_dependencies:
+                      - foo
+                        >=1
+            """,
+            """
+            base: &base {language: golang, additional_dependencies: [foo>=1]}
+            repos:
+              - repo: local
+                hooks:
+                  - <<: *base
+                    id: merged
+                  - id: a
+                    language: python
+                    additional_dependencies: [&pin foo>=2, !!str "foo>=2"]
+                  - id: b
+                    language: [python]
+                    additional_dependencies: [*pin]
+                  - id: c
+                    language: python
+                    additional_dependencies:
+                      - foo >=2
+            """,
+            id="pre-commit-anchors-tags-merge-keys-and-folded-scalars",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=1", """\\\n  foo>=1\\\n  """]\n',
+            '[project]\nname = "demo"\ndependencies = ["\\nfoo>=2", """foo>=2"""]\n',
+            id="pyproject-escapes-and-line-ending-backslash",
+        ),
+        pytest.param(
+            "tox.toml",
+            '[env.deps]\ndeps = ["foo>=1"]\n',
+            '[env.deps]\ndeps = ["foo>=2"]\n',
+            id="tox-toml-env-named-deps",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")
@@ -877,23 +930,22 @@ def test_package_shared_across_files_is_fetched_once(tmp_path: Path, httpx_mock:
     assert len(httpx_mock.get_requests()) == 1
 
 
-def test_output_follows_file_order(capsys: pytest.CaptureFixture[str], tmp_path: Path, httpx_mock: HTTPXMock) -> None:
-    fake = FakeIndex(pypi={"a": ["2"], "b": ["2"]})
+def test_output_follows_file_order(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
+    index.pypi.update(a=["2"], b=["2"])
     b_served = Event()
 
-    def serve(request: httpx.Request) -> httpx.Response:
+    def finish_b_first(request: httpx.Request) -> None:
         if request.url.path.endswith("/a/"):
             b_served.wait(timeout=5)  # answer `a` last to finish its lookup after `b`
             time.sleep(0.05)
-        response = fake.serve(request)
-        b_served.set()
-        return response
+        else:
+            b_served.set()
 
-    httpx_mock.add_callback(serve, is_reusable=True)
+    index.hooks.append(finish_b_first)
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("a\nb\n", encoding="utf-8")
 
-    assert fake.run(requirements)
+    assert index.run(requirements)
 
     assert capsys.readouterr().out.splitlines() == [
         "Using Python index: https://pypi.example/simple",
@@ -944,7 +996,7 @@ def test_output_redacts_direct_reference_credentials(
     )
 
 
-_NESTED_DEPENDENCIES: Final = ", ".join(['{"dependencies": {"foo": "^1.0.0"}}'] * 8000)
+_NESTED_DEPENDENCIES: Final[str] = ", ".join(['{"dependencies": {"foo": "^1.0.0"}}'] * 8000)
 
 
 @pytest.mark.parametrize(

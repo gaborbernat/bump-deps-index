@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 import re
 from itertools import accumulate
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
+from bump_deps_index._parsed import expand_env
 from bump_deps_index._spec import PkgType
 
 from ._base import Entry, Loader
@@ -13,7 +13,9 @@ from ._base import Entry, Loader
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-_ENV_REFERENCE: Final = re.compile(r"\$\{(?P<name>\w+)\}")
+_OPTION: Final[re.Pattern[str]] = re.compile(
+    r"(?P<name>--index-url|--requirement|--constraint|-i|-r|-c)(?:\s*=\s*|\s+|(?<=-[irc])(?=\S))(?P<value>\S+)"
+)
 
 
 class Requirements(Loader):
@@ -67,9 +69,28 @@ class Requirements(Loader):
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         lines = filename.read_text(encoding="utf-8").split("\n")
         requirements = [" ".join(segment for _, segment in entry) for entry in self._entries(lines)]
-        index_url = _index_url(lines)
+        index_url = self._index_url(filename, set())
         for requirement in requirements:
             yield Entry(requirement, PkgType.PYTHON, False if pre_release is None else pre_release, index_url=index_url)
+
+    @classmethod
+    def _index_url(cls, filename: Path, seen: set[Path]) -> str | None:
+        # pip applies the last `--index-url` it reads, including those in files that `-r` or `-c` pulls in
+        seen.add(filename.resolve())
+        try:
+            lines = filename.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            return None
+        found = None
+        for line in lines:
+            if not (option := _OPTION.match(cls._split_comment(line.strip())[0])):
+                continue
+            if option["name"] in {"-r", "--requirement", "-c", "--constraint"}:
+                if (included := filename.parent / expand_env(option["value"])).resolve() not in seen:
+                    found = cls._index_url(included, seen) or found
+            else:
+                found = expand_env(option["value"])
+        return found
 
     @classmethod
     def _entries(cls, lines: list[str]) -> Iterator[list[tuple[int, str]]]:
@@ -86,16 +107,6 @@ class Requirements(Loader):
             if logical and not logical.startswith("-") and "--hash" not in logical:
                 yield entry
             entry = []
-
-
-def _index_url(lines: list[str]) -> str | None:
-    # pip takes the last `--index-url` or `-i` of the file, and substitutes `${NAME}` from the environment
-    urls = [
-        option.partition("=")[2] or value
-        for option, _, value in (line.strip().partition(" ") for line in lines)
-        if option in {"-i", "--index-url"} or option.startswith("--index-url=")
-    ]
-    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], ""), urls[-1].strip()) if urls else None
 
 
 def _common_prefix(left: str, right: str) -> int:

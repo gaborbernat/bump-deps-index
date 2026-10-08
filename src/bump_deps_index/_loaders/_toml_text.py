@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import json
 from tomllib import loads as load_toml
 from typing import TYPE_CHECKING, Final, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
-_SCALAR_END: Final = frozenset(",]}\n#")
+_SCALAR_END: Final[frozenset[str]] = frozenset(",]}\n#")
 # the key path marks an array item with `[]`, and an inline table with a string `replace` key as `{<kind>}`
-_ARRAY: Final = "[]"
+_ARRAY: Final[str] = "[]"
 
 
 def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tuple[str, ...]], bool]) -> str:
@@ -22,18 +23,13 @@ def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tup
         lead = "\n" if len(string.quote) > 1 and text.startswith("\n", string.start) else ""
         pad, trail = value[: len(value) - len(value.lstrip())], value[len(value.rstrip()) :]
         encoded = f"{pad}{new}{trail}"
-        if string.quote[0] == '"':
+        if string.quote == '"':  # a single-line basic string needs escapes for quotes, backslashes and newlines
+            encoded = json.dumps(encoded, ensure_ascii=False)[1:-1]
+        elif string.quote == '"""':
             encoded = encoded.replace("\\", "\\\\").replace('"', '\\"')
         pieces += [text[last : string.start], lead, encoded]
         last = string.end
     return "".join([*pieces, text[last:]])
-
-
-class _String(NamedTuple):
-    start: int
-    end: int
-    path: tuple[str, ...]
-    quote: str
 
 
 class _TomlScanner:
@@ -133,6 +129,13 @@ def _decode(text: str, string: _String) -> str:
     # a basic string escapes `"` and `\`, a literal string holds its text as written
     raw = text[string.start : string.end]
     return raw if string.quote == "'" else load_toml(f"v = {string.quote}{raw}{string.quote}")["v"]
+
+
+class _String(NamedTuple):
+    start: int
+    end: int
+    path: tuple[str, ...]
+    quote: str
 
 
 __all__ = [

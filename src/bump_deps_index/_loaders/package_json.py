@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
+from bump_deps_index._parsed import table
 from bump_deps_index._spec import PkgType
 
 from ._base import Loader
@@ -12,12 +13,14 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
     from typing import TypeAlias
 
-    from ._base import Entry, Parsed
+    from bump_deps_index._parsed import Parsed
+
+    from ._base import Entry
 
     _JsonNode: TypeAlias = dict[str, "_JsonNode"] | tuple[int, int] | None
 
 # skip `peerDependencies`, a raised lower bound there narrows what you declare compatible
-_SECTIONS: Final = ("dependencies", "devDependencies", "optionalDependencies")
+_SECTIONS: Final[tuple[str, ...]] = ("dependencies", "devDependencies", "optionalDependencies")
 
 
 class PackageJson(Loader):
@@ -54,7 +57,7 @@ class PackageJson(Loader):
             [
                 f"{name}@{wanted}"
                 for section in _SECTIONS
-                for name, wanted in self._table(cfg, section).items()
+                for name, wanted in table(cfg, section).items()
                 # skip aliases, paths, URLs and workspace links; the registry has no version for them
                 if isinstance(wanted, str) and ":" not in wanted and "/" not in wanted
             ],
@@ -64,7 +67,7 @@ class PackageJson(Loader):
 
 
 def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
-    # parse the JSON the loader read and keep the span of each string; a later duplicate key wins, as in `json`
+    # a later duplicate key wins, as it does for `json`
     at = _skip_blank(text, at)
     if text[at] == '"':
         end = _string_end(text, at)
@@ -88,17 +91,17 @@ def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
     return (members if closing == "}" else None), at + 1
 
 
+def _skip_blank(text: str, at: int) -> int:
+    while at < len(text) and text[at] in " \t\r\n":
+        at += 1
+    return at
+
+
 def _string_end(text: str, at: int) -> int:
     end = at + 1
     while text[end] != '"':
         end += 2 if text[end] == "\\" else 1
     return end + 1
-
-
-def _skip_blank(text: str, at: int) -> int:
-    while at < len(text) and text[at] in " \t\r\n":
-        at += 1
-    return at
 
 
 __all__ = [

@@ -42,7 +42,7 @@ index you send the credentials from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NA
 uv reads `[tool.uv.sources]` for the `pyproject.toml` of a project, with the sources of its workspace root, and for a
 PEP 723 script from the script's own `[tool.uv]` table. For a package such a table pins to an index you get updates from
 that index, and for one from git, a path or a URL you keep the spec as you wrote it. pip installs the packages of the
-other files, so you get the default index there.
+other Python files, so you get the default index there.
 
 Without `--npm-registry` you get `NPM_CONFIG_REGISTRY`, then `registry` from the `.npmrc` in the working directory, then
 from your user `.npmrc`. From those files you also get the `@scope:registry` of a scoped package and the `_authToken` or

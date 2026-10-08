@@ -174,8 +174,10 @@ def test_run_requirements_txt_looks_up_its_own_index(
     monkeypatch.setenv("HOST", "private.example")
     index.pypi["foo"] = ["2"]
     requirements = tmp_path / "requirements.txt"
-    content = "-i https://ignored.example/simple\n--index-url=https://${HOST}/simple\nfoo>=1\n"
+    content = "--index-url\thttps://ignored.example/simple\n-r base.txt\nfoo>=1\n"
     requirements.write_text(content, encoding="utf-8")
+    base = "-ihttps://${HOST}/simple  # mirror\n-r requirements.txt\n-r missing.txt\n"
+    (tmp_path / "base.txt").write_text(base, encoding="utf-8")
 
     assert index.run(requirements)
 

@@ -11,13 +11,13 @@ from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
-    from typing import TypeAlias
+
+    from bump_deps_index._parsed import Parsed
 
     from ._base import Entry
 
-    TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
-_NESTED: Final = frozenset({"env", "env_base"})
+_NESTED: Final[frozenset[str]] = frozenset({"env", "env_base"})
 
 
 class ToxToml(Loader):
@@ -38,11 +38,11 @@ class ToxToml(Loader):
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         pre = False if pre_release is None else pre_release
         with filename.open("rb") as file_handler:
-            cfg: dict[str, TomlValue] = load_toml(file_handler)
+            cfg: dict[str, Parsed] = load_toml(file_handler)
         yield from self._generate(self._specs(cfg.get("requires")), pkg_type=PkgType.PYTHON, pre_release=pre)
         yield from self._extract_deps(cfg, pre_release=pre)
 
-    def _extract_deps(self, cfg: dict[str, TomlValue], *, pre_release: bool) -> Iterator[Entry]:
+    def _extract_deps(self, cfg: dict[str, Parsed], *, pre_release: bool) -> Iterator[Entry]:
         for key, section in cfg.items():
             if not isinstance(section, dict):
                 continue
@@ -52,18 +52,18 @@ class ToxToml(Loader):
                     if isinstance(env_section, dict):
                         yield from self._deps_from_section(env_section, pre_release=pre_release)
 
-    def _deps_from_section(self, section: dict[str, TomlValue], *, pre_release: bool) -> Iterator[Entry]:
+    def _deps_from_section(self, section: dict[str, Parsed], *, pre_release: bool) -> Iterator[Entry]:
         yield from self._generate(self._specs(section.get("deps")), pkg_type=PkgType.PYTHON, pre_release=pre_release)
 
     @classmethod
-    def _specs(cls, value: TomlValue) -> list[str]:
+    def _specs(cls, value: Parsed) -> list[str]:
         """Collect dependencies from nested tox substitution fallbacks."""
         found: list[str] = []
         cls._collect(value, found)
         return found
 
     @classmethod
-    def _collect(cls, value: TomlValue, found: list[str]) -> None:
+    def _collect(cls, value: Parsed, found: list[str]) -> None:
         if isinstance(value, str):
             if value and value[0] not in {"-", "{"}:
                 found.append(value)
@@ -80,11 +80,12 @@ class ToxToml(Loader):
 
 
 def _is_dependency(path: tuple[str, ...]) -> bool:
+    # try each shape in turn: an environment named `deps` has the path `env.deps.deps`
     match path:
-        case ("requires", *value) | (_, "deps", *value):
-            return _collected(value)
-        case (nested, _, "deps", *value) if nested in _NESTED:
-            return _collected(value)
+        case ("requires", *rest) | (_, "deps", *rest) if _collected(rest):
+            return True
+        case (nested, _, "deps", *rest) if nested in _NESTED and _collected(rest):
+            return True
     return False
 
 

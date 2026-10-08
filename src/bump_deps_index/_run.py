@@ -83,89 +83,9 @@ def run(opt: Options) -> bool:
     return successful and resolved
 
 
-class _Spec(NamedTuple):
-    requirement: str
-    pkg_type: PkgType
-    pre_release: bool
-    python_floor: Version | None
-    index_url: str
-
-
-class _Project(NamedTuple):
-    pyproject: Path | None
-    name: str | None
-    python_floor: Version | None
-    sources: dict[str, str | None]
-
-
 def _python_index(package: str, sources: Mapping[str, str | None], default: str) -> str:
     # `package_type` parsed the requirement before it chose Python
     return sources.get(canonicalize_name(Requirement(package).name)) or default
-
-
-def _get_project(directory: Path) -> _Project:
-    pyproject = next(
-        (path for folder in (directory, *directory.parents) if (path := folder / "pyproject.toml").is_file()), None
-    )
-    if pyproject is None:
-        return _Project(None, None, None, {})
-    try:
-        with pyproject.open("rb") as file_handler:
-            cfg = load_toml(file_handler)
-        # treat a wrongly typed field as missing; the run still works for the files around it
-        project = project if isinstance(project := cfg.get("project"), dict) else {}
-        name, requires_python = project.get("name"), project.get("requires-python")
-        return _Project(
-            pyproject,
-            canonicalize_name(name) if isinstance(name, str) else None,
-            _python_floor(requires_python if isinstance(requires_python, str) else None),
-            uv_sources(pyproject.parent, cfg),
-        )
-    except (OSError, ValueError) as exc:
-        sys.stderr.write(f"ignoring project metadata from {pyproject} due to {exc!r}\n")
-        return _Project(pyproject, None, None, {})
-
-
-def _python_floor(requires_python: str | None) -> Version | None:
-    bounds = [
-        _lower_bound(specifier.operator, specifier.version)
-        for specifier in SpecifierSet(requires_python or "")
-        if specifier.operator in {"==", ">", ">=", "~="}
-    ]
-    if not bounds:
-        return None
-    floor = max(bounds)
-    specifiers = SpecifierSet(requires_python or "")
-    for excluded in specifiers:
-        if (
-            excluded.operator == "!="
-            and excluded.version.endswith(".*")
-            and floor in SpecifierSet(f"=={excluded.version}")
-        ):
-            prefix = Version(excluded.version.removesuffix(".*")).release
-            floor = Version(".".join(str(part) for part in (*prefix[:-1], prefix[-1] + 1)))
-    excluded_versions = {
-        Version(specifier.version)
-        for specifier in specifiers
-        if specifier.operator == "!=" and not specifier.version.endswith(".*")
-    }
-    while floor in excluded_versions:
-        floor = _next_release(floor)
-    return floor if specifiers.contains(floor, prereleases=True) else None
-
-
-def _lower_bound(operator: str, raw_version: str) -> Version:
-    version = Version(raw_version.removesuffix(".*"))
-    if operator != ">":
-        return version
-    if version.is_prerelease or version.is_devrelease:
-        return Version(".".join(str(part) for part in version.release))
-    return _next_release(version)
-
-
-def _next_release(version: Version) -> Version:
-    release = (*version.release, *(0 for _ in range(3 - len(version.release))))
-    return Version(".".join(str(part) for part in (*release[:-1], release[-1] + 1)))
 
 
 def _calculate_update(opt: Options, npm: NpmSettings, specs: Sequence[_Spec]) -> tuple[dict[_Spec, str], bool]:
@@ -227,7 +147,7 @@ def _load_specs(
         sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
         return None
     project = _get_project(filename.resolve().parent)
-    # uv reads `[tool.uv.sources]` for the project's own pyproject.toml; pip and tox never do
+    # uv reads `[tool.uv.sources]` for the project's own pyproject.toml; pip and tox ignore it
     own_sources = project.sources if filename.resolve() == project.pyproject else {}
     specs: dict[_Spec, None] = {}
     for entry in entries:
@@ -250,6 +170,86 @@ def _load_specs(
         floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
         specs[_Spec(name, entry.pkg_type, entry.pre_release, floor, index)] = None
     return list(specs)
+
+
+def _get_project(directory: Path) -> _Project:
+    pyproject = next(
+        (path for folder in (directory, *directory.parents) if (path := folder / "pyproject.toml").is_file()), None
+    )
+    if pyproject is None:
+        return _Project(None, None, None, {})
+    try:
+        with pyproject.open("rb") as file_handler:
+            cfg = load_toml(file_handler)
+        # treat a mistyped field as missing; the run still works for the files around it
+        project = project if isinstance(project := cfg.get("project"), dict) else {}
+        name, requires_python = project.get("name"), project.get("requires-python")
+        return _Project(
+            pyproject,
+            canonicalize_name(name) if isinstance(name, str) else None,
+            _python_floor(requires_python if isinstance(requires_python, str) else None),
+            uv_sources(pyproject.parent, cfg),
+        )
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"ignoring project metadata from {pyproject} due to {exc!r}\n")
+        return _Project(pyproject, None, None, {})
+
+
+class _Project(NamedTuple):
+    pyproject: Path | None
+    name: str | None
+    python_floor: Version | None
+    sources: dict[str, str | None]
+
+
+def _python_floor(requires_python: str | None) -> Version | None:
+    bounds = [
+        _lower_bound(specifier.operator, specifier.version)
+        for specifier in SpecifierSet(requires_python or "")
+        if specifier.operator in {"==", ">", ">=", "~="}
+    ]
+    if not bounds:
+        return None
+    floor = max(bounds)
+    specifiers = SpecifierSet(requires_python or "")
+    for excluded in specifiers:
+        if (
+            excluded.operator == "!="
+            and excluded.version.endswith(".*")
+            and floor in SpecifierSet(f"=={excluded.version}")
+        ):
+            prefix = Version(excluded.version.removesuffix(".*")).release
+            floor = Version(".".join(str(part) for part in (*prefix[:-1], prefix[-1] + 1)))
+    excluded_versions = {
+        Version(specifier.version)
+        for specifier in specifiers
+        if specifier.operator == "!=" and not specifier.version.endswith(".*")
+    }
+    while floor in excluded_versions:
+        floor = _next_release(floor)
+    return floor if specifiers.contains(floor, prereleases=True) else None
+
+
+def _lower_bound(operator: str, raw_version: str) -> Version:
+    version = Version(raw_version.removesuffix(".*"))
+    if operator != ">":
+        return version
+    if version.is_prerelease or version.is_devrelease:
+        return Version(".".join(str(part) for part in version.release))
+    return _next_release(version)
+
+
+def _next_release(version: Version) -> Version:
+    release = (*version.release, *(0 for _ in range(3 - len(version.release))))
+    return Version(".".join(str(part) for part in (*release[:-1], release[-1] + 1)))
+
+
+class _Spec(NamedTuple):
+    requirement: str
+    pkg_type: PkgType
+    pre_release: bool
+    python_floor: Version | None
+    index_url: str
 
 
 __all__ = [

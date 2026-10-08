@@ -7,6 +7,7 @@ from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
 from bump_deps_index._config import script_uv_settings
+from bump_deps_index._parsed import strings
 from bump_deps_index._spec import PkgType
 
 from ._base import Entry, Loader
@@ -15,7 +16,7 @@ from ._toml_text import replace_strings
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-    from ._base import Parsed
+    from bump_deps_index._parsed import Parsed
 
 
 class ScriptMetadata(Loader):
@@ -44,7 +45,6 @@ class ScriptMetadata(Loader):
                 break
         if start_idx is None or end_idx is None:
             return text
-        # edit the TOML inside the comment block, then put each line back behind its `# `
         block = lines[start_idx + 1 : end_idx - 1]
         toml = replace_strings(
             "\n".join(line[2:] for line in block), changes, lambda path: path == ("dependencies", "[]")
@@ -58,7 +58,7 @@ class ScriptMetadata(Loader):
         metadata = self._metadata(filename)
         sources, index_url = script_uv_settings(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
-        for dependency in self._strings(metadata.get("dependencies")):
+        for dependency in strings(metadata.get("dependencies")):
             yield Entry(
                 dependency,
                 PkgType.PYTHON,
