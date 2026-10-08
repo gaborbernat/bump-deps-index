@@ -67,10 +67,21 @@ _NPM: Final = "https://registry.npmjs.org"
         ),
         pytest.param(
             (
+                {},
+                {
+                    "~/.pip/pip.conf": "[install]\nindex-url = https://install.example/simple",
+                    "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
+                },
+            ),
+            ("https://install.example/simple", _NPM),
+            id="pip-install-section-across-files",
+        ),
+        pytest.param(
+            (
                 {"PIP_CONFIG_FILE": "{tmp}/custom.conf"},
                 {
                     "custom.conf": "[global]\nindex-url = https://custom.example/simple",
-                    "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
+                    "~/.config/pip/pip.conf": "[install]\nindex-url = https://pip.example/simple",
                 },
             ),
             ("https://custom.example/simple", _NPM),
@@ -324,3 +335,52 @@ def test_main_reads_uv_sources_from_the_workspace_root(
         sources.pinned = { git = "https://github.com/a/pinned" }
         """
     ).lstrip()
+
+
+@pytest.mark.usefixtures("isolated_index_settings")
+def test_main_applies_uv_sources_where_uv_reads_them(
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        dedent(
+            """
+            [project]
+            name = "myproj"
+            [tool.uv]
+            sources.torch = { index = "corp" }
+            [[tool.uv.index]]
+            name = "corp"
+            url = "https://corp.example/simple"
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements.txt").write_text("torch>=1\n", encoding="utf-8")
+    (tmp_path / "script.py").write_text(
+        dedent(
+            """
+            # /// script
+            # dependencies = ["torch>=1", "foo>=1", "myproj>=1"]
+            # [tool.uv]
+            # sources.foo = { git = "https://github.com/a/foo" }
+            # index-url = "https://script.example/simple"
+            # ///
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    httpx_mock.add_callback(
+        lambda request: httpx.Response(200, text=f"<a>{request.url.path.split('/')[-2]}-2.tar.gz</a>"),
+        is_reusable=True,
+    )
+
+    main(["-i", "https://pypi.example/simple", "-f", "requirements.txt", "script.py"])
+    main(["-i", "https://pypi.example/simple", "torch"])
+
+    assert sorted(str(request.url) for request in httpx_mock.get_requests()) == [
+        "https://corp.example/simple/torch/",
+        "https://pypi.example/simple/torch/",
+        "https://script.example/simple/myproj/",
+        "https://script.example/simple/torch/",
+    ]

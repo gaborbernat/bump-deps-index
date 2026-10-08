@@ -258,7 +258,8 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
 def _update_js(client: Client, spec: str, config: UpdateConfig) -> str:
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    versions = _get_js_pkgs(client, package, config)
+    if not (versions := _get_js_pkgs(client, package, config)):
+        return spec  # the registry has no release you accept, such as only pre-releases
     if not wanted or _NPM_PIN.fullmatch(wanted):
         # a pin moves to the newest release, unless that release sorts below the pin
         pinned = _semver_key(_pad_version(wanted)) if wanted else None

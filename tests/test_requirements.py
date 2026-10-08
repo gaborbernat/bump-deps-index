@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
 def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
@@ -165,3 +166,20 @@ def test_run_requirements_txt_updates_continued_entries(
     assert index.run(requirements)
 
     assert requirements.read_text(encoding="utf-8") == expected
+
+
+def test_run_requirements_txt_looks_up_its_own_index(
+    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOST", "private.example")
+    index.pypi["foo"] = ["2"]
+    requirements = tmp_path / "requirements.txt"
+    content = "-i https://ignored.example/simple\n--index-url=https://${HOST}/simple\nfoo>=1\n"
+    requirements.write_text(content, encoding="utf-8")
+
+    assert index.run(requirements)
+
+    assert (requirements.read_text(encoding="utf-8"), [str(request.url) for request in httpx_mock.get_requests()]) == (
+        content.replace("foo>=1", "foo>=2"),
+        ["https://private.example/simple/foo/"],
+    )

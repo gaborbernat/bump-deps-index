@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+import json
 import ssl
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
@@ -8,7 +8,8 @@ from urllib.parse import quote, urlsplit
 
 from httpx import Client, HTTPError
 from truststore import SSLContext
-from yaml import YAMLError
+from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode, YAMLError
+from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
 from bump_deps_index._spec import PkgType, package_type
@@ -27,7 +28,7 @@ class PreCommitConfig(Loader):
     _filename: ClassVar[str] = ".pre-commit-config.yaml"
 
     def __init__(self) -> None:
-        # the writer matches text, so it needs to know which hooks the loader skipped to leave their lists alone
+        # the writer reuses the loader's verdict per hook, since the language may come from a remote manifest
         self._kept_by_file: dict[Path, list[bool]] = {}
         self._kept: list[bool] = []
 
@@ -44,65 +45,22 @@ class PreCommitConfig(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
-        result: list[str] = []
-        dependency_indent: int | None = None
-        flow_depth = 0
-        kept_hooks, keep = iter(self._kept), True
-        for line in text.split("\n"):
-            stripped = line.strip()
-            indent = len(line) - len(line.lstrip())
-            head, key, value = line.partition("additional_dependencies:")
-            # a key follows the `-` that opens a hook, or the `{` or `,` of an inline hook mapping
-            if not flow_depth and key and (not head.strip(" -") or head.rstrip().endswith(("{", ","))):
-                keep = next(kept_hooks, True)
-                dependency_indent = None if head.strip(" -") or not keep else len(head)
-                updated, flow_depth = self._replace_flow(value, changes, keep=keep, depth=0)
-                result.append(f"{head}{key}{updated}")
+        # walk the nodes the loader read and replace each scalar at the position PyYAML reports for it
+        edits: dict[int, tuple[int, str]] = {}
+        kept = iter(self._kept)
+        for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
+            if (dependencies := _value(hook, "additional_dependencies")) is None or not next(kept, True):
                 continue
-            # a flow list continues from the line above, or opens on the line after its key
-            if flow_depth or (dependency_indent is not None and indent > dependency_indent and stripped[:1] == "["):
-                updated, flow_depth = self._replace_flow(line, changes, keep=keep, depth=flow_depth)
-                dependency_indent = None
-                result.append(updated)
-                continue
-            if (
-                dependency_indent is not None
-                and stripped
-                and (indent < dependency_indent or (indent == dependency_indent and not stripped.startswith("-")))
-            ):
-                dependency_indent = None
-            if dependency_indent is not None and stripped.startswith("-"):
-                updated_line = self._replace_list_item(line, changes)
-            else:
-                updated_line = line
-            result.append(updated_line)
-        return "\n".join(result)
-
-    @classmethod
-    def _replace_flow(cls, part: str, changes: Mapping[str, str], *, keep: bool, depth: int) -> tuple[str, int]:
-        code, comment = cls._split_comment(part)
-        end, depth = _flow_list(code, depth)
-        flow = cls._replace_flow_values(cls._replace_quoted(code[:end], changes), changes) if keep else code[:end]
-        return f"{flow}{code[end:]}{comment}", depth
-
-    @classmethod
-    def _replace_list_item(cls, line: str, changes: Mapping[str, str]) -> str:
-        prefix, _, value = line.partition("-")
-        spacing = value[: len(value) - len(value.lstrip())]
-        value_with_spacing, suffix = cls._split_comment(value[len(spacing) :])
-        quoted = value_with_spacing.rstrip()
-        quote = quoted[:1] if quoted[:1] in {"'", '"'} and quoted.endswith(quoted[:1]) else ""
-        raw = quoted[1:-1] if quote else quoted
-        trailing = value_with_spacing[len(quoted) :]
-        return f"{prefix}-{spacing}{quote}{changes.get(raw, raw)}{quote}{trailing}{suffix}"
-
-    @staticmethod
-    def _replace_flow_values(line: str, changes: Mapping[str, str]) -> str:
-        if not changes:
-            return line
-        values = "|".join(re.escape(value) for value in sorted(changes, key=len, reverse=True))
-        pattern = re.compile(rf"(?P<prefix>^\s*|\[\s*|,\s*)(?P<value>{values})(?=\s*(?:,|]|#|$))")
-        return pattern.sub(lambda match: f"{match['prefix']}{changes[match['value']]}", line)
+            for item in dependencies.value if isinstance(dependencies, SequenceNode) else []:
+                if (
+                    isinstance(item, ScalarNode)
+                    and (new := changes.get(item.value)) is not None
+                    and (encoded := _encode(new, item.style)) is not None
+                ):
+                    edits[item.start_mark.index] = (item.end_mark.index, encoded)
+        for start, (end, encoded) in sorted(edits.items(), reverse=True):
+            text = f"{text[:start]}{encoded}{text[end:]}"
+        return text
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open("rt", encoding="utf-8") as file_handler:
@@ -137,13 +95,24 @@ def _mappings(value: Parsed) -> list[dict[str, Parsed]]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-def _flow_list(value: str, depth: int) -> tuple[int, int]:
-    # end at the `]` that closes the list, to leave the keys after it in an inline hook mapping alone
-    for at, character in enumerate(value):
-        depth += {"[": 1, "]": -1}.get(character, 0)
-        if character == "]" and depth == 0:
-            return at + 1, 0
-    return len(value), depth
+def _hooks(repos: Node | None) -> Iterator[MappingNode]:
+    for repo in repos.value if isinstance(repos, SequenceNode) else []:
+        if isinstance(hooks := _value(repo, "hooks"), SequenceNode):
+            yield from (hook for hook in hooks.value if isinstance(hook, MappingNode))
+
+
+def _value(node: Node | None, key: str) -> Node | None:
+    # a later duplicate key wins, as it does for the loader's dict
+    pairs = node.value if isinstance(node, MappingNode) else []
+    return next((value for name, value in reversed(pairs) if isinstance(name, ScalarNode) and name.value == key), None)
+
+
+def _encode(value: str, style: str | None) -> str | None:
+    if style == "'":
+        return "'{}'".format(value.replace("'", "''"))
+    if style == '"':
+        return json.dumps(value)  # a JSON string is a valid YAML double-quoted scalar
+    return value if style is None else None  # leave block scalars as written
 
 
 def _hook_languages(repo: str, rev: str | None) -> dict[str, str]:

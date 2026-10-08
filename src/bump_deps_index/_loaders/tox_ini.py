@@ -38,8 +38,10 @@ class ToxIni(Loader):
         return self._update_ini(
             text,
             changes,
+            # configparser hands a `[DEFAULT]` key to every section that lacks it
             lambda section, key: (
-                (section, key) == ("tox", "requires") or (section.startswith("testenv") and key == "deps")
+                (section in {"tox", "DEFAULT"} and key == "requires")
+                or ((section.startswith("testenv") or section == "DEFAULT") and key == "deps")
             ),
         )
 

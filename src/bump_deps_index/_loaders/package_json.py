@@ -10,8 +10,11 @@ from ._base import Loader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+    from typing import TypeAlias
 
     from ._base import Entry, Parsed
+
+    _JsonNode: TypeAlias = dict[str, "_JsonNode"] | tuple[int, int] | None
 
 # skip `peerDependencies`, a raised lower bound there narrows what you declare compatible
 _SECTIONS: Final = ("dependencies", "devDependencies", "optionalDependencies")
@@ -30,16 +33,19 @@ class PackageJson(Loader):
 
     @staticmethod
     def _update_text(text: str, changes: Mapping[str, str]) -> str:
-        pieces: list[str] = []
-        last = 0
-        for start, end, path in _json_strings(text):
-            match path:
-                case (section, name) if section in _SECTIONS and (
-                    new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1])}")
-                ):
-                    pieces += [text[last:start], json.dumps(new[len(name) + 1 :])[1:-1]]
-                    last = end
-        return "".join([*pieces, text[last:]])
+        tree, _ = _json_node(text, 0)
+        edits: list[tuple[int, int, str]] = []
+        for section in _SECTIONS:
+            entries = tree.get(section) if isinstance(tree, dict) else None
+            for name, span in entries.items() if isinstance(entries, dict) else []:
+                if not isinstance(span, tuple):
+                    continue
+                start, end = span
+                if new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1])}"):
+                    edits.append((start, end, json.dumps(new[len(name) + 1 :])[1:-1]))
+        for start, end, encoded in sorted(edits, reverse=True):
+            text = f"{text[:start]}{encoded}{text[end:]}"
+        return text
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         with filename.open(encoding="utf-8") as file_handler:
@@ -57,31 +63,42 @@ class PackageJson(Loader):
         )
 
 
-def _json_strings(text: str) -> Iterator[tuple[int, int, tuple[str, ...]]]:
-    # walk the JSON the loader parsed, and yield each string value with the object keys above it
-    containers: list[tuple[str, str]] = []
-    expect_key = False
-    at = 0
-    while at < len(text):
-        character = text[at]
-        if character == '"':
-            end = at + 1
-            while text[end] != '"':
-                end += 2 if text[end] == "\\" else 1
-            if expect_key:
-                containers[-1] = (containers[-1][0], json.loads(text[at : end + 1]))
-                expect_key = False
-            else:
-                yield at + 1, end, tuple(key for kind, key in containers if kind == "{")
-            at = end
-        elif character in "{[":
-            containers.append((character, ""))
-            expect_key = character == "{"
-        elif character in "}]":
-            containers.pop()
-        elif character == ",":
-            expect_key = containers[-1][0] == "{"
+def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
+    # parse the JSON the loader read and keep the span of each string; a later duplicate key wins, as in `json`
+    at = _skip_blank(text, at)
+    if text[at] == '"':
+        end = _string_end(text, at)
+        return (at + 1, end - 1), end
+    if text[at] not in "{[":
+        while at < len(text) and text[at] not in ",]} \t\r\n":
+            at += 1
+        return None, at
+    closing = "}" if text[at] == "{" else "]"
+    members: dict[str, _JsonNode] = {}
+    at += 1
+    while (at := _skip_blank(text, at)) < len(text) and text[at] != closing:
+        if closing == "}":
+            key_end = _string_end(text, at)
+            key = json.loads(text[at:key_end])
+            members[key], at = _json_node(text, text.index(":", key_end) + 1)
+        else:
+            _, at = _json_node(text, at)
+        if (at := _skip_blank(text, at)) < len(text) and text[at] == ",":
+            at += 1
+    return (members if closing == "}" else None), at + 1
+
+
+def _string_end(text: str, at: int) -> int:
+    end = at + 1
+    while text[end] != '"':
+        end += 2 if text[end] == "\\" else 1
+    return end + 1
+
+
+def _skip_blank(text: str, at: int) -> int:
+    while at < len(text) and text[at] in " \t\r\n":
         at += 1
+    return at
 
 
 __all__ = [

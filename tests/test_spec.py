@@ -169,6 +169,7 @@ def test_update_python(
         pytest.param("a@1 || 2", ["1.0.0", "3.0.0"], False, "a@1 || 2", id="union-range"),
         pytest.param("a@2.0.0-beta.1", ["1.9.0", "2.0.0-beta.1"], False, "a@2.0.0-beta.1", id="pin-no-downgrade"),
         pytest.param("a@3", ["2.0.0"], False, "a@3", id="partial-pin-no-downgrade"),
+        pytest.param("a@1.0.0", ["1.1.0-beta"], False, "a@1.0.0", id="only-pre-releases"),
         pytest.param("a@1.x", ["1.0.0", "2.0.0"], False, "a@1.x", id="x-range"),
     ],
 )

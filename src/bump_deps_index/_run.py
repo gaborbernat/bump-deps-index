@@ -24,7 +24,7 @@ from ._spec import PkgType, UpdateConfig, package_type, redact_text, redact_url
 from ._spec import update as update_spec
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from ._cli import Options
     from ._config import NpmSettings
@@ -37,24 +37,27 @@ def run(opt: Options) -> bool:
 
     npm = npm_settings()
     if opt.pkgs:
-        python_floor = _get_project(Path.cwd()).python_floor
+        # a package you name gets the floor and the index pins of the project you run in
+        project = _get_project(Path.cwd())
         pre_release = False if pre_release is None else pre_release
         specs = list({
             _Spec(
                 package,
                 pkg_type := package_type(package),
                 pre_release,
-                python_floor,
-                opt.index_url if pkg_type is PkgType.PYTHON else npm.registry(package, opt.npm_registry),
+                project.python_floor,
+                _python_index(package, project.sources, opt.index_url)
+                if pkg_type is PkgType.PYTHON
+                else npm.registry(package, opt.npm_registry),
             ): None
             for package in (raw.strip() for raw in opt.pkgs)
         })
         _, successful = _calculate_update(opt, npm, specs)
         return successful
 
-    if not opt.filenames:
+    successful = bool(opt.filenames)
+    if not successful:
         sys.stderr.write("no supported dependency files found\n")
-    successful = True
     plans: list[tuple[Path, Loader, list[_Spec]]] = []
     for filename in opt.filenames:
         if not filename.is_file():
@@ -73,7 +76,10 @@ def run(opt: Options) -> bool:
         opt, npm, list(dict.fromkeys(chain.from_iterable(specs for _, _, specs in plans)))
     )
     for filename, loader, specs in plans:
-        loader.update_file(filename, {spec.requirement: results[spec] for spec in specs if spec in results})
+        changes = {
+            spec.requirement: new for spec in specs if (new := results.get(spec, spec.requirement)) != spec.requirement
+        }
+        loader.update_file(filename, changes)
     return successful and resolved
 
 
@@ -86,9 +92,15 @@ class _Spec(NamedTuple):
 
 
 class _Project(NamedTuple):
+    pyproject: Path | None
     name: str | None
     python_floor: Version | None
     sources: dict[str, str | None]
+
+
+def _python_index(package: str, sources: Mapping[str, str | None], default: str) -> str:
+    # `package_type` parsed the requirement before it chose Python
+    return sources.get(canonicalize_name(Requirement(package).name)) or default
 
 
 def _get_project(directory: Path) -> _Project:
@@ -96,7 +108,7 @@ def _get_project(directory: Path) -> _Project:
         (path for folder in (directory, *directory.parents) if (path := folder / "pyproject.toml").is_file()), None
     )
     if pyproject is None:
-        return _Project(None, None, {})
+        return _Project(None, None, None, {})
     try:
         with pyproject.open("rb") as file_handler:
             cfg = load_toml(file_handler)
@@ -104,13 +116,14 @@ def _get_project(directory: Path) -> _Project:
         project = project if isinstance(project := cfg.get("project"), dict) else {}
         name, requires_python = project.get("name"), project.get("requires-python")
         return _Project(
+            pyproject,
             canonicalize_name(name) if isinstance(name, str) else None,
             _python_floor(requires_python if isinstance(requires_python, str) else None),
             uv_sources(pyproject.parent, cfg),
         )
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"ignoring project metadata from {pyproject} due to {exc!r}\n")
-        return _Project(None, None, {})
+        return _Project(pyproject, None, None, {})
 
 
 def _python_floor(requires_python: str | None) -> Version | None:
@@ -209,29 +222,33 @@ def _load_specs(
     try:
         entries = list(loader.load(filename, pre_release=pre_release))
         # prefer a PEP 723 script's own `requires-python` over the project's, since you run the script outside it
-        floors = {requires: _python_floor(requires) for *_, requires in entries if requires is not None}
+        floors = {entry.requires_python: _python_floor(entry.requires_python) for entry in entries}
     except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
         sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
         return None
     project = _get_project(filename.resolve().parent)
+    # uv reads `[tool.uv.sources]` for the project's own pyproject.toml; pip and tox never do
+    own_sources = project.sources if filename.resolve() == project.pyproject else {}
     specs: dict[_Spec, None] = {}
-    for raw, pkg_type, accept_prereleases, requires_python in entries:
-        if not (name := raw.strip()):
+    for entry in entries:
+        if not (name := entry.spec.strip()):
             continue
-        if pkg_type is PkgType.JS:
+        if entry.pkg_type is PkgType.JS:
             index = npm.registry(name, opt.npm_registry)
         else:
             try:
                 requirement = Requirement(name)
             except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
                 continue
-            # skip the project itself and packages uv installs from git, a path or a URL instead of an index
-            if (package := canonicalize_name(requirement.name)) == project.name or (
-                index := project.sources.get(package, opt.index_url)
+            package = canonicalize_name(requirement.name)
+            sources = own_sources if entry.sources is None else entry.sources
+            # skip the project itself, though a script may depend on it, and packages from git, a path or a URL
+            if (entry.sources is None and package == project.name) or (
+                index := sources.get(package, entry.index_url or opt.index_url)
             ) is None:
                 continue
-        floor = project.python_floor if requires_python is None else floors[requires_python]
-        specs[_Spec(name, pkg_type, accept_prereleases, floor, index)] = None
+        floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
+        specs[_Spec(name, entry.pkg_type, entry.pre_release, floor, index)] = None
     return list(specs)
 
 

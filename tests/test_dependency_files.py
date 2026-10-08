@@ -712,6 +712,112 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             """,
             id="script-only-dependencies",
         ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    "additional_dependencies": ["foo>=1; python_version>\\"3\\"", 'foo>=1; os_name==''nt''']
+                  - id: g
+                    language: golang
+                    entry: |
+                      additional_dependencies: [foo>=1]
+                    additional_dependencies: ["foo @ https://h/x[y.whl", foo>=1]
+                  - id: b
+                    language: python
+                    additional_dependencies:
+                      - foo>=1
+            #     - old>=1
+                      - "x, foo>=1 #y"
+                      - foo>=1
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    "additional_dependencies": ["foo>=2; python_version>\\"3\\"", 'foo>=2; os_name==''nt''']
+                  - id: g
+                    language: golang
+                    entry: |
+                      additional_dependencies: [foo>=1]
+                    additional_dependencies: ["foo @ https://h/x[y.whl", foo>=1]
+                  - id: b
+                    language: python
+                    additional_dependencies:
+                      - foo>=2
+            #     - old>=1
+                      - "x, foo>=1 #y"
+                      - foo>=2
+            """,
+            id="pre-commit-yaml-nodes",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "demo"
+            dependencies = [\"\"\"foo>=1\"\"\", '''
+            foo>=1''', "\\u0066oo>=2"]
+            optional-dependencies.x = "foo>=1"
+            """,
+            """
+            [project]
+            name = "demo"
+            dependencies = [\"\"\"foo>=2\"\"\", '''
+            foo>=2''', "\\u0066oo>=2"]
+            optional-dependencies.x = "foo>=1"
+            """,
+            id="pyproject-multi-line-strings-and-unchanged-escapes",
+        ),
+        pytest.param(
+            "tox.toml",
+            """
+            requires = \"\"\"foo>=1\"\"\"
+            [[foo]]
+            deps = ["foo>=1"]
+            [env.a]
+            deps = [
+              { replace = "ref", of = ["x"], default = "foo>=1" },
+              { replace = "posargs", default = ["foo>=1"] },
+              { replace = "if", condition = "foo>=1", then = "foo>=1", else = ["foo>=1"] },
+            ]
+            """,
+            """
+            requires = \"\"\"foo>=2\"\"\"
+            [[foo]]
+            deps = ["foo>=1"]
+            [env.a]
+            deps = [
+              { replace = "ref", of = ["x"], default = "foo>=1" },
+              { replace = "posargs", default = ["foo>=2"] },
+              { replace = "if", condition = "foo>=1", then = "foo>=2", else = ["foo>=2"] },
+            ]
+            """,
+            id="tox-toml-substitution-kinds-and-array-tables",
+        ),
+        pytest.param(
+            "package.json",
+            '{"devDependencies": {"foo": "^1.0.0", "bar": "\\u005e2.0.0"}, "devDependencies": {"foo": "^1.0.0"}}\n',
+            '{"devDependencies": {"foo": "^1.0.0", "bar": "\\u005e2.0.0"}, "devDependencies": {"foo": "^1.5.0"}}\n',
+            id="package-json-duplicate-key",
+        ),
+        pytest.param(
+            "tox.ini",
+            "[DEFAULT]\ndeps = foo>=1\nrequires = foo>=1\n[tox]\n[testenv]\ncommands = x\n",
+            "[DEFAULT]\ndeps = foo>=2\nrequires = foo>=2\n[tox]\n[testenv]\ncommands = x\n",
+            id="tox-ini-default-section",
+        ),
+        pytest.param(
+            "setup.cfg",
+            "[DEFAULT]\ninstall_requires = foo>=1\ntest = foo>=1\n[options]\n[options.extras_require]\n",
+            "[DEFAULT]\ninstall_requires = foo>=2\ntest = foo>=2\n[options]\n[options.extras_require]\n",
+            id="setup-cfg-default-section",
+        ),
     ],
 )
 @pytest.mark.usefixtures("foo_index")
@@ -724,15 +830,24 @@ def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str,
     assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()
 
 
+@pytest.mark.parametrize(
+    ("name", "content", "expected"),
+    [
+        pytest.param("requirements.txt", b"foo>=1\r\nbar>=1\r\nbar>=1\n", b"foo>=2\r\nbar>=1\r\nbar>=1\n", id="mixed"),
+        pytest.param("tox.ini", b"[testenv]\rdeps = foo>=1\r", b"[testenv]\rdeps = foo>=2\r", id="carriage-return"),
+    ],
+)
 @pytest.mark.usefixtures("foo_index")
-def test_requirements_preserves_each_line_ending(tmp_path: Path, index: FakeIndex) -> None:
-    requirements = tmp_path / "requirements.txt"
-    requirements.write_bytes(b"foo>=1\r\nbar>=1\r\nbar>=1\n")
+def test_file_keeps_each_line_ending(
+    tmp_path: Path, index: FakeIndex, name: str, content: bytes, expected: bytes
+) -> None:
+    dest = tmp_path / name
+    dest.write_bytes(content)
     index.pypi["bar"] = ["1"]
 
-    assert index.run(requirements)
+    assert index.run(dest)
 
-    assert requirements.read_bytes() == b"foo>=2\r\nbar>=1\r\nbar>=1\n"
+    assert dest.read_bytes() == expected
 
 
 @pytest.mark.usefixtures("foo_index")
@@ -904,4 +1019,5 @@ def test_requirements_next_to_wrongly_typed_pyproject(tmp_path: Path, index: Fak
 @pytest.fixture
 def foo_index(index: FakeIndex) -> None:
     index.pypi["foo"] = ["2"]
+    index.npm["bar"] = ["2.0.0"]
     index.npm["foo"] = ["1.0.0", "1.0.5", "1.5.0", "2.0.0"]

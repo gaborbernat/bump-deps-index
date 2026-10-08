@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import TypeAlias
 
-    TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue]"
+    TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
     TomlTable: TypeAlias = dict[str, TomlValue]
 
 _ENV_REFERENCE: Final = re.compile(r"\$\{(?P<name>\w+)\}")
@@ -79,14 +79,24 @@ class NpmSettings:
 def uv_sources(folder: Path, pyproject: TomlTable) -> dict[str, str | None]:
     # a workspace member inherits the sources and indexes of the workspace root, and overrides them
     layers = [*_workspace_root(folder), (folder, _table(pyproject, "tool", "uv"))]
+    return _sources([(uv, _read_toml(path / "uv.toml")) for path, uv in layers])
+
+
+def script_uv_settings(metadata: TomlTable) -> tuple[dict[str, str | None], str | None]:
+    # `uv run --script` reads the `[tool.uv]` table of the script, outside any project
+    uv = _table(metadata, "tool", "uv")
+    return _sources([(uv, {})]), _default_index(uv)
+
+
+def _sources(layers: list[tuple[TomlTable, TomlTable]]) -> dict[str, str | None]:
     named = {
         name: url
-        for path, uv in layers
-        for index in (*_indexes(uv), *_indexes(_read_toml(path / "uv.toml")))
+        for uv, uv_toml in layers
+        for index in (*_indexes(uv), *_indexes(uv_toml))
         if isinstance(name := index.get("name"), str) and (url := _index_url(index))
     }
     sources: dict[str, str | None] = {}
-    for package, source in (item for _, uv in layers for item in _table(uv, "sources").items()):
+    for package, source in (item for uv, _ in layers for item in _table(uv, "sources").items()):
         # a list splits the source by environment markers, take its first entry
         entry = next(iter(source), None) if isinstance(source, list) else source
         index = entry.get("index") if isinstance(entry, dict) else None
@@ -155,29 +165,24 @@ def _config_home() -> Path:
 
 
 def _pip_index() -> str | None:
-    # pip reads no config file at all when `PIP_CONFIG_FILE` points at the null device
-    if (config_file := os.environ.get("PIP_CONFIG_FILE", "")) == os.devnull:
-        return None
     home, config_home = Path.home(), _config_home()
-    # pip lets later files override earlier ones, so check them from the last loaded to the first
-    for file in filter(
-        None,
-        [
-            config_file,
-            config_home / "pip" / "pip.ini",
-            home / "Library" / "Application Support" / "pip" / "pip.conf",
-            config_home / "pip" / "pip.conf",
-            home / ".pip" / "pip.conf",
-        ],
-    ):
-        cfg = ConfigParser(interpolation=None)
+    # pip skips the user files when `PIP_CONFIG_FILE` names a file, the null device included
+    config_file = os.environ.get("PIP_CONFIG_FILE", "")
+    user = [
+        home / ".pip" / "pip.conf",
+        home / "Library" / "Application Support" / "pip" / "pip.conf",
+        config_home / "pip" / "pip.conf",
+        config_home / "pip" / "pip.ini",
+    ]
+    skip_user = config_file == os.devnull or (bool(config_file) and Path(config_file).is_file())
+    # pip lets a later file override an earlier one, and an `[install]` value beat a `[global]` one in any file
+    cfg = ConfigParser(interpolation=None)
+    for file in [*([] if skip_user else user), *filter(None, [config_file])]:
         try:
             cfg.read(file, encoding="utf-8")
         except (ConfigParserError, UnicodeDecodeError):
             continue
-        if url := cfg.get("install", "index-url", fallback=None) or cfg.get("global", "index-url", fallback=None):
-            return url
-    return None
+    return cfg.get("install", "index-url", fallback=None) or cfg.get("global", "index-url", fallback=None)
 
 
 def _npmrc() -> dict[str, str]:
@@ -219,5 +224,6 @@ __all__ = [
     "npm_registry",
     "npm_settings",
     "python_index_url",
+    "script_uv_settings",
     "uv_sources",
 ]

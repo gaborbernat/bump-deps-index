@@ -49,11 +49,11 @@ class PyProjectToml(Loader):
 def _is_dependency(path: tuple[str, ...]) -> bool:
     match path:
         case (
-            ("build-system", "requires")
-            | ("project", "dependencies")
-            | ("project", "optional-dependencies", _)
-            | ("dependency-groups", _)
-            | ("tool", "uv", "dev-dependencies")
+            ("build-system", "requires", "[]")
+            | ("project", "dependencies", "[]")
+            | ("project", "optional-dependencies", _, "[]")
+            | ("dependency-groups", _, "[]")
+            | ("tool", "uv", "dev-dependencies", "[]")
         ):
             return True
     return False

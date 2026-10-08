@@ -6,15 +6,16 @@ from tomllib import TOMLDecodeError
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
+from bump_deps_index._config import script_uv_settings
 from bump_deps_index._spec import PkgType
 
-from ._base import Loader
+from ._base import Entry, Loader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-    from ._base import Entry, Parsed
+    from ._base import Parsed
 
 
 class ScriptMetadata(Loader):
@@ -45,7 +46,9 @@ class ScriptMetadata(Loader):
             return text
         # edit the TOML inside the comment block, then put each line back behind its `# `
         block = lines[start_idx + 1 : end_idx - 1]
-        toml = replace_strings("\n".join(line[2:] for line in block), changes, lambda path: path == ("dependencies",))
+        toml = replace_strings(
+            "\n".join(line[2:] for line in block), changes, lambda path: path == ("dependencies", "[]")
+        )
         lines[start_idx + 1 : end_idx - 1] = [
             f"# {new}" if line.startswith("# ") else line for line, new in zip(block, toml.split("\n"), strict=True)
         ]
@@ -53,12 +56,17 @@ class ScriptMetadata(Loader):
 
     def load(self, filename: Path, *, pre_release: bool | None) -> Iterator[Entry]:
         metadata = self._metadata(filename)
-        yield from self._generate(
-            self._strings(metadata.get("dependencies")),
-            pkg_type=PkgType.PYTHON,
-            pre_release=False if pre_release is None else pre_release,
-            requires_python=requires if isinstance(requires := metadata.get("requires-python"), str) else None,
-        )
+        sources, index_url = script_uv_settings(metadata)
+        requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
+        for dependency in self._strings(metadata.get("dependencies")):
+            yield Entry(
+                dependency,
+                PkgType.PYTHON,
+                False if pre_release is None else pre_release,
+                requires_python,
+                sources,
+                index_url,
+            )
 
     def _metadata(self, filename: Path) -> dict[str, Parsed]:
         if (toml_str := self._extract_toml_from_comments(filename.read_text(encoding="utf-8"))) is None:

@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     TomlValue: TypeAlias = "str | int | float | bool | list[TomlValue] | dict[str, TomlValue] | None"
 
 _NESTED: Final = frozenset({"env", "env_base"})
-_SUBSTITUTION_KEYS: Final = frozenset({"then", "else", "default"})
 
 
 class ToxToml(Loader):
@@ -81,15 +80,25 @@ class ToxToml(Loader):
 
 
 def _is_dependency(path: tuple[str, ...]) -> bool:
-    # match the paths the loader reads, through the `then`, `else` and `default` of a substitution
-    while path[-1:] and path[-1] in _SUBSTITUTION_KEYS:
-        path = path[:-1]
     match path:
-        case ("requires",) | (_, "deps"):
-            return True
-        case (nested, _, "deps"):
-            return nested in _NESTED
+        case ("requires", *value) | (_, "deps", *value):
+            return _collected(value)
+        case (nested, _, "deps", *value) if nested in _NESTED:
+            return _collected(value)
     return False
+
+
+def _collected(path: list[str]) -> bool:
+    # follow the value the way `_collect` does: into lists, and into the branches of a substitution
+    while path:
+        match path:
+            case (
+                ["[]", *rest] | ["{if}", "then" | "else", *rest] | ["{posargs}" | "{env}" | "{glob}", "default", *rest]
+            ):
+                path = rest
+            case _:
+                return False
+    return True
 
 
 __all__ = [

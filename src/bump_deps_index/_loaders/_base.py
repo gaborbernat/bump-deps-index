@@ -2,15 +2,26 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Final, TypeAlias
-
-from bump_deps_index._spec import PkgType
+from typing import TYPE_CHECKING, Final, NamedTuple, TypeAlias
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Mapping
     from pathlib import Path
 
-Entry: TypeAlias = tuple[str, PkgType, bool, str | None]
+    from bump_deps_index._spec import PkgType
+
+
+class Entry(NamedTuple):
+    spec: str
+    pkg_type: PkgType
+    pre_release: bool
+    requires_python: str | None = None
+    # a PEP 723 script brings its own uv sources, since `uv run --script` resolves it outside the project
+    sources: Mapping[str, str | None] | None = None
+    # an index the file sets for its own requirements, such as `--index-url` in a requirements file
+    index_url: str | None = None
+
+
 Parsed: TypeAlias = str | int | float | bool | list["Parsed"] | dict[str, "Parsed"] | None
 
 
@@ -38,10 +49,10 @@ class Loader(ABC):
     def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
         with filename.open(encoding="utf-8", newline="") as file_handler:
             raw = file_handler.read()
-        text = raw.replace("\r\n", "\n")
+        text = re.sub(r"\r\n?", "\n", raw)
         if (updated := self._update_text(text, changes)) != text:
             # the writers keep the line count, so each line gets back its own ending
-            endings = [*re.findall(r"\r?\n", raw), ""]
+            endings = [*re.findall(r"\r\n?|\n", raw), ""]
             with filename.open("w", encoding="utf-8", newline="") as file_handler:
                 file_handler.write(
                     "".join(f"{line}{end}" for line, end in zip(updated.split("\n"), endings, strict=True))
@@ -50,16 +61,6 @@ class Loader(ABC):
     @abstractmethod
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         raise NotImplementedError
-
-    @staticmethod
-    def _replace_quoted(text: str, changes: Mapping[str, str]) -> str:
-        if not changes:
-            return text
-        values = "|".join(re.escape(value) for value in sorted(changes, key=len, reverse=True))
-        pattern = re.compile(rf"(?P<quote>['\"])(?P<pad>[ \t]*)(?P<value>{values})(?P<end>[ \t]*)(?P=quote)")
-        return pattern.sub(
-            lambda match: f"{match['quote']}{match['pad']}{changes[match['value']]}{match['end']}{match['quote']}", text
-        )
 
     @classmethod
     def _update_ini(cls, text: str, changes: Mapping[str, str], wanted: Callable[[str, str], bool]) -> str:
@@ -137,10 +138,9 @@ class Loader(ABC):
         pkg_type: PkgType,
         *,
         pre_release: bool = False,
-        requires_python: str | None = None,
     ) -> Iterator[Entry]:
         for value in generator:
-            yield value, pkg_type, pre_release, requires_python
+            yield Entry(value, pkg_type, pre_release)
 
 
 __all__ = [

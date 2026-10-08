@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from configparser import RawConfigParser
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -35,11 +36,15 @@ class SetupCfg(Loader):
         return filename.name == self._filename
 
     def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
+        # configparser hands every `[DEFAULT]` key to `[options.extras_require]`, which reads each key as an extra
+        extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
         return self._update_ini(
             text,
             changes,
             lambda section, key: (
-                (section, key) == ("options", "install_requires") or section == "options.extras_require"
+                (section in {"options", "DEFAULT"} and key == "install_requires")
+                or section == "options.extras_require"
+                or (section == "DEFAULT" and extras)
             ),
         )
 

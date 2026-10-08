@@ -115,11 +115,9 @@ def test_run_pre_commit_keeps_filtered_inline_dependencies(
 
 
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
-    assert index.run()
+    assert not index.run()
 
-    out, err = capsys.readouterr()
-    assert err == "no supported dependency files found\n"
-    assert not out
+    assert capsys.readouterr() == ("", "no supported dependency files found\n")
 
 
 def test_run_pre_commit_node_hook_dependencies_are_javascript(index: FakeIndex, tmp_path: Path) -> None:
