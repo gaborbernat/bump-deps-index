@@ -4,6 +4,7 @@ skip_missing_interpreters = true
 
 [env_run_base]
 description = "run the tests with pytest under {env_name}"
+default_base_python = [ "3.15" ]
 package = "wheel"
 wheel_build_env = ".pkg"
 dependency_groups = [ "test" ]
@@ -32,6 +33,9 @@ commands = [
   ],
 ]
 
+[env_pkg_base]
+default_base_python = [ "3.15" ]
+
 [env.docs]
 description = "Build documentation"
 dependency_groups = [ "docs" ]
@@ -39,7 +43,11 @@ commands = [
   [
     "python",
     "-c",
-    "import glob; import subprocess; subprocess.check_call(['proselint', 'check', *glob.glob('docs/*.rst')])",
+    # RE2 lacks Python 3.15 wheels: https://github.com/google/re2/issues/647
+    """\
+  import glob; import subprocess; subprocess.check_call(['uv', 'tool', 'run', '--python', '3.14', '--from', \
+  'proselint>=0.16', 'proselint', 'check', *glob.glob('docs/*.rst')])\
+  """,
   ],
   [
     "sphinx-build",

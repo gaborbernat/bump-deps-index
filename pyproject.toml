@@ -72,9 +72,9 @@ type = [
 ]
 docs = [
   "furo>=2025.12.19",
-  "proselint>=0.16",
   "sphinx>=9.0.4",
   "sphinx-argparse-cli>=1.23",
+  "uv>=0.12.22",
 ]
 lint = [ "pre-commit-uv>=4.3" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
@@ -96,24 +96,24 @@ lint.select = [
   "ALL",
 ]
 lint.ignore = [
-  "COM812", # Conflict with formatter
-  "CPY",    # The project does not add copyright headers to individual files
-  "D203",   # `one-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible
-  "D212",   # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible
-  "DOC",    # Public API documentation is generated from signatures
-  "ISC001", # Conflict with formatter
-  "RUF067", # `__init__` module should only contain docstrings and re-exports
+  "CPY",                                       # The project does not add copyright headers to individual files
+  "DOC",                                       # Public API documentation is generated from signatures
+  "incorrect-blank-line-before-class",         # `one-blank-line-before-class` (D203) and `no-blank-line-before-class` (D211) are incompatible
+  "missing-trailing-comma",                    # Conflict with formatter
+  "multi-line-summary-first-line",             # `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible
+  "non-empty-init-module",                     # `__init__` module should only contain docstrings and re-exports
+  "single-line-implicit-string-concatenation", # Conflict with formatter
 ]
 lint.per-file-ignores."tests/**/*.py" = [
-  "D",       # Test names document behavior
-  "FBT",     # Boolean parameters keep parameterized cases compact
-  "INP001",  # The tests directory is not a package
-  "PLC2701", # Tests cover private parsing boundaries directly
-  "PLR0917", # Test inputs favor explicit parameters over setup objects
-  "PLR2004", # Literal expected values keep assertions local
-  "S101",    # Tests use assertions
-  "S404",    # Entry-point tests invoke a local Python executable
-  "S603",    # Entry-point arguments are fixed by the tests
+  "assert",                               # Tests use assertions
+  "D",                                    # Test names document behavior
+  "FBT",                                  # Boolean parameters keep parameterized cases compact
+  "implicit-namespace-package",           # The tests directory is not a package
+  "import-private-name",                  # Tests cover private parsing boundaries directly
+  "magic-value-comparison",               # Literal expected values keep assertions local
+  "subprocess-without-shell-equals-true", # Entry-point arguments are fixed by the tests
+  "suspicious-subprocess-import",         # Entry-point tests invoke a local Python executable
+  "too-many-positional-arguments",        # Test inputs favor explicit parameters over setup objects
 ]
 lint.isort = { known-first-party = [
   "bump_deps_index",
@@ -130,7 +130,7 @@ count = true
 max_supported_python = "3.15"
 
 [tool.ty]
-environment.python-version = "3.11"
+environment.python-version = "3.15"
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
