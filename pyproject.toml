@@ -72,9 +72,9 @@ type = [
 ]
 docs = [
   "furo>=2025.12.19",
-  "proselint>=0.16",
   "sphinx>=9.0.4",
   "sphinx-argparse-cli>=1.23",
+  "uv>=0.12.22",
 ]
 lint = [ "pre-commit-uv>=4.3" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
