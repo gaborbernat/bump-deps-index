@@ -45,6 +45,7 @@ dependencies = [
   "truststore>=0.10.4",
   "typing-extensions>=4.16",
 ]
+urls.Changelog = "https://bump-deps-index.readthedocs.io/en/latest/changelog.html"
 urls.Documentation = "https://bump-deps-index.readthedocs.io"
 urls.Homepage = "https://github.com/gaborbernat/bump-deps-index"
 urls.Source = "https://github.com/gaborbernat/bump-deps-index"
@@ -72,6 +73,7 @@ type = [
 ]
 docs = [
   "furo>=2025.12.19",
+  "myst-parser>=4",
   "sphinx>=9.0.4",
   "sphinx-argparse-cli>=1.23",
   "uv>=0.12.22",
@@ -157,3 +159,14 @@ paths.source = [
 report.fail_under = 100
 html.show_contexts = true
 html.skip_covered = false
+
+[tool.towncrier]
+name = "bump-deps-index"
+directory = "docs/changelog.d"
+filename = "docs/changelog.md"
+title_format = "## {version} ({project_date})"
+type = [
+  { directory = "feature", name = "Features", showcontent = true },
+  { directory = "bugfix", name = "Bug fixes", showcontent = true },
+  { directory = "doc", name = "Documentation", showcontent = true },
+]
