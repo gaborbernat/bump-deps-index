@@ -8,7 +8,6 @@
 
 - Document earlier releases and require changelog entries for pull requests. (#269)
 
-
 ## 1.17.0 (2026-10-08)
 
 ### Added
