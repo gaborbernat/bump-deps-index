@@ -26,9 +26,12 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.inheritance_diagram",
     "sphinx_argparse_cli",
+    "myst_parser",
 ]
 
-master_doc, source_suffix = "index", ".rst"
+master_doc, source_suffix = "index", {".rst": "restructuredtext", ".md": "markdown"}
+exclude_patterns = ["changelog.d/*"]
+autosectionlabel_maxdepth = 2
 
 html_theme = "furo"
 html_title, html_last_updated_fmt = "Bump dependencies from package indexes", now.isoformat()
