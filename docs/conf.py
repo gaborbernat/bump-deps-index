@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
+from tomllib import loads
 from typing import TYPE_CHECKING
 
 import bump_deps_index
@@ -56,6 +58,28 @@ for module in (bump_deps_index,):
 def setup(app: Sphinx) -> None:
     """Sphinx resolves pathlib.Path to an undocumented private alias without this hook."""
     app.connect("missing-reference", _resolve_private_path)
+    app.connect("source-read", _include_unreleased)
+
+
+def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
+    if docname != "changelog":
+        return
+    root = Path(__file__).parent.parent
+    fragments = root / "docs" / "changelog.d"
+    app.env.note_dependency(str(fragments))
+    sections: list[str] = []
+    for category in loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["towncrier"]["type"]:
+        entries = [
+            f"- {fragment.read_text(encoding='utf-8').strip()}"
+            for fragment in sorted(fragments.glob(f"*.{category['directory']}.md"))
+        ]
+        if entries:
+            sections.extend((f"### {category['name']}", "", *entries, ""))
+    if sections:
+        source[0] = source[0].replace(
+            "<!-- towncrier release notes start -->",
+            "## Unreleased\n\n" + "\n".join(sections) + "<!-- towncrier release notes start -->",
+        )
 
 
 def _resolve_private_path(
