@@ -215,8 +215,6 @@ jobs:
           PR_NUMBER: ${{ steps.fixture.outputs.pr }}
           PR_AUTHOR: ${{ steps.fixture.outputs.author }}
           PR_AUTHOR_TYPE: ${{ steps.fixture.outputs.author_type }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           previous=$(git tag --list | release-creator tags "$VERSION" --previous)
@@ -228,17 +226,8 @@ jobs:
           if [[ -n "$previous" ]]; then
             args+=(--previous "$previous")
           fi
-          generated=(
-            -f tag_name="$VERSION"
-            -f target_commitish="$HEAD_SHA"
-          )
-          if [[ -n "$previous" ]]; then
-            generated+=(-f previous_tag_name="$previous")
-          fi
-          gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            "${generated[@]}" --jq .body > "$RUNNER_TEMP/generated-notes.md"
           printf '* Validate release pipeline by @%s in https://github.com/%s/pull/%s\n' \
-            "$PR_AUTHOR" "$GITHUB_REPOSITORY" "$PR_NUMBER" >> "$RUNNER_TEMP/generated-notes.md"
+            "$PR_AUTHOR" "$GITHUB_REPOSITORY" "$PR_NUMBER" > "$RUNNER_TEMP/generated-notes.md"
           release-creator notes --changelog docs/changelog.md --tag "$VERSION" --repository "$GITHUB_REPOSITORY" --artifact-url "https://pypi.org/project/bump-deps-index/${VERSION}/" --generated-notes "$RUNNER_TEMP/generated-notes.md" "${args[@]}" > "$RUNNER_TEMP/release-notes.md"
           test "$(grep -c '^\*\*Full Changelog\*\*:' "$RUNNER_TEMP/release-notes.md")" -eq 1
           grep -Fq "[#${PR_NUMBER}](https://github.com/${GITHUB_REPOSITORY}/pull/${PR_NUMBER})" "$RUNNER_TEMP/release-notes.md"
