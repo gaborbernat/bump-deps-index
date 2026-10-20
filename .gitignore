@@ -3,3 +3,4 @@
 dist/
 .tox/
 /src/bump_deps_index/version.py
+/uv.lock
