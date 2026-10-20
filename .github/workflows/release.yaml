@@ -33,6 +33,16 @@ jobs:
           python-version: "3.15"
           cache-dependency-glob: "pyproject.toml"
           enable-cache: false
+      - name: Check tagged source
+        run: |
+          set -euo pipefail
+          uv venv --python 3.15 "$RUNNER_TEMP/release-tools"
+          uv pip sync \
+            --preview-features pylock \
+            --python "$RUNNER_TEMP/release-tools/bin/python" \
+            --group release \
+            pylock.toml
+          "$RUNNER_TEMP/release-tools/bin/prek" run --all-files
       - name: 📦 Build package
         run: uv build --python 3.15 --python-preference only-managed --sdist --wheel . --out-dir dist
       - name: 📤 Store the distribution packages
