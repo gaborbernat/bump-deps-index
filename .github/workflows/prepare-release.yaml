@@ -46,7 +46,7 @@ jobs:
             pylock.toml
           echo "$RUNNER_TEMP/release-tools/bin" >> "$GITHUB_PATH"
       - id: prepare
-        uses: tox-dev/github-workflows/prepare-towncrier@47a08c1c289b68ec58548fa848e8c8c561ddc757
+        uses: tox-dev/github-workflows/prepare-towncrier@662d0147be4cfa7a3dc82db3688b741a7823dc43
         with:
           bump: ${{ inputs.bump }}
           changelog: docs/changelog.md
@@ -89,7 +89,7 @@ jobs:
             --group release \
             pylock.toml
           echo "$RUNNER_TEMP/release-tools/bin" >> "$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/validate-release-patch@47a08c1c289b68ec58548fa848e8c8c561ddc757
+      - uses: tox-dev/github-workflows/validate-release-patch@662d0147be4cfa7a3dc82db3688b741a7823dc43
         with:
           version: ${{ needs.assemble.outputs.version }}
           patch: ${{ runner.temp }}/release-patch/release.patch
@@ -103,7 +103,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
-      - uses: tox-dev/github-workflows/commit-and-tag@47a08c1c289b68ec58548fa848e8c8c561ddc757
+      - uses: tox-dev/github-workflows/commit-and-tag@662d0147be4cfa7a3dc82db3688b741a7823dc43
         with:
           version: ${{ needs.assemble.outputs.version }}
           token: ${{ steps.token.outputs.token }}
