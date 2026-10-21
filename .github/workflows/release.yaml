@@ -8,7 +8,7 @@ env:
   dists-artifact-name: python-package-distributions
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@a250ca3524857236e288764651851010939b6f71
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@8db87d4730353b61630d66cbc592d6bed0c85d2b
     permissions:
       contents: read
       pull-requests: read
@@ -108,7 +108,7 @@ jobs:
           uv pip sync --preview-features pylock --python "$RUNNER_TEMP/release-tools/bin/python" --group release pylock.toml
       - name: Add release tools to PATH
         run: echo "$RUNNER_TEMP/release-tools/bin" >> "$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@a250ca3524857236e288764651851010939b6f71
+      - uses: tox-dev/github-workflows/render-release-notes@8db87d4730353b61630d66cbc592d6bed0c85d2b
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
@@ -126,6 +126,8 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
+    outputs:
+      missing-count: ${{ steps.missing.outputs.missing-count }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,7 +141,8 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@a250ca3524857236e288764651851010939b6f71
+      - id: missing
+        uses: tox-dev/github-workflows/reconcile-pypi-artifacts@8db87d4730353b61630d66cbc592d6bed0c85d2b
         with:
           project: bump-deps-index
           version: ${{ github.ref_name }}
@@ -150,9 +153,29 @@ jobs:
           name: pypi-missing-names
           path: ${{ runner.temp }}/pypi-missing-names.txt
           if-no-files-found: error
+  github-draft:
+    needs: [github-notes, previous-tag, stage-pypi]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: github-release-notes
+          path: ${{ runner.temp }}
+      - uses: tox-dev/github-workflows/publish-github-release@8db87d4730353b61630d66cbc592d6bed0c85d2b
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ github.ref_name }}
+          commit: ${{ needs.previous-tag.outputs.commit }}
+          title: ${{ github.ref_name }}
+          notes-file: ${{ runner.temp }}/release-notes.md
+          mode: stage
   publish:
     name: 🚀 publish
-    needs: [build, github-notes, stage-pypi]
+    needs: [build, github-draft, stage-pypi]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-26.04
     environment:
@@ -170,11 +193,12 @@ jobs:
           name: pypi-missing-names
           path: ${{ runner.temp }}/manifest
       - id: selected
-        uses: tox-dev/github-workflows/select-pypi-artifacts@a250ca3524857236e288764651851010939b6f71
+        uses: tox-dev/github-workflows/select-pypi-artifacts@8db87d4730353b61630d66cbc592d6bed0c85d2b
         with:
           dist: dist
           manifest: ${{ runner.temp }}/manifest/pypi-missing-names.txt
           output-dir: selected-dist
+          expected-count: ${{ needs.stage-pypi.outputs.missing-count }}
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         if: steps.selected.outputs.selected-count != '0'
         with:
@@ -199,14 +223,14 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@a250ca3524857236e288764651851010939b6f71
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@8db87d4730353b61630d66cbc592d6bed0c85d2b
         with:
           project: bump-deps-index
           version: ${{ github.ref_name }}
           dist: dist
           mode: verify
   github-release:
-    needs: [verify-pypi, github-notes, previous-tag]
+    needs: [github-draft, verify-pypi, previous-tag]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-26.04
     permissions:
@@ -216,7 +240,7 @@ jobs:
         with:
           name: github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@a250ca3524857236e288764651851010939b6f71
+      - uses: tox-dev/github-workflows/publish-github-release@8db87d4730353b61630d66cbc592d6bed0c85d2b
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -225,3 +249,4 @@ jobs:
           commit: ${{ needs.previous-tag.outputs.commit }}
           title: ${{ github.ref_name }}
           notes-file: ${{ runner.temp }}/release-notes.md
+          mode: publish
