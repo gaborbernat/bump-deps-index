@@ -10,8 +10,8 @@
 
 ### Documentation
 
-- Document earlier releases and require changelog entries for pull requests
-  ([#269](https://github.com/gaborbernat/bump-deps-index/pull/269)) by [@gaborbernat](https://github.com/gaborbernat).
+- Document earlier releases ([#269](https://github.com/gaborbernat/bump-deps-index/pull/269)) by
+  [@gaborbernat](https://github.com/gaborbernat).
 
 <a name="release-1-17-0"></a>
 
@@ -160,14 +160,6 @@
 - Declare Python 3.15 support ([#242](https://github.com/gaborbernat/bump-deps-index/pull/242)) by
   [@gaborbernat](https://github.com/gaborbernat).
 
-<a name="release-1-15-0-changes"></a>
-
-### Changes
-
-- Format Markdown and YAML with mdformat and yamlfmt in place of prettier
-  ([#239](https://github.com/gaborbernat/bump-deps-index/pull/239)). No change to behavior by
-  [@gaborbernat](https://github.com/gaborbernat).
-
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.14.0...1.15.0
 
 <a name="release-1-14-0"></a>
@@ -215,14 +207,11 @@
 - Update `deps` in `env_base` templates of `tox.toml` ([#228](https://github.com/gaborbernat/bump-deps-index/pull/228))
   by [@gaborbernat](https://github.com/gaborbernat).
 
-<a name="release-1-13-0-security"></a>
+<a name="release-1-13-0-security"></a> <a name="release-1-13-0-documentation"></a>
 
-### Security
+### Documentation
 
-- Harden the GitHub workflows with zizmor and least-privilege permissions
-  ([#200](https://github.com/gaborbernat/bump-deps-index/pull/200))
-  ([#210](https://github.com/gaborbernat/bump-deps-index/pull/210)) by [@gaborbernat](https://github.com/gaborbernat).
-- Add a security policy by [@gaborbernat](https://github.com/gaborbernat).
+- Add guidance for reporting security issues by [@gaborbernat](https://github.com/gaborbernat).
 
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.12.0...1.13.0
 
@@ -270,14 +259,6 @@
 <a name="release-1-10-0"></a>
 
 ## 1.10.0 (2025-10-09)
-
-<a name="release-1-10-0-changes"></a>
-
-### Changes
-
-- Raise the minimum versions of PyYAML and truststore and drop leftover Python 3.9 tooling
-  ([#172](https://github.com/gaborbernat/bump-deps-index/pull/172)). Python 3.11 stays the minimum by
-  [@gaborbernat](https://github.com/gaborbernat).
 
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.9.0...1.10.0
 
@@ -334,13 +315,6 @@
   and leave the compiled `.txt` alone ([#160](https://github.com/gaborbernat/bump-deps-index/pull/160)) by
   [@gaborbernat](https://github.com/gaborbernat).
 
-<a name="release-1-7-0-changes"></a>
-
-### Changes
-
-- Move each file format into its own loader ([#157](https://github.com/gaborbernat/bump-deps-index/pull/157)) by
-  [@gaborbernat](https://github.com/gaborbernat).
-
 <a name="release-1-7-0-fixed"></a>
 
 ### Fixed
@@ -381,11 +355,11 @@
 
 ## 1.4.8 (2024-09-18)
 
-<a name="release-1-4-8-changes"></a>
+<a name="release-1-4-8-changes"></a> <a name="release-1-4-8-documentation"></a>
 
-### Changes
+### Documentation
 
-- Fix the downloads badge in the README. No change to behavior by [@gaborbernat](https://github.com/gaborbernat).
+- Fix the downloads badge in the README by [@gaborbernat](https://github.com/gaborbernat).
 
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.7...1.4.8
 
@@ -393,12 +367,11 @@
 
 ## 1.4.7 (2024-09-18)
 
-<a name="release-1-4-7-changes"></a>
+<a name="release-1-4-7-changes"></a> <a name="release-1-4-7-packaging"></a>
 
-### Changes
+### Packaging
 
-- Rework the CI and rename the `test` extra to `testing`. No change to behavior by
-  [@gaborbernat](https://github.com/gaborbernat).
+- Rename the `test` extra to `testing` by [@gaborbernat](https://github.com/gaborbernat).
 
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.6...1.4.7
 
@@ -448,14 +421,6 @@
 
 ## 1.4.3 (2023-06-16)
 
-<a name="release-1-4-3-changes"></a>
-
-### Changes
-
-- Lint with ruff and test against the Python 3.12 beta ([#52](https://github.com/gaborbernat/bump-deps-index/pull/52))
-  ([#53](https://github.com/gaborbernat/bump-deps-index/pull/53)). No change to behavior by
-  [@gaborbernat](https://github.com/gaborbernat).
-
 **Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.2...1.4.3
 
 <a name="release-1-4-2"></a>
@@ -480,13 +445,6 @@
 ### Added
 
 - Support Python 3.12 ([#46](https://github.com/gaborbernat/bump-deps-index/pull/46)) by
-  [@gaborbernat](https://github.com/gaborbernat).
-
-<a name="release-1-4-1-changes"></a>
-
-### Changes
-
-- Publish to PyPI through trusted publishing ([#45](https://github.com/gaborbernat/bump-deps-index/pull/45)) by
   [@gaborbernat](https://github.com/gaborbernat).
 
 <a name="release-1-4-1-removed"></a>
