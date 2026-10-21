@@ -30,8 +30,8 @@ jobs:
           - "3.12"
           - "3.11"
         os:
-          - ubuntu-24.04
-          - macos-15
+          - ubuntu-26.04
+          - macos-26
           - windows-2025
     steps:
       - name: 📥 Checkout code
@@ -70,7 +70,7 @@ jobs:
           - type
           - pkg_meta
         os:
-          - ubuntu-24.04
+          - ubuntu-26.04
           - windows-2025
         exclude:
           - os: windows-2025
@@ -93,7 +93,7 @@ jobs:
         run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
   changelog:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -109,12 +109,12 @@ jobs:
           uv venv --python 3.15 "$RUNNER_TEMP/release-tools"
           uv pip sync --preview-features pylock --python "$RUNNER_TEMP/release-tools/bin/python" --group release pylock.toml
           echo "$RUNNER_TEMP/release-tools/bin" >> "$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/validate-news@144f8e68b7d4c7c44e32258b1305e4402bc4e392
+      - uses: tox-dev/github-workflows/validate-news@296388849cced16665b3e8b4397a22265418d3dc
   gate:
     name: Required checks pass
     if: always()
     needs: [test, check, changelog]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - env:
           NEEDS_JSON: ${{ toJSON(needs) }}
