@@ -74,9 +74,8 @@ def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
             for fragment in sorted(fragments.glob(f"*.{category['directory']}.md"))
         ]
         if entries:
-            anchor = category["name"].lower().replace(" ", "-")
             sections.extend((
-                f'<a name="release-unreleased-{anchor}"></a>',
+                f'<a name="release-unreleased-{category["name"].lower().replace(" ", "-")}"></a>',
                 "",
                 f"### {category['name']}",
                 "",
