@@ -13,6 +13,8 @@
 - Document earlier releases ([#269](https://github.com/gaborbernat/bump-deps-index/pull/269)) by
   [@gaborbernat](https://github.com/gaborbernat).
 
+**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.17.0...1.17.1
+
 <a name="release-1-17-0"></a>
 
 ## 1.17.0 (2026-10-08)
@@ -207,7 +209,7 @@
 - Update `deps` in `env_base` templates of `tox.toml` ([#228](https://github.com/gaborbernat/bump-deps-index/pull/228))
   by [@gaborbernat](https://github.com/gaborbernat).
 
-<a name="release-1-13-0-security"></a> <a name="release-1-13-0-documentation"></a>
+<a name="release-1-13-0-documentation"></a>
 
 ### Documentation
 
@@ -355,7 +357,7 @@
 
 ## 1.4.8 (2024-09-18)
 
-<a name="release-1-4-8-changes"></a> <a name="release-1-4-8-documentation"></a>
+<a name="release-1-4-8-documentation"></a>
 
 ### Documentation
 
@@ -367,7 +369,7 @@
 
 ## 1.4.7 (2024-09-18)
 
-<a name="release-1-4-7-changes"></a> <a name="release-1-4-7-packaging"></a>
+<a name="release-1-4-7-packaging"></a>
 
 ### Packaging
 
