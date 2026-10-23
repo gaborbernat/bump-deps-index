@@ -3,6 +3,18 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-3:
+
+1.17.3 (2026-10-23)
+===================
+
+.. _release-1-17-3-documentation:
+
+Documentation
+-------------
+
+- Keep the Sphinx changelog and contributing guide in reStructuredText (:pr:`275`) by :user:`gaborbernat`.
+
 .. _release-1-17-2:
 
 1.17.2 (2026-10-23)
