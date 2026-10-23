@@ -8,12 +8,9 @@ env:
   dists-artifact-name: python-package-distributions
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@801969505384f96d16882e224e98a74bffd09d21
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@1b7d58c3e744b505215e1cb11697a80737b0e94d
     permissions:
       contents: read
-    with:
-      changelog: docs/changelog.rst
-      artifact-base-url: https://pypi.org/project/bump-deps-index/
   previous-tag:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-26.04
@@ -33,16 +30,15 @@ jobs:
           python-version: "3.15"
           enable-cache: false
       - name: Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@801969505384f96d16882e224e98a74bffd09d21
+        uses: tox-dev/github-workflows/install-locked-tools@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
       - name: Select previous tag
         id: select
-        uses: tox-dev/github-workflows/select-previous-tag@801969505384f96d16882e224e98a74bffd09d21
+        uses: tox-dev/github-workflows/select-previous-tag@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           tag: ${{ github.ref_name }}
-          executable: ${{ runner.temp }}/release-tools/bin/release-creator
       - name: Record tagged commit
         id: identity
         env:
@@ -97,13 +93,11 @@ jobs:
           python-version: "3.15"
           enable-cache: false
       - name: Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@801969505384f96d16882e224e98a74bffd09d21
+        uses: tox-dev/github-workflows/install-locked-tools@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
-      - name: Add release tools to PATH
-        run: echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@801969505384f96d16882e224e98a74bffd09d21
+      - uses: tox-dev/github-workflows/render-release-notes@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous-tag.outputs.previous }}
@@ -129,7 +123,7 @@ jobs:
         with:
           name: github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@801969505384f96d16882e224e98a74bffd09d21
+      - uses: tox-dev/github-workflows/publish-github-release@1b7d58c3e744b505215e1cb11697a80737b0e94d
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -178,7 +172,7 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@801969505384f96d16882e224e98a74bffd09d21
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           project: bump-deps-index
           version: ${{ github.ref_name }}
@@ -194,7 +188,7 @@ jobs:
         with:
           name: github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@801969505384f96d16882e224e98a74bffd09d21
+      - uses: tox-dev/github-workflows/publish-github-release@1b7d58c3e744b505215e1cb11697a80737b0e94d
         env:
           GH_TOKEN: ${{ github.token }}
         with:
