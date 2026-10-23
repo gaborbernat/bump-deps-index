@@ -3,6 +3,19 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-5:
+
+1.17.5 (2026-10-23)
+-------------------
+
+.. _release-1-17-5-documentation:
+
+Documentation
+~~~~~~~~~~~~~
+
+- Keep the contents control visible while reading older changelog entries on narrower desktop screens (:pr:`277`) by
+  :user:`gaborbernat`.
+
 .. _release-1-17-4:
 
 1.17.4 (2026-10-23)
