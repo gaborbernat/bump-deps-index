@@ -159,6 +159,7 @@ jobs:
         with:
           attestations: true
           packages-dir: dist
+          skip-existing: true
   verify-pypi:
     needs: publish
     runs-on: ubuntu-26.04
