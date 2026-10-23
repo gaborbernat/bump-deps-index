@@ -25,13 +25,13 @@ version, release = __version__, __version__.split("+")[0]
 extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.autodoc",
+    "sphinx.ext.extlinks",
     "sphinx.ext.intersphinx",
     "sphinx.ext.inheritance_diagram",
     "sphinx_argparse_cli",
-    "myst_parser",
 ]
 
-master_doc, source_suffix = "index", {".rst": "restructuredtext", ".md": "markdown"}
+master_doc, source_suffix = "index", ".rst"
 exclude_patterns = ["changelog.d/*"]
 autosectionlabel_maxdepth = 2
 
@@ -44,6 +44,10 @@ inheritance_alias, inheritance_graph_attrs = {}, {"rankdir": "TB"}
 autodoc_default_options = {"members": True, "member-order": "bysource", "undoc-members": True, "show-inheritance": True}
 
 intersphinx_mapping = {"python": ("https://docs.python.org/3.11", None)}
+extlinks = {
+    "pr": ("https://github.com/gaborbernat/bump-deps-index/pull/%s", "#%s"),
+    "user": ("https://github.com/%s", "@%s"),
+}
 nitpicky = True
 nitpick_ignore = []
 
@@ -71,23 +75,24 @@ def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
     for category in loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["towncrier"]["type"]:
         entries = [
             f"- {fragment.read_text(encoding='utf-8').strip()}"
-            for fragment in sorted(fragments.glob(f"*.{category['directory']}.md"))
+            for fragment in sorted(fragments.glob(f"*.{category['directory']}.rst"))
         ]
         if entries:
             sections.extend((
-                f'<a name="release-unreleased-{category["name"].lower().replace(" ", "-")}"></a>',
+                f".. _release-unreleased-{category['name'].lower().replace(' ', '-')}:",
                 "",
-                f"### {category['name']}",
+                category["name"],
+                "~" * len(category["name"]),
                 "",
                 *entries,
                 "",
             ))
     if sections:
         source[0] = source[0].replace(
-            "<!-- towncrier release notes start -->",
-            '<a name="release-unreleased"></a>\n\n## Unreleased\n\n'
+            ".. towncrier release notes start",
+            ".. _release-unreleased:\n\nUnreleased\n----------\n\n"
             + "\n".join(sections)
-            + "<!-- towncrier release notes start -->",
+            + ".. towncrier release notes start",
         )
 
 

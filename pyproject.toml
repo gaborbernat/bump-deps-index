@@ -75,7 +75,6 @@ type = [
 ]
 docs = [
   "furo>=2025.12.19",
-  "myst-parser>=4",
   "sphinx>=9.0.4",
   "sphinx-argparse-cli>=1.23",
   "uv>=0.12.22",
@@ -200,8 +199,8 @@ html.skip_covered = false
 [tool.towncrier]
 name = "bump-deps-index"
 directory = "docs/changelog.d"
-filename = "docs/changelog.md"
-template = "release_creator.fragments:template.jinja2"
+filename = "docs/changelog.rst"
+template = "release_creator.fragments:template.rst.jinja2"
 title_format = false
 type = [
   { directory = "feature", name = "Added", showcontent = true },
