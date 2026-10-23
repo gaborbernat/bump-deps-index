@@ -202,6 +202,7 @@ directory = "docs/changelog.d"
 filename = "docs/changelog.rst"
 template = "release_creator.fragments:template.rst.jinja2"
 title_format = false
+underlines = [ "-", "~", "^" ]
 type = [
   { directory = "feature", name = "Added", showcontent = true },
   { directory = "change", name = "Changes", showcontent = true },
