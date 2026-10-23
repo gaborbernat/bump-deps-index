@@ -30,8 +30,8 @@ jobs:
           - "3.12"
           - "3.11"
         os:
-          - ubuntu-24.04
-          - macos-15
+          - ubuntu-26.04
+          - macos-26
           - windows-2025
     steps:
       - name: 📥 Checkout code
@@ -42,6 +42,7 @@ jobs:
       - name: 🚀 Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          version: latest-known
           python-version: "3.15"
       - name: 📦 Install tox with tox-uv
         run: uv tool install --managed-python --python 3.15 tox --with tox-uv
@@ -70,7 +71,7 @@ jobs:
           - type
           - pkg_meta
         os:
-          - ubuntu-24.04
+          - ubuntu-26.04
           - windows-2025
         exclude:
           - os: windows-2025
@@ -84,6 +85,7 @@ jobs:
       - name: 🚀 Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          version: latest-known
           python-version: "3.15"
       - name: 📦 Install tox
         run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
@@ -92,8 +94,8 @@ jobs:
       - name: 🏃 Run check for ${{ matrix.tox_env }}
         run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
   changelog:
-    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip news')
-    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,22 +103,43 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - run: uvx towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
+      - name: Install locked release tools
+        uses: tox-dev/github-workflows/install-locked-tools@cadf58a0dcc5d0c7853b248ab7c2b19bb93675d1
+        with:
+          groups: release-news
+          venv: ${{ runner.temp }}/release-tools
+      - name: Add installed tools to PATH
+        run: echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
+      - uses: tox-dev/github-workflows/validate-news@cadf58a0dcc5d0c7853b248ab7c2b19bb93675d1
+  hook-update-cooldown:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@cadf58a0dcc5d0c7853b248ab7c2b19bb93675d1
+        env:
+          GH_TOKEN: ${{ github.token }}
   gate:
     name: Required checks pass
-    if: always()
-    needs: [test, check, changelog]
-    runs-on: ubuntu-24.04
+    if: ${{ !cancelled() }} # codespell:ignore cancelled
+    needs: [test, check, changelog, hook-update-cooldown]
+    runs-on: ubuntu-26.04
     steps:
       - env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          jq -e '
+          jq -e --arg event "$EVENT_NAME" '
             all(
               to_entries[];
               .value.result == "success" or
-              (.key == "changelog" and .value.result == "skipped")
+              ((.key == "changelog" or .key == "hook-update-cooldown") and
+                .value.result == "skipped" and $event != "pull_request")
             )
-          ' <<< "$NEEDS_JSON"
+          ' <<<"$NEEDS_JSON"

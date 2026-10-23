@@ -7,4 +7,5 @@ Index
    cli
    py_api
    changelog
+   contributing
    self
