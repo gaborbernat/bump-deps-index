@@ -12,13 +12,11 @@ jobs:
     permissions:
       contents: read
   previous-tag:
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
       previous: ${{ steps.select.outputs.previous }}
-      commit: ${{ steps.identity.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,19 +37,11 @@ jobs:
         uses: tox-dev/github-workflows/select-previous-tag@1b7d58c3e744b505215e1cb11697a80737b0e94d
         with:
           tag: ${{ github.ref_name }}
-      - name: Record tagged commit
-        id: identity
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          commit=$(git rev-parse "refs/tags/$TAG^{commit}")
-          echo "commit=$commit" >>"$GITHUB_OUTPUT"
   contributor-metadata:
     needs: previous-tag
     runs-on: ubuntu-26.04
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Fetch contributor metadata
         if: needs.previous-tag.outputs.previous != ''
@@ -113,7 +103,6 @@ jobs:
   github-draft:
     needs:
       - github-notes
-      - previous-tag
       - build
     runs-on: ubuntu-26.04
     permissions:
@@ -128,7 +117,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           tag: ${{ github.ref_name }}
-          commit: ${{ needs.previous-tag.outputs.commit }}
+          commit: ${{ github.sha }}
           title: ${{ github.ref_name }}
           notes-file: ${{ runner.temp }}/release-notes.md
           mode: stage
@@ -137,7 +126,6 @@ jobs:
     needs:
       - build
       - github-draft
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-26.04
     environment:
       name: release
@@ -178,8 +166,7 @@ jobs:
           version: ${{ github.ref_name }}
           dist: dist
   github-release:
-    needs: [github-draft, verify-pypi, previous-tag]
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [github-draft, verify-pypi]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -193,7 +180,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           tag: ${{ github.ref_name }}
-          commit: ${{ needs.previous-tag.outputs.commit }}
+          commit: ${{ github.sha }}
           title: ${{ github.ref_name }}
           notes-file: ${{ runner.temp }}/release-notes.md
           mode: publish

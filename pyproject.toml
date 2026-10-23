@@ -82,11 +82,6 @@ docs = [
 lint = [ "pre-commit-uv>=4.3" ]
 lock-tools = [ "nab==0.0.22" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
-release = [
-  "prek>=0.5",
-  "release-creator>=0.6.5",
-  "towncrier>=26.9",
-]
 release-check = [
   "prek>=0.5",
 ]
@@ -114,7 +109,6 @@ metadata.hooks.fancy-pypi-readme.fragments = [ { path = "README.md" } ]
 build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
 
 [tool.uv]
-dependency-groups.release = { requires-python = ">=3.15" }
 dependency-groups.release-check = { requires-python = ">=3.15" }
 dependency-groups.release-news = { requires-python = ">=3.15" }
 dependency-groups.release-notes = { requires-python = ">=3.15" }
