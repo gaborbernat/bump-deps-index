@@ -1014,7 +1014,6 @@ command-line = [
     "release-validate",
     "--output",
     "pylock.toml",
-    "--upgrade",
 ]
 input-path = "pyproject.toml"
 mode = "universal"
