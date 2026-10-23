@@ -92,6 +92,7 @@ def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
             ".. towncrier release notes start",
             ".. _release-unreleased:\n\nUnreleased\n----------\n\n"
             + "\n".join(sections)
+            + "\n"
             + ".. towncrier release notes start",
         )
 
