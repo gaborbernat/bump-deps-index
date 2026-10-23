@@ -3,6 +3,19 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-4:
+
+1.17.4 (2026-10-23)
+-------------------
+
+.. _release-1-17-4-documentation:
+
+Documentation
+~~~~~~~~~~~~~
+
+- Keep release headings under Changelog in the documentation and use named links for comparison pages (:pr:`276`) by
+  :user:`gaborbernat`.
+
 .. _release-1-17-3:
 
 1.17.3 (2026-10-23)
