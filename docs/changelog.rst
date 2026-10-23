@@ -6,14 +6,16 @@ Changelog
 .. _release-1-17-3:
 
 1.17.3 (2026-10-23)
-===================
+-------------------
 
 .. _release-1-17-3-documentation:
 
 Documentation
--------------
+~~~~~~~~~~~~~
 
 - Keep the Sphinx changelog and contributing guide in reStructuredText (:pr:`275`) by :user:`gaborbernat`.
+
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.17.2...1.17.3>`__
 
 .. _release-1-17-2:
 
@@ -28,6 +30,8 @@ Documentation
 - Add stable links to releases and change categories in the documentation changelog (`#274
   <https://github.com/gaborbernat/bump-deps-index/pull/274>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.17.1...1.17.2>`__
+
 .. _release-1-17-1:
 
 1.17.1 (2026-10-18)
@@ -41,7 +45,7 @@ Documentation
 - Document earlier releases (`#269 <https://github.com/gaborbernat/bump-deps-index/pull/269>`__) by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.17.0...1.17.1
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.17.0...1.17.1>`__
 
 .. _release-1-17-0:
 
@@ -136,7 +140,7 @@ Security
   <https://github.com/gaborbernat/bump-deps-index/pull/264>`__) (`#265
   <https://github.com/gaborbernat/bump-deps-index/pull/265>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.16.0...1.17.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.16.0...1.17.0>`__
 
 .. _release-1-16-0:
 
@@ -187,7 +191,7 @@ Security
 - Strip credentials from URLs in error messages (`#261 <https://github.com/gaborbernat/bump-deps-index/pull/261>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.15.0...1.16.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.15.0...1.16.0>`__
 
 .. _release-1-15-0:
 
@@ -202,7 +206,7 @@ Added
 - Declare Python 3.15 support (`#242 <https://github.com/gaborbernat/bump-deps-index/pull/242>`__) by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.14.0...1.15.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.14.0...1.15.0>`__
 
 .. _release-1-14-0:
 
@@ -238,7 +242,7 @@ Security
 - Redact index credentials from the CLI output (`#238 <https://github.com/gaborbernat/bump-deps-index/pull/238>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.13.0...1.14.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.13.0...1.14.0>`__
 
 .. _release-1-13-0:
 
@@ -263,7 +267,7 @@ Documentation
 
 - Add guidance for reporting security issues by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.12.0...1.13.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.12.0...1.13.0>`__
 
 .. _release-1-12-0:
 
@@ -287,7 +291,7 @@ Fixed
   ``pytest`` could touch ``pytest-httpx`` (`#194 <https://github.com/gaborbernat/bump-deps-index/pull/194>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.11.0...1.12.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.11.0...1.12.0>`__
 
 .. _release-1-11-0:
 
@@ -311,14 +315,14 @@ Fixed
   them (`#192 <https://github.com/gaborbernat/bump-deps-index/pull/192>`__) by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.10.0...1.11.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.10.0...1.11.0>`__
 
 .. _release-1-10-0:
 
 1.10.0 (2025-10-09)
 -------------------
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.9.0...1.10.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.9.0...1.10.0>`__
 
 .. _release-1-9-0:
 
@@ -333,7 +337,7 @@ Added
 - Find requirements files with a suffix, such as ``requirements-test.txt`` (`#168
   <https://github.com/gaborbernat/bump-deps-index/pull/168>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.8.1...1.9.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.8.1...1.9.0>`__
 
 .. _release-1-8-1:
 
@@ -348,7 +352,7 @@ Fixed
 - Stop crashing on npm packages and on tox.ini substitutions such as ``{[testenv:sync]deps}`` (`#163
   <https://github.com/gaborbernat/bump-deps-index/pull/163>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.8.0...1.8.1
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.8.0...1.8.1>`__
 
 .. _release-1-8-0:
 
@@ -365,7 +369,7 @@ Changes
 - Skip the project's own name in its dependencies, such as ``demo[test]`` inside ``demo`` (`#161
   <https://github.com/gaborbernat/bump-deps-index/pull/161>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.7.0...1.8.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.7.0...1.8.0>`__
 
 .. _release-1-7-0:
 
@@ -389,7 +393,7 @@ Fixed
 - Skip yanked releases on Python indexes (`#159 <https://github.com/gaborbernat/bump-deps-index/pull/159>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.6.0...1.7.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.6.0...1.7.0>`__
 
 .. _release-1-6-0:
 
@@ -405,7 +409,7 @@ Added
   tool works behind corporate proxies (`#140 <https://github.com/gaborbernat/bump-deps-index/pull/140>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.5.0...1.6.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.5.0...1.6.0>`__
 
 .. _release-1-5-0:
 
@@ -420,7 +424,7 @@ Added
 - Update PEP 735 ``[dependency-groups]`` in ``pyproject.toml`` and ``requires`` in ``tox.toml`` (`#128
   <https://github.com/gaborbernat/bump-deps-index/pull/128>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.8...1.5.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.8...1.5.0>`__
 
 .. _release-1-4-8:
 
@@ -434,7 +438,7 @@ Documentation
 
 - Fix the downloads badge in the README by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.7...1.4.8
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.7...1.4.8>`__
 
 .. _release-1-4-7:
 
@@ -448,7 +452,7 @@ Packaging
 
 - Rename the ``test`` extra to ``testing`` by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.6...1.4.7
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.6...1.4.7>`__
 
 .. _release-1-4-6:
 
@@ -463,7 +467,7 @@ Fixed
 - Keep single quotes in environment markers, so ``A; python_version<'3.11'`` keeps its quoting when you bump it (`#113
   <https://github.com/gaborbernat/bump-deps-index/pull/113>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.5...1.4.6
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.5...1.4.6>`__
 
 .. _release-1-4-5:
 
@@ -479,7 +483,7 @@ Added
 - End Python 3.10 support; new releases require Python 3.11 or later by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.4...1.4.5
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.4...1.4.5>`__
 
 .. _release-1-4-4:
 
@@ -496,14 +500,14 @@ Fixed
 - Read the name of a scoped npm package such as ``@scope/name`` with no version by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.3...1.4.4
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.3...1.4.4>`__
 
 .. _release-1-4-3:
 
 1.4.3 (2023-06-16)
 ------------------
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.2...1.4.3
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.2...1.4.3>`__
 
 .. _release-1-4-2:
 
@@ -518,7 +522,7 @@ Fixed
 - Parse index pages as HTML again; 1.4.1 read them as XML and failed on pages that are not valid XML (`#49
   <https://github.com/gaborbernat/bump-deps-index/pull/49>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.1...1.4.2
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.1...1.4.2>`__
 
 .. _release-1-4-1:
 
@@ -541,7 +545,7 @@ Removed
 - The ``lxml`` dependency; the standard library parses index pages (`#46
   <https://github.com/gaborbernat/bump-deps-index/pull/46>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.4.0...1.4.1
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.4.0...1.4.1>`__
 
 .. _release-1-4-0:
 
@@ -557,7 +561,7 @@ Added
 - Choose pre-release handling with ``--pre-release yes|no|file-default``. The default accepts pre-releases in
   ``.pre-commit-config.yaml`` and refuses them elsewhere by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.3.0...1.4.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.3.0...1.4.0>`__
 
 .. _release-1-3-0:
 
@@ -572,7 +576,7 @@ Changes
 - Skip pre-releases when you pick the newest version (`#5 <https://github.com/gaborbernat/bump-deps-index/pull/5>`__) by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.2.0...1.3.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.2.0...1.3.0>`__
 
 .. _release-1-2-0:
 
@@ -589,7 +593,7 @@ Added
 - Pick the npm registry with ``--npm-registry`` or ``NPM_CONFIG_REGISTRY`` by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.1.0...1.2.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.1.0...1.2.0>`__
 
 .. _release-1-1-0:
 
@@ -605,7 +609,7 @@ Added
   name several (`#2 <https://github.com/gaborbernat/bump-deps-index/pull/2>`__) by `@gaborbernat
   <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.0.3...1.1.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.0.3...1.1.0>`__
 
 .. _release-1-0-3:
 
@@ -620,7 +624,7 @@ Fixed
 - Drop the build label after ``+`` from the version you write, so a release such as ``1.0+local`` gives ``>=1.0`` by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.0.2...1.0.3
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.0.2...1.0.3>`__
 
 .. _release-1-0-2:
 
@@ -635,7 +639,7 @@ Fixed
 - Read a ``setup.cfg`` without ``[options]`` or ``[options.extras_require]`` instead of failing on it (`#1
   <https://github.com/gaborbernat/bump-deps-index/pull/1>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.0.1...1.0.2
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.0.1...1.0.2>`__
 
 .. _release-1-0-1:
 
@@ -650,7 +654,7 @@ Fixed
 - Parse index pages with ``lxml``, so an index that serves HTML instead of well-formed XML no longer fails the lookup by
   `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/compare/1.0.0...1.0.1
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.0.0...1.0.1>`__
 
 .. _release-1-0-0:
 
@@ -667,4 +671,4 @@ Added
   <https://github.com/gaborbernat>`__.
 - Pick the index with ``--index-url`` or ``PIP_INDEX_URL`` by `@gaborbernat <https://github.com/gaborbernat>`__.
 
-**Full Changelog**: https://github.com/gaborbernat/bump-deps-index/commits/1.0.0
+`Full Changelog <https://github.com/gaborbernat/bump-deps-index/commits/1.0.0>`__
