@@ -127,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
   gate:
     name: Required checks pass
-    if: always()
+    if: ${{ !cancelled() }} # codespell:ignore cancelled
     needs: [test, check, changelog, hook-update-cooldown]
     runs-on: ubuntu-26.04
     steps:
