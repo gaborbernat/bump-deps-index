@@ -41,7 +41,7 @@ jobs:
     needs: previous-tag
     runs-on: ubuntu-26.04
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Fetch contributor metadata
         if: needs.previous-tag.outputs.previous != ''
