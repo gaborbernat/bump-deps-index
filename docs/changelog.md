@@ -2,6 +2,17 @@
 
 <!-- towncrier release notes start -->
 
+<a name="release-1-17-2"></a>
+
+## 1.17.2 (2026-10-23)
+
+<a name="release-1-17-2-documentation"></a>
+
+### Documentation
+
+- Add stable links to releases and change categories in the documentation changelog
+  ([#274](https://github.com/gaborbernat/bump-deps-index/pull/274)) by [@gaborbernat](https://github.com/gaborbernat).
+
 <a name="release-1-17-1"></a>
 
 ## 1.17.1 (2026-10-18)
