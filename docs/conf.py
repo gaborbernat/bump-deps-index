@@ -37,6 +37,8 @@ autosectionlabel_maxdepth = 2
 
 html_theme = "furo"
 html_title, html_last_updated_fmt = "Bump dependencies from package indexes", now.isoformat()
+html_static_path = ["_static"]
+html_css_files = ["changelog-toc.css"]
 pygments_style, pygments_dark_style = "sphinx", "monokai"
 
 autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "description", "short"
