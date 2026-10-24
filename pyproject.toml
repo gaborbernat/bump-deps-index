@@ -80,31 +80,25 @@ docs = [
   "uv>=0.12.22",
 ]
 lint = [ "pre-commit-uv>=4.3" ]
-lock-tools = [ "nab==0.0.22" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
-release = [
-  "prek>=0.5",
-  "release-creator>=0.6",
-  "towncrier>=26.9",
-]
 release-check = [
   "prek>=0.5",
 ]
 release-news = [
-  "release-creator>=0.6",
+  "release-creator>=1.1",
   "towncrier>=26.9",
 ]
 release-notes = [
-  "release-creator>=0.6",
+  "release-creator>=1.1",
 ]
 release-prepare = [
   "prek>=0.5",
-  "release-creator>=0.6",
+  "release-creator>=1.1",
   "towncrier>=26.9",
 ]
 release-validate = [
   "prek>=0.5",
-  "release-creator>=0.6",
+  "release-creator>=1.1",
 ]
 
 [tool.hatch]
@@ -114,7 +108,6 @@ metadata.hooks.fancy-pypi-readme.fragments = [ { path = "README.md" } ]
 build.hooks.vcs.version-file = "src/bump_deps_index/version.py"
 
 [tool.uv]
-dependency-groups.release = { requires-python = ">=3.15" }
 dependency-groups.release-check = { requires-python = ">=3.15" }
 dependency-groups.release-news = { requires-python = ">=3.15" }
 dependency-groups.release-notes = { requires-python = ">=3.15" }
@@ -216,17 +209,5 @@ type = [
   { directory = "packaging", name = "Packaging", showcontent = true },
 ]
 
-[tool.nab]
-mode = "universal"
-base-group = "project-runtime"
-build-group = "build"
-default-groups = []
-uploaded-prior-to = "P7D"
-decision-order = "stable"
-matrix.python = ">=3.15,<3.16"
-matrix.platforms = [ "linux_x86_64", "linux_aarch64", "macos_arm64", "windows_amd64" ]
-packages.release-creator.uploaded-prior-to = "2026-10-23T02:44:40Z"
-
-[[tool.nab.package-rules]]
-match = [ "nab", "nab-index", "nab-markersets", "nab-project", "nab-provider", "nab-resolver" ]
-uploaded-prior-to = "2026-10-19T00:00:00Z"
+[tool.release-creator]
+locks.exclude-newer-package = { release-creator = "2026-10-24T09:08:40Z" }
