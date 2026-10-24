@@ -348,6 +348,14 @@ Fixed
 1.10.0 (2025-10-09)
 -------------------
 
+.. _release-1-10-0-changes:
+
+Changes
+~~~~~~~
+
+- Require PyYAML 6.0.3 or newer and truststore 0.10.4 or newer (`#172
+  <https://github.com/gaborbernat/bump-deps-index/pull/172>`__) by `@gaborbernat <https://github.com/gaborbernat>`__.
+
 `Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.9.0...1.10.0>`__
 
 .. _release-1-9-0:
