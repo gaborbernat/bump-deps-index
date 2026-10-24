@@ -34,13 +34,6 @@ Documentation
 1.17.3 (2026-10-23)
 -------------------
 
-.. _release-1-17-3-documentation:
-
-Documentation
-~~~~~~~~~~~~~
-
-- Keep the Sphinx changelog and contributing guide in reStructuredText (:pr:`275`) by :user:`gaborbernat`.
-
 `Full Changelog <https://github.com/gaborbernat/bump-deps-index/compare/1.17.2...1.17.3>`__
 
 .. _release-1-17-2:
