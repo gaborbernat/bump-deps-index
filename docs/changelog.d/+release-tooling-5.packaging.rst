@@ -1,0 +1,1 @@
+Releases now use ``tox-dev/github-workflows`` 5.0.0. Nab generates the release-tool lock, credits and the New Contributors list are computed from git history, and hook updates come from Dependabot and pre-commit.ci.
