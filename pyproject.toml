@@ -79,26 +79,33 @@ docs = [
   "sphinx-argparse-cli>=1.23",
   "uv>=0.12.22",
 ]
+build = [
+  "cython>=3",
+  "hatch-fancy-pypi-readme>=25.1",
+  "hatch-vcs>=0.5",
+  "hatchling>=1.32.4",
+  "setuptools>=80",
+]
 lint = [ "pre-commit-uv>=4.3" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
 release-check = [
   "prek>=0.5",
 ]
 release-news = [
-  "release-creator>=2",
+  "release-creator>=3.1",
   "towncrier>=26.9",
 ]
 release-notes = [
-  "release-creator>=2",
+  "release-creator>=3.1",
 ]
 release-prepare = [
   "prek>=0.5",
-  "release-creator>=2",
+  "release-creator>=3.1",
   "towncrier>=26.9",
 ]
 release-validate = [
   "prek>=0.5",
-  "release-creator>=2",
+  "release-creator>=3.1",
 ]
 
 [tool.hatch]
@@ -209,5 +216,12 @@ type = [
   { directory = "packaging", name = "Packaging", showcontent = true },
 ]
 
-[tool.release-creator]
-locks.exclude-newer-package = { release-creator = "2026-10-25T07:08:32Z" }
+[tool.nab]
+mode = "universal"
+base-group = "project-runtime"
+uploaded-prior-to = "P7D"
+decision-order = "stable"
+matrix.python = ">=3.15,<3.16"
+matrix.platforms = [ "linux_x86_64" ]
+# temporary, delete after 2026-11-02
+packages.release-creator.uploaded-prior-to = 2026-10-25T21:03:31Z

@@ -93,34 +93,12 @@ jobs:
         run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.tox_env }}
       - name: 🏃 Run check for ${{ matrix.tox_env }}
         run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
-  hook-update-cooldown:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-26.04
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
-        with:
-          release-app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-        env:
-          GH_TOKEN: ${{ github.token }}
   gate:
     name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Non-PR checks pass' }}
     if: ${{ !cancelled() }} # codespell:ignore cancelled
-    needs: [test, check, hook-update-cooldown]
+    needs: [test, check]
     runs-on: ubuntu-26.04
     steps:
       - env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          jq -e --arg event "$EVENT_NAME" '
-            all(
-              to_entries[];
-              .value.result == "success" or
-              (.key == "hook-update-cooldown" and
-                .value.result == "skipped" and $event != "pull_request")
-            )
-          ' <<<"$NEEDS_JSON"
+        run: jq -e 'all(to_entries[]; .value.result == "success")' <<<"$NEEDS_JSON"
