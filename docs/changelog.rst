@@ -3,6 +3,20 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-6:
+
+1.17.6 (2026-10-25)
+-------------------
+
+.. _release-1-17-6-packaging:
+
+Packaging
+~~~~~~~~~
+
+- Releases are now built, checked and published by the shared ``tox-dev/github-workflows`` release workflows. Release
+  tools install from a hash-pinned lock that admits only packages published at least seven days earlier (:pr:`279`) by
+  :user:`gaborbernat`.
+
 .. _release-1-17-5:
 
 1.17.5 (2026-10-23)
