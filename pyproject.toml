@@ -85,20 +85,20 @@ release-check = [
   "prek>=0.5",
 ]
 release-news = [
-  "release-creator>=1.1",
+  "release-creator>=2",
   "towncrier>=26.9",
 ]
 release-notes = [
-  "release-creator>=1.1",
+  "release-creator>=2",
 ]
 release-prepare = [
   "prek>=0.5",
-  "release-creator>=1.1",
+  "release-creator>=2",
   "towncrier>=26.9",
 ]
 release-validate = [
   "prek>=0.5",
-  "release-creator>=1.1",
+  "release-creator>=2",
 ]
 
 [tool.hatch]
@@ -210,4 +210,4 @@ type = [
 ]
 
 [tool.release-creator]
-locks.exclude-newer-package = { release-creator = "2026-10-24T09:08:40Z" }
+locks.exclude-newer-package = { release-creator = "2026-10-25T07:08:32Z" }
