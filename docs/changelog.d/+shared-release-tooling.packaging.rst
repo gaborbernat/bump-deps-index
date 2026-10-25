@@ -1,0 +1,1 @@
+Releases are now built, checked and published by the shared ``tox-dev/github-workflows`` release workflows. Release tools install from a hash-pinned lock that admits only packages published at least seven days earlier.
