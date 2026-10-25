@@ -6,9 +6,11 @@ permissions:
   contents: read
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
   previous-tag:
     runs-on: ubuntu-26.04
     permissions:
@@ -20,19 +22,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
       - name: Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+        uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
       - name: Select previous tag
         id: select
-        uses: tox-dev/github-workflows/select-previous-tag@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+        uses: tox-dev/github-workflows/select-previous-tag@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           tag: ${{ github.ref_name }}
   contributor-metadata:
@@ -40,6 +42,8 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: write
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: Fetch contributor metadata
         if: needs.previous-tag.outputs.previous != ''
@@ -56,7 +60,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: >-
           gh api -X POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" -f tag_name="$TAG" --jq .body >"$RUNNER_TEMP/generated-notes.md"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: github-generated-notes
           path: ${{ runner.temp }}/generated-notes.md
@@ -66,6 +71,8 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,27 +80,27 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: github-generated-notes
+          artifact-ids: ${{ needs.contributor-metadata.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
       - name: Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+        uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
-      - uses: tox-dev/github-workflows/render-release-notes@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+      - uses: tox-dev/github-workflows/render-release-notes@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous-tag.outputs.previous }}
           changelog: docs/changelog.rst
           artifact-url: https://pypi.org/project/bump-deps-index/${{ github.ref_name }}/
           generated-notes: ${{ runner.temp }}/generated-notes.md
-          output: ${{ runner.temp }}/release-notes.md
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: github-release-notes
           path: ${{ runner.temp }}/release-notes.md
@@ -108,9 +115,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: github-release-notes
+          artifact-ids: ${{ needs.github-notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+      - uses: tox-dev/github-workflows/publish-github-release@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -146,34 +153,31 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build.outputs.distributions-artifact-id }}
           path: dist/
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           project: bump-deps-index
           version: ${{ github.ref_name }}
           dist: dist
   github-release:
-    needs: [github-draft, verify-pypi]
+    needs: [github-draft, github-notes, verify-pypi]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: github-release-notes
+          artifact-ids: ${{ needs.github-notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
+      - uses: tox-dev/github-workflows/publish-github-release@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
