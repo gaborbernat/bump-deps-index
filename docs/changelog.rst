@@ -3,6 +3,20 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-7:
+
+1.17.7 (2026-10-25)
+-------------------
+
+.. _release-1-17-7-packaging:
+
+Packaging
+~~~~~~~~~
+
+- Releases now use ``tox-dev/github-workflows`` 5.0.0. Nab generates the release-tool lock, credits and the New
+  Contributors list are computed from git history, and hook updates come from Dependabot and pre-commit.ci (:pr:`280`)
+  by :user:`gaborbernat`.
+
 .. _release-1-17-6:
 
 1.17.6 (2026-10-25)
