@@ -3,6 +3,18 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-17-10:
+
+1.17.10 (2026-10-26)
+--------------------
+
+.. _release-1-17-10-packaging:
+
+Packaging
+~~~~~~~~~
+
+- Releases now use ``tox-dev/github-workflows`` 6.0.0 and ``release-creator`` 4.1.0 (:pr:`283`) by :user:`gaborbernat`.
+
 .. _release-1-17-9:
 
 1.17.9 (2026-10-26)
