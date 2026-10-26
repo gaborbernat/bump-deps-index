@@ -39,7 +39,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: 🚀 Install uv
+      - name: 🐍 Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
@@ -48,9 +48,9 @@ jobs:
         run: uv tool install --managed-python --python 3.15 tox --with tox-uv
       - name: 🐍 Setup Python for test ${{ matrix.py }}
         run: uv python install ${{ matrix.py }}
-      - name: 🏗️ Setup test suite
+      - name: 📦 Set up test suite
         run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.py }}
-      - name: 🏃 Run test suite
+      - name: 🧪 Run test suite
         run: tox run --skip-pkg-install -e ${{ matrix.py }}
         timeout-minutes: 20
         env:
@@ -58,7 +58,7 @@ jobs:
           CI_RUN: "yes"
           DIFF_AGAINST: HEAD
   check:
-    name: 🔎 check ${{ matrix.tox_env }} - ${{ matrix.os }}
+    name: 🔍 check ${{ matrix.tox_env }} - ${{ matrix.os }}
     if: github.event_name != 'schedule' || github.repository_owner == 'gaborbernat'
     runs-on: ${{ matrix.os }}
     strategy:
@@ -82,23 +82,24 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: 🚀 Install uv
+      - name: 🐍 Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
       - name: 📦 Install tox
         run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
-      - name: 🏗️ Setup check suite
+      - name: 📦 Setup check suite
         run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.tox_env }}
-      - name: 🏃 Run check for ${{ matrix.tox_env }}
+      - name: 🧪 Run check for ${{ matrix.tox_env }}
         run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
   gate:
-    name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Non-PR checks pass' }}
+    name: 🚦 ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Non-PR checks pass' }}
     if: ${{ !cancelled() }} # codespell:ignore cancelled
     needs: [test, check]
     runs-on: ubuntu-26.04
     steps:
-      - env:
+      - name: 🚦 Require all needed jobs to pass
+        env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: jq -e 'all(to_entries[]; .value.result == "success")' <<<"$NEEDS_JSON"
