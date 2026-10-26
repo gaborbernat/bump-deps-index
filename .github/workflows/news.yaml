@@ -17,8 +17,8 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+      - uses: tox-dev/github-workflows/install-locked-tools@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         with:
           groups: release-news
           venv: ${{ runner.temp }}/release-tools
-      - uses: tox-dev/github-workflows/validate-news@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+      - uses: tox-dev/github-workflows/validate-news@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
