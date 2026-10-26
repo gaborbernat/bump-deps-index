@@ -224,4 +224,4 @@ decision-order = "stable"
 matrix.python = ">=3.15,<3.16"
 matrix.platforms = [ "linux_x86_64" ]
 # temporary, delete after 2026-11-02
-packages.release-creator.uploaded-prior-to = 2026-10-25T21:03:31Z
+packages.release-creator.uploaded-prior-to = 2026-10-25T23:49:37Z

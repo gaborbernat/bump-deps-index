@@ -1885,7 +1885,7 @@ sha256 = "d0dae1f74bb273b534770cb4cccb6bb78735540afdb03c2146f4e19dcd412560"
 
 [[packages]]
 name = "release-creator"
-version = "3.1.0"
+version = "3.2.0"
 marker = "\"release-news\" in dependency_groups or \"release-notes\" in dependency_groups or \"release-prepare\" in dependency_groups or \"release-validate\" in dependency_groups"
 requires-python = ">=3.15"
 dependencies = [
@@ -1900,22 +1900,22 @@ dependencies = [
 index = "https://pypi.org/simple/"
 
 [packages.sdist]
-name = "release_creator-3.1.0.tar.gz"
-upload-time = 2026-10-25 21:03:30.896511+00:00
-url = "https://files.pythonhosted.org/packages/03/98/73278ccb2393b27b702100a0eff5b387f2db6f06fc8aa0dea60bbfcbd402/release_creator-3.1.0.tar.gz"
-size = 178357
+name = "release_creator-3.2.0.tar.gz"
+upload-time = 2026-10-25 23:49:36.434836+00:00
+url = "https://files.pythonhosted.org/packages/d4/f6/af888b70adc3e43707f815645c0aab4e8ad5f9417c2c12bf01877ebd1a68/release_creator-3.2.0.tar.gz"
+size = 180596
 
 [packages.sdist.hashes]
-sha256 = "7fba39aa52283c7edb4bf906656296a0696b4d23f6d6df85ef5d9a7abca7e1b2"
+sha256 = "961f44369d1939b5886307909dd30f8fa81e432dccb5bc5c3bf88c8991c03462"
 
 [[packages.wheels]]
-name = "release_creator-3.1.0-py3-none-any.whl"
-upload-time = 2026-10-25 21:03:29.549360+00:00
-url = "https://files.pythonhosted.org/packages/35/f2/20dca23b89aadcd846a7b36d763440a2e5cf2ef3b2adda350af16406aa52/release_creator-3.1.0-py3-none-any.whl"
-size = 51886
+name = "release_creator-3.2.0-py3-none-any.whl"
+upload-time = 2026-10-25 23:49:34.991539+00:00
+url = "https://files.pythonhosted.org/packages/52/3b/1e1f5cb2cd17adb484a13b1ef528846c74428335408d0bd24e6ce38a92d4/release_creator-3.2.0-py3-none-any.whl"
+size = 52558
 
 [packages.wheels.hashes]
-sha256 = "e378a399af800452180ca1748dfb981b9f0115b634587226be927162b4b34f17"
+sha256 = "f9f24ddebf28361524b7cd561d81a29f20891778d900b401898c6ad26cd095ca"
 
 [[packages]]
 name = "requests"
@@ -2826,7 +2826,7 @@ sha256 = "3fa599046443d4ca830d06e3d180cd0a675d5871af0a68daa5623318bb4d17e3"
 
 [tool.nab]
 nab-version = "0.0.22"
-created-at = 2026-10-25 22:10:56.028740+00:00
+created-at = 2026-10-25 23:58:02.633624+00:00
 command-line = [
     "nab",
     "lock",
