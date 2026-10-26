@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
     permissions:
       contents: read
   notes:
@@ -29,16 +29,16 @@ jobs:
           python-version: "3.15"
           enable-cache: false
       - name: Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+        uses: tox-dev/github-workflows/install-locked-tools@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
       - name: Select previous tag
         id: previous
-        uses: tox-dev/github-workflows/select-previous-tag@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+        uses: tox-dev/github-workflows/select-previous-tag@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         with:
           tag: ${{ github.ref_name }}
-      - uses: tox-dev/github-workflows/render-release-notes@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+      - uses: tox-dev/github-workflows/render-release-notes@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ steps.previous.outputs.previous }}
@@ -87,7 +87,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         with:
           project: bump-deps-index
           version: ${{ github.ref_name }}
@@ -97,7 +97,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$TAG" --jq .sha)" = "$GITHUB_SHA"
-      - uses: tox-dev/github-workflows/publish-github-release@c2b2b561473103b0428e5dfd433f42d77195191c # v5.0.1
+      - uses: tox-dev/github-workflows/publish-github-release@80ce6db702c52e364d49d01aea70a145a8a95930 # v5.0.2
         env:
           GH_TOKEN: ${{ github.token }}
         with:

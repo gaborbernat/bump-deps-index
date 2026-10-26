@@ -633,28 +633,28 @@ sha256 = "d0013f540772d1420576855455d050a2180186c91c15779301ac2ccb3eeb68de"
 
 [[packages]]
 name = "filelock"
-version = "4.2.2"
+version = "4.2.3"
 marker = "\"dev\" in dependency_groups or \"lint\" in dependency_groups"
 requires-python = ">=3.11"
 index = "https://pypi.org/simple/"
 
 [packages.sdist]
-name = "filelock-4.2.2.tar.gz"
-upload-time = 2026-10-18 07:26:44.624023+00:00
-url = "https://files.pythonhosted.org/packages/d4/08/d8f81287742010e38daf3632380c8d80ede7b4df2716f8ca3d0a2b087d44/filelock-4.2.2.tar.gz"
-size = 651339
+name = "filelock-4.2.3.tar.gz"
+upload-time = 2026-10-19 00:33:43.379596+00:00
+url = "https://files.pythonhosted.org/packages/bc/d4/6b18cf75948c7f7e87c8451532e1c689581e2edd09ac10417cc5f5cfd43d/filelock-4.2.3.tar.gz"
+size = 652401
 
 [packages.sdist.hashes]
-sha256 = "b29ff2ae9140bb17b3bc77c648dc4f010d9ac0955eccabff4f2b01dde859f787"
+sha256 = "baae96d6059bcd6aab5e4d78283de7580b362b392d6e4fd8572816d646ea2bf0"
 
 [[packages.wheels]]
-name = "filelock-4.2.2-py3-none-any.whl"
-upload-time = 2026-10-18 07:26:43.115949+00:00
-url = "https://files.pythonhosted.org/packages/4e/53/35698fff350cb99c49ee01ae5cb1eb4408567792a286314ea984b53b5002/filelock-4.2.2-py3-none-any.whl"
-size = 162415
+name = "filelock-4.2.3-py3-none-any.whl"
+upload-time = 2026-10-19 00:33:40.502992+00:00
+url = "https://files.pythonhosted.org/packages/0d/50/f53d1aeb6049186d6b9816f2059290ba1afa2cf3770e7bb586fe551cce70/filelock-4.2.3-py3-none-any.whl"
+size = 162474
 
 [packages.wheels.hashes]
-sha256 = "1851d2f14ca2901e98069d68333b33ad7409f56904e17b48cc0c32a0db8ed73a"
+sha256 = "8a09a56992ac9c4eb58d17c6c723c1fe5209fbcd4d569b49d58c1a9103295061"
 
 [[packages]]
 name = "furo"
@@ -1885,7 +1885,7 @@ sha256 = "d0dae1f74bb273b534770cb4cccb6bb78735540afdb03c2146f4e19dcd412560"
 
 [[packages]]
 name = "release-creator"
-version = "3.2.0"
+version = "3.2.1"
 marker = "\"release-news\" in dependency_groups or \"release-notes\" in dependency_groups or \"release-prepare\" in dependency_groups or \"release-validate\" in dependency_groups"
 requires-python = ">=3.15"
 dependencies = [
@@ -1900,22 +1900,22 @@ dependencies = [
 index = "https://pypi.org/simple/"
 
 [packages.sdist]
-name = "release_creator-3.2.0.tar.gz"
-upload-time = 2026-10-25 23:49:36.434836+00:00
-url = "https://files.pythonhosted.org/packages/d4/f6/af888b70adc3e43707f815645c0aab4e8ad5f9417c2c12bf01877ebd1a68/release_creator-3.2.0.tar.gz"
-size = 180596
+name = "release_creator-3.2.1.tar.gz"
+upload-time = 2026-10-26 00:42:36.586228+00:00
+url = "https://files.pythonhosted.org/packages/fa/67/e212616a07042f4c72b187fcc1db3b443486a1eed8295be8b0f39855209a/release_creator-3.2.1.tar.gz"
+size = 182918
 
 [packages.sdist.hashes]
-sha256 = "961f44369d1939b5886307909dd30f8fa81e432dccb5bc5c3bf88c8991c03462"
+sha256 = "6786924e88d71c0ec5b37c947884e012cb1e856d0ebf6bc37b8d92beeab9dd2b"
 
 [[packages.wheels]]
-name = "release_creator-3.2.0-py3-none-any.whl"
-upload-time = 2026-10-25 23:49:34.991539+00:00
-url = "https://files.pythonhosted.org/packages/52/3b/1e1f5cb2cd17adb484a13b1ef528846c74428335408d0bd24e6ce38a92d4/release_creator-3.2.0-py3-none-any.whl"
-size = 52558
+name = "release_creator-3.2.1-py3-none-any.whl"
+upload-time = 2026-10-26 00:42:35.115451+00:00
+url = "https://files.pythonhosted.org/packages/79/9d/13fc115128b5fff6ef807c7e1558196030f803dc75754665b07d3357dbc3/release_creator-3.2.1-py3-none-any.whl"
+size = 52816
 
 [packages.wheels.hashes]
-sha256 = "f9f24ddebf28361524b7cd561d81a29f20891778d900b401898c6ad26cd095ca"
+sha256 = "83d9bf15347236946d32b7db658fee9f754c1fd1dd4742d78b09998dec5f12b9"
 
 [[packages]]
 name = "requests"
@@ -2826,7 +2826,7 @@ sha256 = "3fa599046443d4ca830d06e3d180cd0a675d5871af0a68daa5623318bb4d17e3"
 
 [tool.nab]
 nab-version = "0.0.22"
-created-at = 2026-10-25 23:58:02.633624+00:00
+created-at = 2026-10-26 00:43:37.327295+00:00
 command-line = [
     "nab",
     "lock",
