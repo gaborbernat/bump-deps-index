@@ -39,6 +39,7 @@ the open and publish no advisory. Classify by who supplies the dangerous input, 
 - A credential from `.npmrc` or an index URL sent to a host other than the registry it is configured for.
 - Editing a file the run did not select, or writing outside the project.
 - A yanked release, or a file listed for another project on an index page, chosen as the update.
+- Index credentials appearing unredacted in the tool's output or error messages.
 
 **Out of scope**
 

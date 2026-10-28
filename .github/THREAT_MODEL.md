@@ -33,18 +33,19 @@ which first needs a trusted element compromised is out of scope; the first triag
 [DOMPurify](https://github.com/cure53/DOMPurify/blob/main/SECURITY.md#what-we-consider-a-vulnerability) puts it, is what
 the attacker controls.
 
-| Project                                                             | Language   | Where it draws the line                                                                |
-| ------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------- |
-| [Renovate](https://github.com/renovatebot/renovate/security/policy) | TypeScript | Dependency updater; private advisories, published about a month after the fix ships.   |
-| [pnpm](https://github.com/pnpm/pnpm/security/policy)                | JavaScript | Registry metadata is untrusted input; the local project and store are trusted.         |
-| [npm CLI](https://github.com/npm/cli/security/policy)               | JavaScript | Reads registry metadata for `npm outdated`; private reports, no separate threat model. |
+| Project                                                             | Language   | Where it draws the line                                                                                                                                                  |
+| ------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Renovate](https://github.com/renovatebot/renovate/security/policy) | TypeScript | Dependency updater; private advisories, published about a month after the fix ships.                                                                                     |
+| [pnpm](https://github.com/pnpm/pnpm/security/policy)                | JavaScript | Draws its boundary at filesystem permissions: the store, project, lockfile and configuration are trusted, and running it in a repository means trusting that repository. |
+| [npm CLI](https://github.com/npm/cli/security/policy)               | JavaScript | Follows GitHub's open source reporting policy, which defines no scope of its own.                                                                                        |
 
 ## Trusted
 
 An attacker who controls any of these already has what bump-deps-index could give them:
 
 - The user, the command line and the project files it edits.
-- The configured indexes and registries, and the credentials in `.npmrc`.
+- The configured indexes and registries, pip, uv and npm configuration (`pip.conf`, `uv.toml`, `.npmrc`), and the
+  credentials in them.
 
 ## Untrusted inputs
 
@@ -52,6 +53,7 @@ An attacker who controls any of these already has what bump-deps-index could giv
 | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Release lists from indexes and registries | Anyone who can publish a package      | Only strings that parse as a PEP 440 or semver version are written; yanked files and files of other projects on an index page are skipped. |
 | Hook manifests                            | Hook repositories at the pinned `rev` | Parsed with YAML `safe_load` and used only to classify hooks.                                                                              |
+| Error text from indexes and registries    | The configured hosts                  | Credentials in URLs are redacted before an error is printed.                                                                               |
 
 ## Threats and controls
 
@@ -64,8 +66,8 @@ An attacker who controls any of these already has what bump-deps-index could giv
 ## Release chain
 
 Releases run on the shared [tox-dev/github-workflows](https://github.com/tox-dev/github-workflows) pipeline. A release
-App, not a person, pushes the release commit and tag; the build installs its tools hash-checked from `pylock.toml` with
-a seven-day upload cooldown; PyPI receives the files through
+App, not a person, pushes the release commit and tag; the build installs its tools from a hash-checked `pylock.toml`
+resolved with a seven-day upload cooldown by default; PyPI receives the files through
 [trusted publishing](https://docs.pypi.org/trusted-publishers/) with attestations, and the GitHub Release is immutable.
 Every workflow pins third-party actions to a commit SHA.
 
@@ -76,6 +78,14 @@ Every workflow pins third-party actions to a commit SHA.
 | A registry returns version `1.0.0\n--extra-index-url https://evil` and it lands in a file | Vulnerability       | Untrusted data escaped the version field.        |
 | The tool upgrades to a freshly published malicious release                                | Not a vulnerability | It reports what the index offers; use cooldowns. |
 | A comment in `pyproject.toml` is reformatted                                              | Bug                 | Layout preservation, no boundary.                |
+
+## Severity
+
+- **High:** a credential sent to a host other than the registry it is configured for, or index data written into a file
+  as anything other than a version.
+- **Medium:** a yanked release or another project's file chosen as an update, a file the run did not select edited, or a
+  credential printed unredacted.
+- **Low:** a crash on a malformed index response instead of a clean error.
 
 ## Accepted risks
 
