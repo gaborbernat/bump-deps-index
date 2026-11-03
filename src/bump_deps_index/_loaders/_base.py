@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterable, Iterator, Mapping
 
     from bump_deps_index._config import UvIndexes
     from bump_deps_index._lookup import PkgType
@@ -103,9 +103,17 @@ class Entry:
     extra_index_urls: tuple[str, ...] = ()
 
 
+def splice(text: str, edits: Iterable[tuple[int, int, str]]) -> str:
+    # apply from the end so each edit leaves the offsets of the earlier ones valid
+    for start, end, encoded in sorted(edits, reverse=True):
+        text = f"{text[:start]}{encoded}{text[end:]}"
+    return text
+
+
 __all__ = [
     "Entry",
     "Loaded",
     "Loader",
     "SingleFileLoader",
+    "splice",
 ]

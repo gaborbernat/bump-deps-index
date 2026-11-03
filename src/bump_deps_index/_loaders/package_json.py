@@ -8,7 +8,7 @@ from typing_extensions import override
 from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import table
 
-from ._base import Entry, Loaded, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader, splice
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -53,9 +53,7 @@ class PackageJson(SingleFileLoader):
                 start, end = span
                 if new := changes.get(f"{name}@{json.loads(text[start - 1 : end + 1]).strip()}"):
                     edits.append((start, end, json.dumps(new[len(name) + 1 :])[1:-1]))
-        for start, end, encoded in sorted(edits, reverse=True):
-            text = f"{text[:start]}{encoded}{text[end:]}"
-        return text
+        return splice(text, edits)
 
     @staticmethod
     def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:

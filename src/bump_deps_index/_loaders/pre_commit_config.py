@@ -12,7 +12,7 @@ from bump_deps_index._hook_manifest import hook_languages
 from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
 
-from ._base import Entry, Loaded, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader, splice
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -63,6 +63,7 @@ class PreCommitConfig(SingleFileLoader):
 
     @override
     def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+        # keyed by start: an alias yields its anchored node again, which must be edited once
         edits: dict[int, tuple[int, str]] = {}
         verdicts = iter(kept)
         for hook in self._hooks(self._value(compose_yaml(text, Loader=SafeLoader), "repos")):
@@ -77,9 +78,7 @@ class PreCommitConfig(SingleFileLoader):
                     and (encoded := self._encode(new, item.style, flow=dependencies.flow_style is True)) is not None
                 ):
                     edits[self._scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
-        for start, (end, encoded) in sorted(edits.items(), reverse=True):
-            text = f"{text[:start]}{encoded}{text[end:]}"
-        return text
+        return splice(text, ((start, end, encoded) for start, (end, encoded) in edits.items()))
 
     @staticmethod
     def _hooks(repos: Node | None) -> Iterator[MappingNode]:
