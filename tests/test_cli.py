@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from conftest import FakeIndex
 
-pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
 _FILES: Final[dict[str, str]] = {
     "pyproject.toml": '[project]\ndependencies = ["foo>=1"]\n',

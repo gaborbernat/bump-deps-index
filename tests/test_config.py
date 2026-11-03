@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
 
 
-pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
 
 @pytest.mark.parametrize(

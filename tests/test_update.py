@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
     from conftest import Bump, FakeIndex
 
-pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
 
 def test_update_python_parses_index_file_names(bump: Bump) -> None:

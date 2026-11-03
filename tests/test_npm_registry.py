@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from conftest import Bump
     from pytest_httpx import HTTPXMock
 
-pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
 
 _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"

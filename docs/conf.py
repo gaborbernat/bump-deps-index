@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from tomllib import loads
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import bump_deps_index
 from bump_deps_index import __version__
@@ -26,12 +26,13 @@ def _inheritance_aliases() -> dict[str, str]:
     return aliases
 
 
-project = "bump-deps-index"
-now = datetime.now(tz=UTC)
-globals()["copyright"] = f"2022-{now.year}"
-version, release = __version__, __version__.split("+")[0]
+project: Final[str] = "bump-deps-index"
+_NOW: Final[datetime] = datetime.now(tz=UTC)
+globals()["copyright"] = f"2022-{_NOW.year}"
+version: Final[str] = __version__
+release: Final[str] = __version__.split("+")[0]
 
-extensions = [
+extensions: Final[list[str]] = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.autodoc",
     "sphinx.ext.extlinks",
@@ -40,27 +41,38 @@ extensions = [
     "sphinx_argparse_cli",
 ]
 
-master_doc, source_suffix = "index", ".rst"
-exclude_patterns = ["changelog.d/*"]
-autosectionlabel_maxdepth = 2
+master_doc: Final[str] = "index"
+source_suffix: Final[str] = ".rst"
+exclude_patterns: Final[list[str]] = ["changelog.d/*"]
+autosectionlabel_maxdepth: Final[int] = 2
 
-html_theme = "furo"
-html_title, html_last_updated_fmt = "Bump dependencies from package indexes", now.isoformat()
-html_static_path = ["_static"]
-html_css_files = ["changelog-toc.css"]
-pygments_style, pygments_dark_style = "sphinx", "monokai"
+html_theme: Final[str] = "furo"
+html_title: Final[str] = "Bump dependencies from package indexes"
+html_last_updated_fmt: Final[str] = _NOW.isoformat()
+html_static_path: Final[list[str]] = ["_static"]
+html_css_files: Final[list[str]] = ["changelog-toc.css"]
+pygments_style: Final[str] = "sphinx"
+pygments_dark_style: Final[str] = "monokai"
 
-autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "description", "short"
-inheritance_alias, inheritance_graph_attrs = _inheritance_aliases(), {"rankdir": "TB"}
-autodoc_default_options = {"members": True, "member-order": "bysource", "undoc-members": True, "show-inheritance": True}
+autoclass_content: Final[str] = "both"
+autodoc_typehints: Final[str] = "description"
+autodoc_typehints_format: Final[str] = "short"
+inheritance_alias: Final[dict[str, str]] = _inheritance_aliases()
+inheritance_graph_attrs: Final[dict[str, str]] = {"rankdir": "TB"}
+autodoc_default_options: Final[dict[str, bool | str]] = {
+    "members": True,
+    "member-order": "bysource",
+    "undoc-members": True,
+    "show-inheritance": True,
+}
 
-intersphinx_mapping = {"python": ("https://docs.python.org/3.11", None)}
-extlinks = {
+intersphinx_mapping: Final[dict[str, tuple[str, None]]] = {"python": ("https://docs.python.org/3.11", None)}
+extlinks: Final[dict[str, tuple[str, str]]] = {
     "pr": ("https://github.com/gaborbernat/bump-deps-index/pull/%s", "#%s"),
     "user": ("https://github.com/%s", "@%s"),
 }
-nitpicky = True
-nitpick_ignore = []
+nitpicky: Final[bool] = True
+nitpick_ignore: Final[list[str]] = []
 
 
 def setup(app: Sphinx) -> None:
