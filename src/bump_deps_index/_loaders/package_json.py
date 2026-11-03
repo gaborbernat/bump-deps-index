@@ -57,7 +57,6 @@ class PackageJson(SingleFileLoader):
 
 
 def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
-    # a later duplicate key wins, as it does for `json`
     at = _skip_blank(text, at)
     if text[at] == '"':
         end = _string_end(text, at)
@@ -72,6 +71,7 @@ def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
     while (at := _skip_blank(text, at)) < len(text) and text[at] != closing:
         if closing == "}":
             key_end = _string_end(text, at)
+            # a later duplicate key wins, as it does for `json`
             members[json.loads(text[at:key_end])], at = _json_node(text, text.index(":", key_end) + 1)
         else:
             _, at = _json_node(text, at)

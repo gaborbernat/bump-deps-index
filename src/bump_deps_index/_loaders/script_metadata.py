@@ -77,7 +77,6 @@ def _metadata(content: str) -> dict[str, Parsed]:
 
 
 def _block(lines: list[str]) -> tuple[int, int] | None:
-    # the lines between the `# /// script` and `# ///` markers
     start = None
     for at, line in enumerate(lines):
         if line.rstrip() == _START:

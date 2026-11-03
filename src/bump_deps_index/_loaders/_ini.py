@@ -22,7 +22,7 @@ def read_ini(filename: Path) -> RawConfigParser:
 class _NoTransformConfigParser(RawConfigParser):
     @override
     def optionxform(self, optionstr: str) -> str:
-        """Preserve dependency names because package indexes treat punctuation as significant."""
+        # package indexes treat punctuation in names as significant, so keep the key as written
         return optionstr
 
 
