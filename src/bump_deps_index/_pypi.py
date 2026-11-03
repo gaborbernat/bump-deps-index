@@ -24,16 +24,10 @@ if TYPE_CHECKING:
 
     from httpx import Client
 
+    from bump_deps_index._lookup import IndexLookup
+
 _SIMPLE_JSON: Final[str] = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final[str] = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
-
-
-class IndexLookup(NamedTuple):
-    url: str
-    first: tuple[str, ...] = ()
-    """uv indexes checked before `url`; uv takes a package from the first one that has it."""
-    extra: tuple[str, ...] = ()
-    """pip extra indexes, whose releases pip merges with those of `url`."""
 
 
 class SimpleIndex:
@@ -155,6 +149,5 @@ def _parse_filename(filename: str) -> tuple[str, Version]:
 
 
 __all__ = [
-    "IndexLookup",
     "SimpleIndex",
 ]

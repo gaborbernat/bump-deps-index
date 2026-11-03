@@ -21,11 +21,12 @@ from bump_deps_index._config import (
     pip_extra_indexes,
 )
 from bump_deps_index._loaders import get_loaders
+from bump_deps_index._lookup import Lookup, PkgType, package_type
 from bump_deps_index._npm_registry import NpmRegistry
 from bump_deps_index._pep440 import python_floor
 from bump_deps_index._pypi import SimpleIndex
 from bump_deps_index._redact import redact_text, redact_url
-from bump_deps_index._spec import Lookup, PkgType, package_type, update
+from bump_deps_index._update import update
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
-from bump_deps_index._spec import PkgType
+from bump_deps_index._lookup import PkgType
 
 from ._base import Entry, SingleFileLoader
 from ._ini import ini_values, read_ini, update_ini

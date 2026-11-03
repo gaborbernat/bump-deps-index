@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
     from bump_deps_index._config import UvIndexes
-    from bump_deps_index._spec import PkgType
+    from bump_deps_index._lookup import PkgType
 
 
 class Loader(ABC):

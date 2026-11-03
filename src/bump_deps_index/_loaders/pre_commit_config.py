@@ -12,8 +12,8 @@ from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode, YAMLEr
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
+from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
-from bump_deps_index._spec import PkgType, package_type
 
 from ._base import Entry, SingleFileLoader
 

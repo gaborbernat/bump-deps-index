@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
+from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import table
-from bump_deps_index._spec import PkgType
 
 from ._base import Entry, SingleFileLoader
 

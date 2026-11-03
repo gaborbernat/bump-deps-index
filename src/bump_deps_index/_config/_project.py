@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING, NamedTuple
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
+from bump_deps_index._lookup import IndexLookup, PkgType
 from bump_deps_index._parsed import table
 from bump_deps_index._pep440 import python_floor
-from bump_deps_index._pypi import IndexLookup
-from bump_deps_index._spec import PkgType
 
 from ._uv import UvIndexes, uv_project_indexes
 

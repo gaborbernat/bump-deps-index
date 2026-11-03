@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Final
 from typing_extensions import override
 
 from bump_deps_index._config import script_uv_indexes
+from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import strings
-from bump_deps_index._spec import PkgType
 
 from ._base import Entry, Loader
 from ._toml_text import replace_strings

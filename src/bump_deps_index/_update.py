@@ -1,32 +1,17 @@
 from __future__ import annotations
 
-from enum import StrEnum
-from typing import TYPE_CHECKING, NamedTuple
-from urllib.parse import urlsplit
+from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
 
+from bump_deps_index._lookup import PkgType
 from bump_deps_index._pep440 import bump_python
 from bump_deps_index._semver import bump_js
 
 if TYPE_CHECKING:
-    from packaging.version import Version
-
+    from bump_deps_index._lookup import Lookup
     from bump_deps_index._npm_registry import NpmRegistry
-    from bump_deps_index._pypi import IndexLookup, SimpleIndex
-
-
-class PkgType(StrEnum):
-    PYTHON = "Python"
-    JS = "JavaScript"
-
-
-class Lookup(NamedTuple):
-    requirement: str
-    pkg_type: PkgType
-    pre_release: bool
-    python_floor: Version | None
-    indexes: IndexLookup
+    from bump_deps_index._pypi import SimpleIndex
 
 
 def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
@@ -44,17 +29,6 @@ def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
     return bump_python(lookup.requirement, requirement, versions, pre_release=lookup.pre_release)
 
 
-def package_type(spec: str) -> PkgType:
-    try:
-        requirement = Requirement(spec)
-    except ValueError:
-        return PkgType.JS
-    return PkgType.PYTHON if requirement.url is None or urlsplit(requirement.url).scheme else PkgType.JS
-
-
 __all__ = [
-    "Lookup",
-    "PkgType",
-    "package_type",
     "update",
 ]
