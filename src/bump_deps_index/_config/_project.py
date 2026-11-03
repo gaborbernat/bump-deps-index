@@ -6,19 +6,19 @@ from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 from bump_deps_index._lookup import IndexLookup, PkgType
 from bump_deps_index._parsed import table
-from bump_deps_index._pep440 import python_floor
 
 from ._uv import UvIndexes, uv_project_indexes
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import datetime
     from pathlib import Path
-
-    from packaging.version import Version
 
     from bump_deps_index._loaders._base import Entry
 
@@ -53,6 +53,52 @@ class Project:
     name: str | None = None
     python_floor: Version | None = None
     uv: UvIndexes | None = None
+
+
+def python_floor(requires_python: str | None) -> Version | None:
+    specifiers = SpecifierSet(requires_python or "")
+    bounds = [
+        _lower_bound(specifier.operator, specifier.version)
+        for specifier in specifiers
+        if specifier.operator in {"==", ">", ">=", "~="}
+    ]
+    if not bounds:
+        return None
+    floor = max(bounds)
+    for excluded in specifiers:
+        if (
+            excluded.operator == "!="
+            and excluded.version.endswith(".*")
+            and floor in SpecifierSet(f"=={excluded.version}")
+        ):
+            prefix = Version(excluded.version.removesuffix(".*")).release
+            floor = _release((*prefix[:-1], prefix[-1] + 1))
+    excluded_versions = {
+        Version(specifier.version)
+        for specifier in specifiers
+        if specifier.operator == "!=" and not specifier.version.endswith(".*")
+    }
+    while floor in excluded_versions:
+        floor = _next_release(floor)
+    return floor if specifiers.contains(floor, prereleases=True) else None
+
+
+def _lower_bound(operator: str, raw_version: str) -> Version:
+    version = Version(raw_version.removesuffix(".*"))
+    if operator != ">":
+        return version
+    if version.is_prerelease or version.is_devrelease:
+        return _release(version.release)
+    return _next_release(version)
+
+
+def _release(parts: Iterable[int]) -> Version:
+    return Version(".".join(str(part) for part in parts))
+
+
+def _next_release(version: Version) -> Version:
+    release = (*version.release, *(0 for _ in range(3 - len(version.release))))
+    return _release((*release[:-1], release[-1] + 1))
 
 
 def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: IndexSettings) -> IndexLookup:
@@ -108,4 +154,5 @@ __all__ = [
     "entry_indexes",
     "get_project",
     "named_indexes",
+    "python_floor",
 ]

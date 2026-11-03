@@ -14,11 +14,10 @@ from yaml import YAMLError
 
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
-from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes
+from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes, python_floor
 from ._loaders._registry import get_loaders
 from ._lookup import Lookup, PkgType, package_type
 from ._npm_registry import NpmRegistry
-from ._pep440 import python_floor
 from ._pypi import SimpleIndex
 from ._redact import redact_text, redact_url
 from ._update import update

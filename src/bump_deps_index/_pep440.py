@@ -4,11 +4,12 @@ import re
 from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
-from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from packaging.specifiers import Specifier
 
 
 def bump_python(spec: str, requirement: Requirement, versions: Iterable[Version], *, pre_release: bool) -> str:
@@ -103,53 +104,6 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
     return pattern.sub(lambda match: f"{current.operator}{match['space']}{new_version}", spec, count=1)
 
 
-def python_floor(requires_python: str | None) -> Version | None:
-    specifiers = SpecifierSet(requires_python or "")
-    bounds = [
-        _lower_bound(specifier.operator, specifier.version)
-        for specifier in specifiers
-        if specifier.operator in {"==", ">", ">=", "~="}
-    ]
-    if not bounds:
-        return None
-    floor = max(bounds)
-    for excluded in specifiers:
-        if (
-            excluded.operator == "!="
-            and excluded.version.endswith(".*")
-            and floor in SpecifierSet(f"=={excluded.version}")
-        ):
-            prefix = Version(excluded.version.removesuffix(".*")).release
-            floor = _release((*prefix[:-1], prefix[-1] + 1))
-    excluded_versions = {
-        Version(specifier.version)
-        for specifier in specifiers
-        if specifier.operator == "!=" and not specifier.version.endswith(".*")
-    }
-    while floor in excluded_versions:
-        floor = _next_release(floor)
-    return floor if specifiers.contains(floor, prereleases=True) else None
-
-
-def _lower_bound(operator: str, raw_version: str) -> Version:
-    version = Version(raw_version.removesuffix(".*"))
-    if operator != ">":
-        return version
-    if version.is_prerelease or version.is_devrelease:
-        return _release(version.release)
-    return _next_release(version)
-
-
-def _release(parts: Iterable[int]) -> Version:
-    return Version(".".join(str(part) for part in parts))
-
-
-def _next_release(version: Version) -> Version:
-    release = (*version.release, *(0 for _ in range(3 - len(version.release))))
-    return _release((*release[:-1], release[-1] + 1))
-
-
 __all__ = [
     "bump_python",
-    "python_floor",
 ]
