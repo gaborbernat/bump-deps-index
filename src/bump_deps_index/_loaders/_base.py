@@ -44,16 +44,22 @@ class Loader(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def _restore_endings(raw: str, old: list[str], new: list[str]) -> list[str]:
+    def _restore_endings(raw: str, old_lines: list[str], new_lines: list[str]) -> list[str]:
         # give each line back its own ending; the lines around the edits keep theirs when a rewrite joins lines
-        head = next((at for at, (left, right) in enumerate(zip(old, new, strict=False)) if left != right), len(new))
-        pairs = zip(reversed(old[head:]), reversed(new[head:]), strict=False)
-        tail = next((at for at, (left, right) in enumerate(pairs) if left != right), min(len(old), len(new)) - head)
+        head = next(
+            (at for at, (left, right) in enumerate(zip(old_lines, new_lines, strict=False)) if left != right),
+            len(new_lines),
+        )
+        pairs = zip(reversed(old_lines[head:]), reversed(new_lines[head:]), strict=False)
+        tail = next(
+            (at for at, (left, right) in enumerate(pairs) if left != right),
+            min(len(old_lines), len(new_lines)) - head,
+        )
         endings = [*re.findall(r"\r\n?|\n", raw), ""]
         return [
             *endings[:head],
-            *Loader._fit(endings[head : len(old) - tail], len(new) - head - tail),
-            *endings[len(old) - tail :],
+            *Loader._fit(endings[head : len(old_lines) - tail], len(new_lines) - head - tail),
+            *endings[len(old_lines) - tail :],
         ]
 
     @staticmethod

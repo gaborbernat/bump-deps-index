@@ -32,11 +32,11 @@ class PackageJson(SingleFileLoader):
             cfg: Parsed = json.load(file_handler)
         for section in _SECTIONS:
             yield from (
-                Entry(f"{name}@{wanted.strip()}", PkgType.JS)
-                for name, wanted in table(cfg, section).items()
+                Entry(f"{name}@{spec.strip()}", PkgType.JS)
+                for name, spec in table(cfg, section).items()
                 # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
                 # empty range, which npm reads as `*`
-                if isinstance(wanted, str) and wanted.strip() and ":" not in wanted and "/" not in wanted
+                if isinstance(spec, str) and spec.strip() and ":" not in spec and "/" not in spec
             )
 
     @override

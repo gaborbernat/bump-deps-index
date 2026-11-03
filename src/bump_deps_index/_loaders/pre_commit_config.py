@@ -109,7 +109,8 @@ class PreCommitConfig(SingleFileLoader):
     @staticmethod
     def _encode(value: str, style: str | None, *, flow: bool) -> str | None:
         if style == "'":
-            return "'{}'".format(value.replace("'", "''"))
+            quoted = value.replace("'", "''")
+            return f"'{quoted}'"
         # a JSON string is a valid YAML double-quoted scalar; quote a plain one where a `,` would end it, as in `[a, b]`
         if style == '"' or (style is None and flow and any(character in value for character in ",[]{}")):
             return json.dumps(value)

@@ -15,7 +15,7 @@ _ARRAY: Final[str] = "[]"
 def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tuple[str, ...]], bool]) -> str:
     pieces: list[str] = []
     last = 0
-    for string in _TomlScanner(text).strings():
+    for string in _TomlScanner(text).literals():
         value = _decode(text, string)
         if not wanted(string.path) or (new := changes.get(value.strip())) is None:
             continue
@@ -37,21 +37,22 @@ class _TomlScanner:
     def __init__(self, text: str) -> None:
         self._text, self._at = text, 0
 
-    def strings(self) -> Iterator[_String]:
-        table: tuple[str, ...] = ()
+    def literals(self) -> Iterator[_String]:
+        section: tuple[str, ...] = ()
         body: list[_String] = []
         while self._skip(newlines=True) < len(self._text):
             if self._text.startswith("[", self._at):
-                yield from self._with_kind(table, body)
+                yield from self._with_kind(section, body)
                 array_table = self._text.startswith("[[", self._at)
-                self._at += 2 if array_table else 1
-                table, body = (*self._key(), *([_ARRAY] if array_table else [])), []
-                self._at += 2 if array_table else 1
+                brackets = 2 if array_table else 1
+                self._at += brackets
+                section, body = (*self._key(), *([_ARRAY] if array_table else [])), []
+                self._at += brackets
             else:
                 key = self._key()
                 self._at = self._text.index("=", self._at) + 1
-                body.extend(self._value((*table, *key)))
-        yield from self._with_kind(table, body)
+                body.extend(self._value((*section, *key)))
+        yield from self._with_kind(section, body)
 
     def _skip(self, *, newlines: bool) -> int:
         blank = " \t\r\n" if newlines else " \t"
@@ -65,10 +66,10 @@ class _TomlScanner:
                 break
         return self._at
 
-    def _with_kind(self, path: tuple[str, ...], strings: list[_String]) -> Iterator[_String]:
+    def _with_kind(self, path: tuple[str, ...], members: list[_String]) -> Iterator[_String]:
         # tox reads a substitution by its `replace` kind, so carry the kind in the path of its values
-        kind = next((_decode(self._text, item) for item in strings if item.path == (*path, "replace")), None)
-        for item in strings:
+        kind = next((_decode(self._text, item) for item in members if item.path == (*path, "replace")), None)
+        for item in members:
             yield item if kind is None else item._replace(path=(*path, f"{{{kind}}}", *item.path[len(path) :]))
 
     def _key(self) -> tuple[str, ...]:
@@ -89,7 +90,8 @@ class _TomlScanner:
 
     def _string(self, path: tuple[str, ...]) -> _String:
         character = self._text[self._at]
-        quote = character * 3 if self._text.startswith(character * 3, self._at) else character
+        triple = character * 3
+        quote = triple if self._text.startswith(triple, self._at) else character
         start = at = self._at + len(quote)
         while at < len(self._text) and not self._text.startswith(quote, at):
             at += 2 if character == '"' and self._text[at] == "\\" else 1
@@ -121,14 +123,14 @@ class _TomlScanner:
 
     def _inline_table(self, path: tuple[str, ...]) -> Iterator[_String]:
         self._at += 1
-        strings: list[_String] = []
+        members: list[_String] = []
         while self._skip(newlines=True) < len(self._text) and self._text[self._at] != "}":
             key = self._key()
             self._at = self._text.index("=", self._at) + 1
-            strings.extend(self._value((*path, *key)))
+            members.extend(self._value((*path, *key)))
             self._skip_comma()
         self._at += 1
-        yield from self._with_kind(path, strings)
+        yield from self._with_kind(path, members)
 
 
 class _String(NamedTuple):
