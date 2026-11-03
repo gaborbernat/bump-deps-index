@@ -23,7 +23,7 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
     )
     if iso and any(iso.groupdict().values()):
         return now - timedelta(**{name: int(count) for name, count in iso.groupdict().items() if count})
-    friendly = re.fullmatch(
+    if friendly := re.fullmatch(
         r"""
         (?P<count>\d+)                                   # the amount
         \s*                                              # an optional space before the unit
@@ -31,8 +31,7 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
         """,
         text,
         re.VERBOSE | re.IGNORECASE,
-    )
-    if friendly:
+    ):
         return now - timedelta(**{f"{friendly['unit'].lower().rstrip('s')}s": int(friendly["count"])})
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         return datetime.fromisoformat(text).astimezone()
