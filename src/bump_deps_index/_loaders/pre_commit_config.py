@@ -64,7 +64,8 @@ class PreCommitConfig(SingleFileLoader):
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         edits: dict[int, tuple[int, str]] = {}
-        kept = iter(self._kept_by_file[filename])
+        # the verdicts serve this one rewrite, so take them off the cached loader rather than keep them
+        kept = iter(self._kept_by_file.pop(filename))
         for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
             if (dependencies := _value(hook, "additional_dependencies")) is None:
                 continue
