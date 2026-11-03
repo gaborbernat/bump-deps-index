@@ -17,8 +17,7 @@ from packaging.utils import (
 )
 from packaging.version import Version
 
-from bump_deps_index._cutoff import parse_timestamp
-from bump_deps_index._parsed import json_field, mappings
+from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from datetime import datetime

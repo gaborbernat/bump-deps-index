@@ -2,10 +2,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from bump_deps_index._parsed import Parsed
 
 
 def parse_exclude_newer(value: str, now: datetime) -> datetime:
@@ -49,17 +45,6 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
     return parsed if parsed.tzinfo is not None else parsed.astimezone()
 
 
-def parse_timestamp(value: Parsed) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 __all__ = [
     "parse_exclude_newer",
-    "parse_timestamp",
 ]

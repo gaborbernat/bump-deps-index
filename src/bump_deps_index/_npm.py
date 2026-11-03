@@ -4,8 +4,7 @@ import re
 from typing import TYPE_CHECKING, Final, NamedTuple
 from urllib.parse import quote
 
-from bump_deps_index._cutoff import parse_timestamp
-from bump_deps_index._parsed import json_field, table
+from bump_deps_index._parsed import json_field, parse_timestamp, table
 
 if TYPE_CHECKING:
     from bump_deps_index._parsed import Parsed

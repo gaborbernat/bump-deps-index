@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, TypeAlias, TypeVar
 
 if TYPE_CHECKING:
@@ -31,10 +32,21 @@ def json_field(response: Response, name: str, kind: type[_JsonField]) -> _JsonFi
     return value
 
 
+def parse_timestamp(value: Parsed) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
 __all__ = [
     "Parsed",
     "json_field",
     "mappings",
+    "parse_timestamp",
     "strings",
     "table",
 ]
