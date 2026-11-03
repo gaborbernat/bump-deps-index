@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 
 
 _NESTED: Final[frozenset[str]] = frozenset({"env", "env_base"})
+# tox substitutions can hold requirements in their branches, so the walk and the path check follow these keys
+_SUBSTITUTIONS: Final[dict[Parsed, tuple[str, ...]]] = {
+    "if": ("then", "else"),
+    "posargs": ("default",),
+    "env": ("default",),
+    "glob": ("default",),
+}
 
 
 class ToxToml(SingleFileLoader):
@@ -44,18 +51,15 @@ class ToxToml(SingleFileLoader):
 
     @staticmethod
     def _requirements(value: Parsed) -> Iterator[str]:
-        # tox substitutions can hold requirements in their branches, so the walk follows those too
         match value:
             case str() if value and value[0] not in {"-", "{"}:
                 yield value
             case list():
                 for item in value:
                     yield from ToxToml._requirements(item)
-            case dict() if value.get("replace") == "if":
-                yield from ToxToml._requirements(value.get("then"))
-                yield from ToxToml._requirements(value.get("else"))
-            case dict() if value.get("replace") in {"posargs", "env", "glob"}:
-                yield from ToxToml._requirements(value.get("default"))
+            case dict() if (kind := value.get("replace")) in _SUBSTITUTIONS:
+                for key in _SUBSTITUTIONS[kind]:
+                    yield from ToxToml._requirements(value.get(key))
 
     @override
     def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
@@ -76,10 +80,10 @@ class ToxToml(SingleFileLoader):
         # follow the value the way `_requirements` does
         while path:
             match path:
-                case (
-                    ["[]", *rest]
-                    | ["{if}", "then" | "else", *rest]
-                    | ["{posargs}" | "{env}" | "{glob}", "default", *rest]
+                case ["[]", *rest]:
+                    path = rest
+                case [kind, key, *rest] if (
+                    kind.startswith("{") and kind.endswith("}") and key in _SUBSTITUTIONS.get(kind[1:-1], ())
                 ):
                     path = rest
                 case _:
