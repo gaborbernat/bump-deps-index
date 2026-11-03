@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import index_args
+from conftest import PYPI_FOO, Case, index_args
 
 from bump_deps_index import main
 
@@ -15,19 +14,11 @@ if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _Case:
-    content: str
-    pages: dict[str, str]
-    updates: set[str]
-    expected: str
-
-
 @pytest.mark.parametrize(
     "case",
     [
         pytest.param(
-            _Case(
+            Case(
                 content="A\nB==1\n",
                 pages={
                     "https://pypi.example/simple/a/": "<a>a-1.tar.gz</a>",
@@ -39,7 +30,7 @@ class _Case:
             id="pinned-and-unpinned",
         ),
         pytest.param(
-            _Case(
+            Case(
                 content="-e .[test]\n-r other.txt\n--index-url https://pypi.org/simple\nA\n",
                 pages={"https://pypi.org/simple/a/": "<a>a-1.tar.gz</a>"},
                 updates={"A -> A>=1"},
@@ -50,7 +41,7 @@ class _Case:
     ],
 )
 def test_run_requirements_txt_updates_dependencies(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: _Case
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: Case
 ) -> None:
     for url, page in case.pages.items():
         httpx_mock.add_response(url=url, text=page)
@@ -221,3 +212,34 @@ def test_run_requirements_txt_keeps_unset_and_empty_variables(
         "https://a.example/$%7BUNSET%7D/foo/",
         "https://b.example/$%7BEMPTY%7D/foo/",
     ]
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "expected", "pages"),
+    [
+        pytest.param("dev-requirements.txt", "foo>=1\n", "foo>=2\n", PYPI_FOO, id="requirements-any-name"),
+        pytest.param(
+            "requirements.txt",
+            "foo>=1 \\\n  # why\n",
+            "foo>=2 \\\n  # why\n",
+            PYPI_FOO,
+            id="requirements-comment-in-continuation",
+        ),
+        pytest.param(
+            "requirements.txt",
+            "foo  # keep this reason\nfoobar\n",
+            "foo>=2  # keep this reason\nfoobar>=3\n",
+            {**PYPI_FOO, "https://pypi.example/simple/foobar/": "<a>foobar-3.tar.gz</a>"},
+            id="requirements-keeps-comments-and-similar-names",
+        ),
+    ],
+    indirect=["pages"],
+)
+@pytest.mark.usefixtures("pages")
+def test_file_updates(tmp_path: Path, name: str, content: str, expected: str) -> None:
+    dest = tmp_path / name
+    dest.write_text(dedent(content).lstrip(), encoding="utf-8")
+
+    main(index_args("-f", str(dest)))
+
+    assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()

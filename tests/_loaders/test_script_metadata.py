@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import index_args
+from conftest import PYPI_FOO, Case, index_args
 
 from bump_deps_index import main
 
@@ -15,20 +14,12 @@ if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _Case:
-    script: str
-    pages: dict[str, str]
-    updates: set[str]
-    expected: str
-
-
 @pytest.mark.parametrize(
     "case",
     [
         pytest.param(
-            _Case(
-                script="""
+            Case(
+                content="""
             #!/usr/bin/env python3
             # /// script
             # dependencies = [
@@ -65,8 +56,8 @@ class _Case:
             id="multiline-array",
         ),
         pytest.param(
-            _Case(
-                script="""
+            Case(
+                content="""
             # /// script
             # requires-python = ">=3.11"
             # dependencies = [
@@ -88,8 +79,8 @@ class _Case:
             id="keeps-requires-python-line",
         ),
         pytest.param(
-            _Case(
-                script="""
+            Case(
+                content="""
             # /// script
             # dependencies = [
             #   "requests[security]>=2.28.0",
@@ -109,8 +100,8 @@ class _Case:
             id="with-extras",
         ),
         pytest.param(
-            _Case(
-                script="""
+            Case(
+                content="""
             # /// script
             # dependencies = ["rich>=13.9.4", "orjson"]
             # ///
@@ -129,8 +120,8 @@ class _Case:
             id="inline-array",
         ),
         pytest.param(
-            _Case(
-                script="""
+            Case(
+                content="""
             # /// script
             # requires-python = ">=3.11"
             #
@@ -156,12 +147,12 @@ class _Case:
     ],
 )
 def test_script_metadata_updates_dependencies(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: _Case
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: Case
 ) -> None:
     for url, page in case.pages.items():
         httpx_mock.add_response(url=url, text=page)
     dest = tmp_path / "script.py"
-    dest.write_text(dedent(case.script).lstrip())
+    dest.write_text(dedent(case.content).lstrip())
 
     main(index_args("-f", str(dest)))
 
@@ -324,3 +315,38 @@ def test_script_metadata_rejects_undecodable_file(capsys: pytest.CaptureFixture[
         main(index_args("-f", str(invalid)))
 
     assert capsys.readouterr().err == f"{invalid} is not a supported dependency file, so it was skipped\n"
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "expected", "pages"),
+    [
+        pytest.param(
+            "script.py",
+            """
+            # /// script
+            # dependencies = ["foo>=1"]
+            # [tool.uv]
+            # constraint-dependencies = ["foo>=1"]
+            # ///
+            """,
+            """
+            # /// script
+            # dependencies = ["foo>=2"]
+            # [tool.uv]
+            # constraint-dependencies = ["foo>=1"]
+            # ///
+            """,
+            PYPI_FOO,
+            id="script-only-dependencies",
+        ),
+    ],
+    indirect=["pages"],
+)
+@pytest.mark.usefixtures("pages")
+def test_file_updates(tmp_path: Path, name: str, content: str, expected: str) -> None:
+    dest = tmp_path / name
+    dest.write_text(dedent(content).lstrip(), encoding="utf-8")
+
+    main(index_args("-f", str(dest)))
+
+    assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()

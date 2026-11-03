@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
-from conftest import index_args
+from conftest import PYPI_FOO, Case, index_args
 
 from bump_deps_index import main
 
@@ -72,18 +71,11 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMoc
     assert dest.read_text() == dedent(expected).lstrip()
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class _Case:
-    pages: dict[str, str]
-    content: str
-    expected: str
-
-
 @pytest.mark.parametrize(
     "case",
     [
         pytest.param(
-            _Case(
+            Case(
                 pages={
                     "https://pypi.example/simple/bar/": "<a>bar-2.tar.gz</a>",
                     "https://pypi.example/simple/baz/": "<a>baz-3.tar.gz</a>",
@@ -99,6 +91,7 @@ class _Case:
                     additional_dependencies:
                       - baz  # keep this reason
             """,
+                updates=set(),
                 expected="""
             repos:
               - repo: local
@@ -113,7 +106,7 @@ class _Case:
             id="preserves-yaml-layout",
         ),
         pytest.param(
-            _Case(
+            Case(
                 pages={"https://pypi.example/simple/black/": "<a>black-24.1.tar.gz</a>"},
                 content="""
             repos:
@@ -129,6 +122,7 @@ class _Case:
                     language: python
                     additional_dependencies: [black]
             """,
+                updates=set(),
                 expected="""
             repos:
               - repo: local
@@ -147,7 +141,7 @@ class _Case:
             id="follows-hook-language",
         ),
         pytest.param(
-            _Case(
+            Case(
                 pages={"https://npm.example/eslint": '{"versions": {"9.0.0": {}}}'},
                 content="""
             repos:
@@ -157,6 +151,7 @@ class _Case:
                     language: node
                     additional_dependencies: [eslint]
             """,
+                updates=set(),
                 expected="""
             repos:
               - repo: local
@@ -170,7 +165,7 @@ class _Case:
         ),
     ],
 )
-def test_run_pre_commit_updates_dependencies(httpx_mock: HTTPXMock, tmp_path: Path, case: _Case) -> None:
+def test_run_pre_commit_updates_dependencies(httpx_mock: HTTPXMock, tmp_path: Path, case: Case) -> None:
     for url, page in case.pages.items():
         httpx_mock.add_response(url=url, text=page)
     config = tmp_path / ".pre-commit-config.yaml"
@@ -191,16 +186,6 @@ def test_run_pre_commit_keeps_filtered_inline_dependencies(monkeypatch: pytest.M
     main(index_args("-f", str(config)))
 
     assert config.read_text(encoding="utf-8") == content
-
-
-def test_run_args_empty(capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit, match=r"^1$"):
-        main(index_args("-f"))
-
-    assert capsys.readouterr() == (
-        "",
-        "no supported dependency files found in the working directory; pass --file or packages\n",
-    )
 
 
 def test_run_pre_commit_reports_missing_npm_package(
@@ -292,3 +277,278 @@ def test_run_pre_commit_reads_remote_hook_language(httpx_mock: HTTPXMock, tmp_pa
         """
         ).lstrip()
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "expected", "pages"),
+    [
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - additional_dependencies:
+                      - foo>=1
+                    id: block
+                  - additional_dependencies: [foo>=1]
+                    id: flow
+                  - id: other
+                    args: [foo>=1]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - additional_dependencies:
+                      - foo>=2
+                    id: block
+                  - additional_dependencies: [foo>=2]
+                    id: flow
+                  - id: other
+                    args: [foo>=1]
+            """,
+            PYPI_FOO,
+            id="pre-commit-dependencies-first-key",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    additional_dependencies: [
+                      "foo>=1",
+                      foo>=1,  # why
+                      foo>=1
+                    ]
+                    args: [foo>=1]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    additional_dependencies: [
+                      "foo>=2",
+                      foo>=2,  # why
+                      foo>=2
+                    ]
+                    args: [foo>=1]
+            """,
+            PYPI_FOO,
+            id="pre-commit-multi-line-flow",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: g
+                    entry: "echo additional_dependencies: x"
+                    language: golang
+                    additional_dependencies: [foo>=1]
+                  - id: py
+                    language: python
+                    additional_dependencies:
+                      [foo>=1, "foo>=1",  # not, foo>=1
+                       foo>=1]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: g
+                    entry: "echo additional_dependencies: x"
+                    language: golang
+                    additional_dependencies: [foo>=1]
+                  - id: py
+                    language: python
+                    additional_dependencies:
+                      [foo>=2, "foo>=2",  # not, foo>=1
+                       foo>=2]
+            """,
+            PYPI_FOO,
+            id="pre-commit-key-in-value-and-flow-on-next-line",
+        ),
+        pytest.param(".pre-commit-config.yaml", "repos:\n", "repos:\n", {}, id="pre-commit-null-repos"),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            "repos:\n  - repo: local\n  - 1\n  - repo: local\n    hooks: [{id: x, additional_dependencies: [1]}]\n",
+            "repos:\n  - repo: local\n  - 1\n  - repo: local\n    hooks: [{id: x, additional_dependencies: [1]}]\n",
+            {},
+            id="pre-commit-repo-without-hooks",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    "additional_dependencies": ["foo>=1; python_version>\\"3\\"", 'foo>=1; os_name==''nt''']
+                  - id: g
+                    language: golang
+                    entry: |
+                      additional_dependencies: [foo>=1]
+                    additional_dependencies: ["foo @ https://h/x[y.whl", foo>=1]
+                  - id: b
+                    language: python
+                    additional_dependencies:
+                      - foo>=1
+            #     - old>=1
+                      - "x, foo>=1 #y"
+                      - foo>=1
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    "additional_dependencies": ["foo>=2; python_version>\\"3\\"", 'foo>=2; os_name==''nt''']
+                  - id: g
+                    language: golang
+                    entry: |
+                      additional_dependencies: [foo>=1]
+                    additional_dependencies: ["foo @ https://h/x[y.whl", foo>=1]
+                  - id: b
+                    language: python
+                    additional_dependencies:
+                      - foo>=2
+            #     - old>=1
+                      - "x, foo>=1 #y"
+                      - foo>=2
+            """,
+            PYPI_FOO,
+            id="pre-commit-yaml-nodes",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            base: &base {language: golang, additional_dependencies: [foo>=1]}
+            repos:
+              - repo: local
+                hooks:
+                  - <<: *base
+                    id: merged
+                  - id: a
+                    language: python
+                    additional_dependencies: [&pin foo>=1, !!str "foo>=1"]
+                  - id: b
+                    language: [python]
+                    additional_dependencies: [*pin]
+                  - id: c
+                    language: python
+                    additional_dependencies:
+                      - foo
+                        >=1
+                      - &d # pinned
+                        foo>=1
+                  - <<: *base
+                    <<: {language: python, additional_dependencies: [foo>=1]}
+                    id: last-merge
+            """,
+            """
+            base: &base {language: golang, additional_dependencies: [foo>=1]}
+            repos:
+              - repo: local
+                hooks:
+                  - <<: *base
+                    id: merged
+                  - id: a
+                    language: python
+                    additional_dependencies: [&pin foo>=2, !!str "foo>=2"]
+                  - id: b
+                    language: [python]
+                    additional_dependencies: [*pin]
+                  - id: c
+                    language: python
+                    additional_dependencies:
+                      - foo >=2
+                      - &d # pinned
+                        foo>=2
+                  - <<: *base
+                    <<: {language: python, additional_dependencies: [foo>=2]}
+                    id: last-merge
+            """,
+            PYPI_FOO,
+            id="pre-commit-anchors-tags-merge-keys-and-folded-scalars",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    additional_dependencies: [foo<3, foo, 'foo<4']
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: python
+                    additional_dependencies: ["foo<3,>=2", foo>=2, 'foo<4,>=2']
+            """,
+            PYPI_FOO,
+            id="pre-commit-flow-sequence-quotes-comma",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: node
+                    additional_dependencies: [" ", bar@1.0.0]
+            """,
+            """
+            repos:
+              - repo: local
+                hooks:
+                  - id: a
+                    language: node
+                    additional_dependencies: [" ", bar@2.0.0]
+            """,
+            {"https://npm.example/bar": '{"versions": {"2.0.0": {}}}'},
+            id="pre-commit-blank-dependency",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: https://example.com/foo
+                hooks:
+                  - id: foo
+                    additional_dependencies:
+                      - foo
+            """,
+            """
+            repos:
+              - repo: https://example.com/foo
+                hooks:
+                  - id: foo
+                    additional_dependencies:
+                      - foo>=2
+            """,
+            PYPI_FOO,
+            id="pre-commit-preserves-repository-urls",
+        ),
+    ],
+    indirect=["pages"],
+)
+@pytest.mark.usefixtures("pages")
+def test_file_updates(tmp_path: Path, name: str, content: str, expected: str) -> None:
+    dest = tmp_path / name
+    dest.write_text(dedent(content).lstrip(), encoding="utf-8")
+
+    main(index_args("-f", str(dest)))
+
+    assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()

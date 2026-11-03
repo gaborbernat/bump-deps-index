@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Final, Protocol
 
 import pytest
 
@@ -48,6 +49,23 @@ def index_args(*args: str) -> list[str]:
     return ["-i", "https://pypi.example/simple", "-n", "https://npm.example", "-p", "no", "--no-exclude-newer", *args]
 
 
+PYPI_FOO: Final[dict[str, str]] = {"https://pypi.example/simple/foo/": "<a>foo-2.tar.gz</a>"}
+
+
+@pytest.fixture
+def pages(request: pytest.FixtureRequest, httpx_mock: HTTPXMock) -> None:
+    for url, page in request.param.items():
+        httpx_mock.add_response(url=url, text=page)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Case:
+    content: str
+    pages: dict[str, str]
+    updates: set[str]
+    expected: str
+
+
 class Bump(Protocol):
     def __call__(
         self,
@@ -88,6 +106,8 @@ def bump(
 
 
 __all__ = [
+    "PYPI_FOO",
     "Bump",
+    "Case",
     "index_args",
 ]
