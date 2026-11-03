@@ -242,10 +242,30 @@ _ENV_UV: Final[str] = "2026-10-02T00:00:00Z"
                 {
                     "project/uv.toml": "exclude-newer = false",
                     "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"',
+                },
+            ),
+            None,
+            id="disabled-project-uv-stops-lookup",
+        ),
+        pytest.param(
+            (
+                {"UV_EXCLUDE_NEWER": _ENV_UV},
+                {"project/uv.toml": "exclude-newer = false"},
+            ),
+            datetime(2026, 10, 2, tzinfo=UTC),
+            id="uv-environment-over-disabled-project",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": "exclude-newer = false",
                 },
             ),
             datetime(2026, 10, 6, tzinfo=UTC),
-            id="disabled-uv-falls-through-to-pip",
+            id="pip-over-disabled-user-uv",
         ),
         pytest.param(
             (
@@ -275,6 +295,36 @@ _ENV_UV: Final[str] = "2026-10-02T00:00:00Z"
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_parse_cli_reads_exclude_newer_settings(expected: datetime | None) -> None:
     assert parse_cli(["a"]).exclude_newer == expected
+
+
+_SOURCES: Final[list[tuple[dict[str, str], dict[str, str]]]] = [
+    ({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}),
+    ({"UV_EXCLUDE_NEWER": _ENV_UV}, {}),
+    ({}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}),
+    ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
+    ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z"}),
+    ({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}),
+]
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        pytest.param(["--no-exclude-newer"], None, id="no-exclude-newer"),
+        pytest.param(
+            ["--exclude-newer", "2026-10-09T00:00:00Z"], datetime(2026, 10, 9, tzinfo=UTC), id="exclude-newer"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "workspace",
+    [pytest.param(source, id=f"source-{index}") for index, source in enumerate(_SOURCES)],
+    indirect=True,
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_flag_overrides_every_source(args: list[str], expected: datetime | None) -> None:
+    assert parse_cli([*args, "a"]).exclude_newer == expected
 
 
 @pytest.fixture

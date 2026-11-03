@@ -159,3 +159,17 @@ def test_cli_exclude_newer_rejects_invalid_cutoff(
         parse_cli(args)
 
     assert (error.value.code, "argument --exclude-newer" in capsys.readouterr().err) == (2, True)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(["--exclude-newer", "P7D", "--no-exclude-newer", "foo"], id="exclude-first"),
+        pytest.param(["--no-exclude-newer", "--exclude-newer", "P7D", "foo"], id="no-flag-first"),
+    ],
+)
+def test_cli_exclude_newer_flags_conflict(args: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(args)
+
+    assert (error.value.code, "not allowed with argument" in capsys.readouterr().err) == (2, True)

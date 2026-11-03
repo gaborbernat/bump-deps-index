@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ._files import user_uv_settings
 from ._npm import NpmSettings, npm_registry, npm_settings
@@ -21,22 +21,28 @@ def python_index_url() -> str:
 
 
 def _python_setting(
-    names: tuple[str, ...], uv_value: Callable[[dict[str, Parsed]], str | None], pip_name: str
+    names: tuple[str, ...], uv_value: Callable[[dict[str, Parsed]], str | Literal[False] | None], pip_name: str
 ) -> str | None:
     if env := next((value for name in names if (value := os.environ.get(name))), None):
         return env
     # rank the project's uv settings above the user's pip and uv settings, as the more specific choice
     cwd = Path.cwd()
-    project = next((value for folder in (cwd, *cwd.parents) if (value := uv_value(uv_settings(folder)))), None)
+    project = next(
+        (value for folder in (cwd, *cwd.parents) if (value := uv_value(uv_settings(folder))) or value is False), None
+    )
+    if project is False:
+        return None
     user = uv_value(user_uv_settings())
     return project or pip_setting(pip_name) or user or None
 
 
 def python_exclude_newer() -> str | None:
     names = ("PIP_UPLOADED_PRIOR_TO", "UV_EXCLUDE_NEWER")
-    # uv accepts `exclude-newer = false` to disable the cutoff, so only a string counts
+    # uv accepts `exclude-newer = false` to disable the cutoff, so a false stops the lookup and a non-string is ignored
     return _python_setting(
-        names, lambda uv: value if isinstance(value := uv.get("exclude-newer"), str) else None, "uploaded-prior-to"
+        names,
+        lambda uv: False if (value := uv.get("exclude-newer")) is False else value if isinstance(value, str) else None,
+        "uploaded-prior-to",
     )
 
 

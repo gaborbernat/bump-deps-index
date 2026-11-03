@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from argparse import ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
+from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
 from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
@@ -68,16 +68,28 @@ def _build_parser() -> ArgumentParser:
         "date, a datetime without an offset (read as local time), or a duration before now such as P7D, PT24H, "
         "7 days or 1 week; the default is the first set of PIP_UPLOADED_PRIOR_TO, UV_EXCLUDE_NEWER, exclude-newer in "
         "the nearest uv.toml or [tool.uv] table, uploaded-prior-to in your pip configuration, and exclude-newer in "
-        "your user uv.toml; like uv, a file without an upload time is excluded, so an index without upload times, such "
-        "as one that serves only the HTML simple API, offers no candidates; a requirement already above the newest "
-        "candidate is kept; pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to them too"
+        "your user uv.toml, and exclude-newer = false in a uv file disables the cutoff without consulting the later "
+        "sources; like uv, a file without an upload time is excluded, so an index without upload times, such as one "
+        "that serves only the HTML simple API, offers no candidates; a requirement already above the newest candidate "
+        "is kept; pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to them too"
     )
-    parser.add_argument(
+    cutoff = parser.add_mutually_exclusive_group()
+    cutoff.add_argument(
         "--exclude-newer",
         dest="exclude_newer",
         metavar="cutoff",
         default=python_exclude_newer(),
         type=_cutoff,
+        help=msg,
+    )
+    # SUPPRESS keeps the flag out of the defaults, so the mutual exclusion check sees it when it is given
+    msg = "ignore every cutoff, including the one from the environment and config files; overrides --exclude-newer"
+    cutoff.add_argument(
+        "--no-exclude-newer",
+        dest="exclude_newer",
+        action="store_const",
+        const=None,
+        default=SUPPRESS,
         help=msg,
     )
     source = parser.add_mutually_exclusive_group()
