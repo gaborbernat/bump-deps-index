@@ -7,13 +7,7 @@ from typing import TYPE_CHECKING
 
 from httpx import HTTPStatusError, codes
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
-from packaging.utils import (
-    InvalidSdistFilename,
-    InvalidWheelFilename,
-    canonicalize_name,
-    parse_sdist_filename,
-    parse_wheel_filename,
-)
+from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
 from ._cache import FetchCache
@@ -51,7 +45,7 @@ class SimpleIndex:
                 continue
             try:
                 project, version = _parse_filename(file.filename)
-            except (InvalidSdistFilename, InvalidWheelFilename, IndexError, ValueError):
+            except ValueError:
                 continue
             if project == name:  # an index page may list files of other projects, as pip and uv skip them
                 versions.add(version)

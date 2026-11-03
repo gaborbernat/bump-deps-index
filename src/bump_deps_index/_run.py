@@ -160,7 +160,7 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
         for future, lookup in futures.items():
             try:
                 result = future.result()
-            except (HTTPError, IndexError, KeyError, TypeError, ValueError) as exc:
+            except (HTTPError, TypeError, ValueError) as exc:
                 successful = False
                 sys.stderr.write(
                     f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(exc))}\n"
