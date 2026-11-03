@@ -66,8 +66,8 @@ class PreCommitConfig(SingleFileLoader):
         edits: dict[int, tuple[int, str]] = {}
         # the verdicts serve this one rewrite, so take them off the cached loader rather than keep them
         kept = iter(self._kept_by_file.pop(filename))
-        for hook in _hooks(_value(compose_yaml(text, Loader=SafeLoader), "repos")):
-            if (dependencies := _value(hook, "additional_dependencies")) is None:
+        for hook in self._hooks(self._value(compose_yaml(text, Loader=SafeLoader), "repos")):
+            if (dependencies := self._value(hook, "additional_dependencies")) is None:
                 continue
             if not next(kept) or not isinstance(dependencies, SequenceNode):
                 continue
@@ -75,52 +75,55 @@ class PreCommitConfig(SingleFileLoader):
                 if (
                     isinstance(item, ScalarNode)
                     and (new := changes.get(item.value)) is not None
-                    and (encoded := _encode(new, item.style, flow=dependencies.flow_style is True)) is not None
+                    and (encoded := self._encode(new, item.style, flow=dependencies.flow_style is True)) is not None
                 ):
-                    edits[_scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
+                    edits[self._scalar_start(text, item.start_mark.index)] = (item.end_mark.index, encoded)
         for start, (end, encoded) in sorted(edits.items(), reverse=True):
             text = f"{text[:start]}{encoded}{text[end:]}"
         return text
 
+    @staticmethod
+    def _hooks(repos: Node | None) -> Iterator[MappingNode]:
+        for repo in repos.value if isinstance(repos, SequenceNode) else []:
+            if isinstance(hooks := PreCommitConfig._value(repo, "hooks"), SequenceNode):
+                yield from (hook for hook in hooks.value if isinstance(hook, MappingNode))
 
-def _hooks(repos: Node | None) -> Iterator[MappingNode]:
-    for repo in repos.value if isinstance(repos, SequenceNode) else []:
-        if isinstance(hooks := _value(repo, "hooks"), SequenceNode):
-            yield from (hook for hook in hooks.value if isinstance(hook, MappingNode))
+    @staticmethod
+    def _value(node: Node | None, key: str) -> Node | None:
+        # a later duplicate key wins, and an own key beats one a `<<` merge brings, as they do for the loader's dict
+        pairs = node.value if isinstance(node, MappingNode) else []
+        if found := next((value for name, value in reversed(pairs) if PreCommitConfig._is_key(name, key)), None):
+            return found
+        # the last `<<` key wins, and within one `<<` list the first map wins
+        merged = (value for name, value in reversed(pairs) if name.tag == _MERGE)
+        bases = (base for value in merged for base in (value.value if isinstance(value, SequenceNode) else [value]))
+        return next(
+            (found for base in bases if (found := PreCommitConfig._value(base, key)) is not None),
+            None,
+        )
 
+    @staticmethod
+    def _is_key(node: Node, key: str) -> bool:
+        return isinstance(node, ScalarNode) and node.tag != _MERGE and node.value == key
 
-def _value(node: Node | None, key: str) -> Node | None:
-    # a later duplicate key wins, and an own key beats one a `<<` merge brings, as they do for the loader's dict
-    pairs = node.value if isinstance(node, MappingNode) else []
-    if found := next((value for name, value in reversed(pairs) if _is_key(name, key)), None):
-        return found
-    # the last `<<` key wins, and within one `<<` list the first map wins
-    merged = (value for name, value in reversed(pairs) if name.tag == _MERGE)
-    bases = (base for value in merged for base in (value.value if isinstance(value, SequenceNode) else [value]))
-    return next((found for base in bases if (found := _value(base, key)) is not None), None)
+    @staticmethod
+    def _encode(value: str, style: str | None, *, flow: bool) -> str | None:
+        if style == "'":
+            return "'{}'".format(value.replace("'", "''"))
+        # a JSON string is a valid YAML double-quoted scalar; quote a plain one where a `,` would end it, as in `[a, b]`
+        if style == '"' or (style is None and flow and any(character in value for character in ",[]{}")):
+            return json.dumps(value)
+        return value if style is None else None  # leave block scalars as written
 
-
-def _is_key(node: Node, key: str) -> bool:
-    return isinstance(node, ScalarNode) and node.tag != _MERGE and node.value == key
-
-
-def _encode(value: str, style: str | None, *, flow: bool) -> str | None:
-    if style == "'":
-        return "'{}'".format(value.replace("'", "''"))
-    # a JSON string is a valid YAML double-quoted scalar; quote a plain one where a `,` would end it, as in `[a, b]`
-    if style == '"' or (style is None and flow and any(character in value for character in ",[]{}")):
-        return json.dumps(value)
-    return value if style is None else None  # leave block scalars as written
-
-
-def _scalar_start(text: str, at: int) -> int:
-    # a node starts at its `&anchor` or `!tag`; keep those, and any comment after them, and replace the value
-    while text[at] in {"&", "!", "#"} or text[at].isspace():
-        if text[at] == "#":
-            at = text.index("\n", at)
-        else:
-            at += 1 if text[at].isspace() else len(text[at:].split(maxsplit=1)[0])
-    return at
+    @staticmethod
+    def _scalar_start(text: str, at: int) -> int:
+        # a node starts at its `&anchor` or `!tag`; keep those, and any comment after them, and replace the value
+        while text[at] in {"&", "!", "#"} or text[at].isspace():
+            if text[at] == "#":
+                at = text.index("\n", at)
+            else:
+                at += 1 if text[at].isspace() else len(text[at:].split(maxsplit=1)[0])
+        return at
 
 
 __all__ = [

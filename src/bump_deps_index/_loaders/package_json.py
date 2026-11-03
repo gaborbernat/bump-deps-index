@@ -41,7 +41,7 @@ class PackageJson(SingleFileLoader):
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
-        tree, _ = _json_node(text, 0)
+        tree, _ = self._json_node(text, 0)
         edits: list[tuple[int, int, str]] = []
         for section in _SECTIONS:
             entries = tree.get(section) if isinstance(tree, dict) else None
@@ -55,42 +55,42 @@ class PackageJson(SingleFileLoader):
             text = f"{text[:start]}{encoded}{text[end:]}"
         return text
 
-
-def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
-    at = _skip_blank(text, at)
-    if text[at] == '"':
-        end = _string_end(text, at)
-        return (at + 1, end - 1), end
-    if text[at] not in "{[":
-        while at < len(text) and text[at] not in ",]} \t\r\n":
-            at += 1
-        return None, at
-    closing = "}" if text[at] == "{" else "]"
-    members: dict[str, _JsonNode] = {}
-    at += 1
-    while (at := _skip_blank(text, at)) < len(text) and text[at] != closing:
-        if closing == "}":
-            key_end = _string_end(text, at)
-            # a later duplicate key wins, as it does for `json`
-            members[json.loads(text[at:key_end])], at = _json_node(text, text.index(":", key_end) + 1)
-        else:
-            _, at = _json_node(text, at)
-        if (at := _skip_blank(text, at)) < len(text) and text[at] == ",":
-            at += 1
-    return (members if closing == "}" else None), at + 1
-
-
-def _skip_blank(text: str, at: int) -> int:
-    while at < len(text) and text[at] in " \t\r\n":
+    @staticmethod
+    def _json_node(text: str, at: int) -> tuple[_JsonNode, int]:
+        at = PackageJson._skip_blank(text, at)
+        if text[at] == '"':
+            end = PackageJson._string_end(text, at)
+            return (at + 1, end - 1), end
+        if text[at] not in "{[":
+            while at < len(text) and text[at] not in ",]} \t\r\n":
+                at += 1
+            return None, at
+        closing = "}" if text[at] == "{" else "]"
+        members: dict[str, _JsonNode] = {}
         at += 1
-    return at
+        while (at := PackageJson._skip_blank(text, at)) < len(text) and text[at] != closing:
+            if closing == "}":
+                key_end = PackageJson._string_end(text, at)
+                # a later duplicate key wins, as it does for `json`
+                members[json.loads(text[at:key_end])], at = PackageJson._json_node(text, text.index(":", key_end) + 1)
+            else:
+                _, at = PackageJson._json_node(text, at)
+            if (at := PackageJson._skip_blank(text, at)) < len(text) and text[at] == ",":
+                at += 1
+        return (members if closing == "}" else None), at + 1
 
+    @staticmethod
+    def _skip_blank(text: str, at: int) -> int:
+        while at < len(text) and text[at] in " \t\r\n":
+            at += 1
+        return at
 
-def _string_end(text: str, at: int) -> int:
-    end = at + 1
-    while text[end] != '"':
-        end += 2 if text[end] == "\\" else 1
-    return end + 1
+    @staticmethod
+    def _string_end(text: str, at: int) -> int:
+        end = at + 1
+        while text[end] != '"':
+            end += 2 if text[end] == "\\" else 1
+        return end + 1
 
 
 __all__ = [

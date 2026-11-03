@@ -50,24 +50,99 @@ class Requirements(Loader):
     @override
     def load(self, filename: Path) -> Iterator[Entry]:
         lines = filename.read_text(encoding="utf-8").split("\n")
-        options = list(_index_options(filename, set()))
+        options = list(self._index_options(filename, set()))
         # pip applies the last `--index-url` and every `--extra-index-url`
         index_url = next((value for name, value in reversed(options) if name == "index"), None)
         extra_index_urls = tuple(value for name, value in options if name == "extra")
-        for entry in _entries(lines):
+        for entry in self._entries(lines):
             requirement = " ".join(segment for _, segment in entry)
             yield Entry(requirement, PkgType.PYTHON, index_url=index_url, extra_index_urls=extra_index_urls)
+
+    @staticmethod
+    def _index_options(filename: Path, seen: set[Path]) -> Iterator[tuple[str, str]]:
+        # pip reads the index options of the files that `-r` or `-c` pulls in, too
+        seen.add(filename.resolve())
+        try:
+            lines = filename.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            return
+        for line in Requirements._logical_lines(lines):
+            try:
+                words = shlex.split(_COMMENT.sub("", line))
+            except ValueError:
+                continue
+            for name, value in Requirements._options(words):
+                if name != "include":
+                    yield name, Requirements._expand_env(value)
+                elif (included := filename.parent / Requirements._expand_env(value)).resolve() not in seen:
+                    yield from Requirements._index_options(included, seen)
+
+    @staticmethod
+    def _logical_lines(lines: list[str]) -> Iterator[str]:
+        # follow pip's `join_lines`: a comment line ends a `\` continuation, and the parts join without a space
+        joined: list[str] = []
+        for line in lines:
+            if _COMMENT.match(line):
+                yield "".join(joined)
+                joined = []
+            elif line.endswith("\\"):
+                joined.append(line.removesuffix("\\"))
+            else:
+                yield "".join([*joined, line])
+                joined = []
+        yield "".join(joined)
+
+    @staticmethod
+    def _options(words: list[str]) -> Iterator[tuple[str, str]]:
+        options: dict[str, str] = {
+            "-i": "index",
+            "--index-url": "index",
+            "--extra-index-url": "extra",
+            "-r": "include",
+            "--requirement": "include",
+            "-c": "include",
+            "--constraint": "include",
+        }
+        for at, word in enumerate(words):
+            name, equals, value = word.partition("=")
+            if name in options and equals:
+                yield options[name], value
+            elif word in options and at + 1 < len(words):
+                yield options[word], words[at + 1]
+            elif word[:2] in {"-i", "-r", "-c"} and len(word) > len("-i"):
+                yield options[word[:2]], word[2:]
+
+    @staticmethod
+    def _expand_env(text: str) -> str:
+        # pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
+        return re.sub(r"\$\{(?P<name>[A-Z0-9_]+)\}", lambda match: os.environ.get(match["name"]) or match[0], text)
+
+    @staticmethod
+    def _entries(lines: list[str]) -> Iterator[list[tuple[int, str]]]:
+        entry: list[tuple[int, str]] = []
+        for at, line in enumerate(lines):
+            # pip drops a comment line inside a `\`-continued requirement
+            stripped = "" if line.lstrip().startswith("#") else split_comment(line.strip())[0]
+            if segment := stripped.removesuffix("\\").rstrip():
+                entry.append((at, segment))
+            if stripped.endswith("\\"):
+                continue
+            logical = " ".join(segment for _, segment in entry)
+            # skip hashed entries; you would need new hashes for a new version
+            if logical and not logical.startswith("-") and "--hash" not in logical:
+                yield entry
+            entry = []
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
-        for entry in _entries(lines):
+        for entry in self._entries(lines):
             logical = " ".join(segment for _, segment in entry)
             if (new := changes.get(logical, logical)) == logical:
                 continue
             # find the edited span to rewrite the physical line holding it in a `\`-continued requirement
-            start = _common_prefix(logical, new)
-            kept = _common_prefix(logical[start:][::-1], new[start:][::-1])
+            start = self._common_prefix(logical, new)
+            kept = self._common_prefix(logical[start:][::-1], new[start:][::-1])
             offsets = accumulate((len(segment) + 1 for _, segment in entry), initial=0)
             at, segment, offset = next(
                 (at, segment, offset)
@@ -80,87 +155,12 @@ class Requirements(Loader):
             lines[at] = replace_requirement_line(lines[at], {segment: edited})
         return "\n".join(lines)
 
-
-def _entries(lines: list[str]) -> Iterator[list[tuple[int, str]]]:
-    entry: list[tuple[int, str]] = []
-    for at, line in enumerate(lines):
-        # pip drops a comment line inside a `\`-continued requirement
-        stripped = "" if line.lstrip().startswith("#") else split_comment(line.strip())[0]
-        if segment := stripped.removesuffix("\\").rstrip():
-            entry.append((at, segment))
-        if stripped.endswith("\\"):
-            continue
-        logical = " ".join(segment for _, segment in entry)
-        # skip hashed entries; you would need new hashes for a new version
-        if logical and not logical.startswith("-") and "--hash" not in logical:
-            yield entry
-        entry = []
-
-
-def _index_options(filename: Path, seen: set[Path]) -> Iterator[tuple[str, str]]:
-    # pip reads the index options of the files that `-r` or `-c` pulls in, too
-    seen.add(filename.resolve())
-    try:
-        lines = filename.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return
-    for line in _logical_lines(lines):
-        try:
-            words = shlex.split(_COMMENT.sub("", line))
-        except ValueError:
-            continue
-        for name, value in _options(words):
-            if name != "include":
-                yield name, _expand_env(value)
-            elif (included := filename.parent / _expand_env(value)).resolve() not in seen:
-                yield from _index_options(included, seen)
-
-
-def _logical_lines(lines: list[str]) -> Iterator[str]:
-    # follow pip's `join_lines`: a comment line ends a `\` continuation, and the parts join without a space
-    joined: list[str] = []
-    for line in lines:
-        if _COMMENT.match(line):
-            yield "".join(joined)
-            joined = []
-        elif line.endswith("\\"):
-            joined.append(line.removesuffix("\\"))
-        else:
-            yield "".join([*joined, line])
-            joined = []
-    yield "".join(joined)
-
-
-def _options(words: list[str]) -> Iterator[tuple[str, str]]:
-    options: dict[str, str] = {
-        "-i": "index",
-        "--index-url": "index",
-        "--extra-index-url": "extra",
-        "-r": "include",
-        "--requirement": "include",
-        "-c": "include",
-        "--constraint": "include",
-    }
-    for at, word in enumerate(words):
-        name, equals, value = word.partition("=")
-        if name in options and equals:
-            yield options[name], value
-        elif word in options and at + 1 < len(words):
-            yield options[word], words[at + 1]
-        elif word[:2] in {"-i", "-r", "-c"} and len(word) > len("-i"):
-            yield options[word[:2]], word[2:]
-
-
-def _expand_env(text: str) -> str:
-    # pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
-    return re.sub(r"\$\{(?P<name>[A-Z0-9_]+)\}", lambda match: os.environ.get(match["name"]) or match[0], text)
-
-
-def _common_prefix(left: str, right: str) -> int:
-    return next(
-        (at for at, (first, second) in enumerate(zip(left, right, strict=False)) if first != second),
-        min(len(left), len(right)),
-    )
+    @staticmethod
+    def _common_prefix(left: str, right: str) -> int:
+        return next(
+            (at for at, (first, second) in enumerate(zip(left, right, strict=False)) if first != second),
+            min(len(left), len(right)),
+        )
 
 
 __all__ = [

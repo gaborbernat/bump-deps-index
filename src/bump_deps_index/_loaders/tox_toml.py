@@ -27,58 +27,60 @@ class ToxToml(SingleFileLoader):
     def load(self, filename: Path) -> Iterator[Entry]:
         with filename.open("rb") as file_handler:
             cfg: dict[str, Parsed] = load_toml(file_handler)
-        for value in (cfg.get("requires"), *(section.get("deps") for section in _sections(cfg))):
-            yield from (Entry(spec, PkgType.PYTHON) for spec in _requirements(value))
+        for value in (cfg.get("requires"), *(section.get("deps") for section in self._sections(cfg))):
+            yield from (Entry(spec, PkgType.PYTHON) for spec in self._requirements(value))
+
+    @staticmethod
+    def _sections(cfg: dict[str, Parsed]) -> Iterator[dict[str, Parsed]]:
+        for key, section in cfg.items():
+            if isinstance(section, dict):
+                yield section
+                if key in _NESTED:
+                    yield from (env for env in section.values() if isinstance(env, dict))
+
+    @staticmethod
+    def _requirements(value: Parsed) -> Iterator[str]:
+        # follow lists and the branches of a tox substitution that can hold requirements
+        match value:
+            case str() if value and value[0] not in {"-", "{"}:
+                yield value
+            case list():
+                for item in value:
+                    yield from ToxToml._requirements(item)
+            case dict() if value.get("replace") == "if":
+                yield from ToxToml._requirements(value.get("then"))
+                yield from ToxToml._requirements(value.get("else"))
+            case dict() if value.get("replace") in {"posargs", "env", "glob"}:
+                yield from ToxToml._requirements(value.get("default"))
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
-        return replace_strings(text, changes, _is_dependency)
+        return replace_strings(text, changes, self._is_dependency)
 
-
-def _sections(cfg: dict[str, Parsed]) -> Iterator[dict[str, Parsed]]:
-    for key, section in cfg.items():
-        if isinstance(section, dict):
-            yield section
-            if key in _NESTED:
-                yield from (env for env in section.values() if isinstance(env, dict))
-
-
-def _requirements(value: Parsed) -> Iterator[str]:
-    # follow lists and the branches of a tox substitution that can hold requirements
-    match value:
-        case str() if value and value[0] not in {"-", "{"}:
-            yield value
-        case list():
-            for item in value:
-                yield from _requirements(item)
-        case dict() if value.get("replace") == "if":
-            yield from _requirements(value.get("then"))
-            yield from _requirements(value.get("else"))
-        case dict() if value.get("replace") in {"posargs", "env", "glob"}:
-            yield from _requirements(value.get("default"))
-
-
-def _is_dependency(path: tuple[str, ...]) -> bool:
-    # an environment named `deps` has the path `env.deps.deps`, so fall through to the next shape
-    match path:
-        case ("requires", *rest) | (_, "deps", *rest) if _collected(rest):
-            return True
-        case (nested, _, "deps", *rest) if nested in _NESTED and _collected(rest):
-            return True
-    return False
-
-
-def _collected(path: list[str]) -> bool:
-    # follow the value the way `_requirements` does
-    while path:
+    @staticmethod
+    def _is_dependency(path: tuple[str, ...]) -> bool:
+        # an environment named `deps` has the path `env.deps.deps`, so fall through to the next shape
         match path:
-            case (
-                ["[]", *rest] | ["{if}", "then" | "else", *rest] | ["{posargs}" | "{env}" | "{glob}", "default", *rest]
-            ):
-                path = rest
-            case _:
-                return False
-    return True
+            case ("requires", *rest) | (_, "deps", *rest) if ToxToml._collected(rest):
+                return True
+            case (nested, _, "deps", *rest) if nested in _NESTED and ToxToml._collected(rest):
+                return True
+        return False
+
+    @staticmethod
+    def _collected(path: list[str]) -> bool:
+        # follow the value the way `_requirements` does
+        while path:
+            match path:
+                case (
+                    ["[]", *rest]
+                    | ["{if}", "then" | "else", *rest]
+                    | ["{posargs}" | "{env}" | "{glob}", "default", *rest]
+                ):
+                    path = rest
+                case _:
+                    return False
+        return True
 
 
 __all__ = [

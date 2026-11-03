@@ -1004,6 +1004,13 @@ def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str,
     assert dest.read_text(encoding="utf-8") == dedent(expected).lstrip()
 
 
+@pytest.fixture
+def foo_index(index: FakeIndex) -> None:
+    index.pypi["foo"] = ["2"]
+    index.npm["bar"] = ["2.0.0"]
+    index.npm["foo"] = ["1.0.0", "1.0.5", "1.5.0", "2.0.0"]
+
+
 @pytest.mark.parametrize(
     ("name", "content", "expected"),
     [
@@ -1221,10 +1228,3 @@ def test_ini_files_read_as_utf8(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
         "deps = foo>=2",
         "install_requires = foo>=2",
     ]
-
-
-@pytest.fixture
-def foo_index(index: FakeIndex) -> None:
-    index.pypi["foo"] = ["2"]
-    index.npm["bar"] = ["2.0.0"]
-    index.npm["foo"] = ["1.0.0", "1.0.5", "1.5.0", "2.0.0"]

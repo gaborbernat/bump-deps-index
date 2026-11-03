@@ -35,13 +35,32 @@ class Loader(ABC):
         if (updated := self._update_text(filename, text, changes)) == text:
             return
         lines = updated.split("\n")
-        endings = _restore_endings(raw, text.split("\n"), lines)
+        endings = self._restore_endings(raw, text.split("\n"), lines)
         with filename.open("w", encoding="utf-8", newline="") as file_handler:
             file_handler.write("".join(f"{line}{end}" for line, end in zip(lines, endings, strict=True)))
 
     @abstractmethod
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         raise NotImplementedError
+
+    @staticmethod
+    def _restore_endings(raw: str, old: list[str], new: list[str]) -> list[str]:
+        # give each line back its own ending; the lines around the edits keep theirs when a rewrite joins lines
+        head = next((at for at, (left, right) in enumerate(zip(old, new, strict=False)) if left != right), len(new))
+        pairs = zip(reversed(old[head:]), reversed(new[head:]), strict=False)
+        tail = next((at for at, (left, right) in enumerate(pairs) if left != right), min(len(old), len(new)) - head)
+        endings = [*re.findall(r"\r\n?|\n", raw), ""]
+        return [
+            *endings[:head],
+            *Loader._fit(endings[head : len(old) - tail], len(new) - head - tail),
+            *endings[len(old) - tail :],
+        ]
+
+    @staticmethod
+    def _fit(endings: list[str], count: int) -> list[str]:
+        # keep the endings in order and the last one last, so the end of the file keeps its final newline or lack of it
+        first, last = (endings[0], endings[-1]) if endings else ("\n", "\n")  # an inserted line has no old ending
+        return [*[*endings[:-1], *[first] * count][: count - 1], last][:count]
 
 
 class SingleFileLoader(Loader, ABC):
@@ -66,25 +85,6 @@ class Entry(NamedTuple):
     index_url: str | None = None
     # the extra indexes a requirements file sets with `--extra-index-url`
     extra_index_urls: tuple[str, ...] = ()
-
-
-def _restore_endings(raw: str, old: list[str], new: list[str]) -> list[str]:
-    # give each line back its own ending; the lines around the edits keep theirs when a rewrite joins lines
-    head = next((at for at, (left, right) in enumerate(zip(old, new, strict=False)) if left != right), len(new))
-    pairs = zip(reversed(old[head:]), reversed(new[head:]), strict=False)
-    tail = next((at for at, (left, right) in enumerate(pairs) if left != right), min(len(old), len(new)) - head)
-    endings = [*re.findall(r"\r\n?|\n", raw), ""]
-    return [
-        *endings[:head],
-        *_fit(endings[head : len(old) - tail], len(new) - head - tail),
-        *endings[len(old) - tail :],
-    ]
-
-
-def _fit(endings: list[str], count: int) -> list[str]:
-    # keep the endings in order and the last one last, so the end of the file keeps its final newline or lack of it
-    first, last = (endings[0], endings[-1]) if endings else ("\n", "\n")  # an inserted line has no old ending
-    return [*[*endings[:-1], *[first] * count][: count - 1], last][:count]
 
 
 __all__ = [

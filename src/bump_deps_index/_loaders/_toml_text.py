@@ -53,6 +53,24 @@ class _TomlScanner:
                 body.extend(self._value((*table, *key)))
         yield from self._with_kind(table, body)
 
+    def _skip(self, *, newlines: bool) -> int:
+        blank = " \t\r\n" if newlines else " \t"
+        while self._at < len(self._text):
+            if self._text[self._at] in blank:
+                self._at += 1
+            elif self._text[self._at] == "#":
+                while self._at < len(self._text) and self._text[self._at] != "\n":
+                    self._at += 1
+            else:
+                break
+        return self._at
+
+    def _with_kind(self, path: tuple[str, ...], strings: list[_String]) -> Iterator[_String]:
+        # tox reads a substitution by its `replace` kind, so carry the kind in the path of its values
+        kind = next((_decode(self._text, item) for item in strings if item.path == (*path, "replace")), None)
+        for item in strings:
+            yield item if kind is None else item._replace(path=(*path, f"{{{kind}}}", *item.path[len(path) :]))
+
     def _key(self) -> tuple[str, ...]:
         parts: list[str] = []
         while True:
@@ -68,6 +86,17 @@ class _TomlScanner:
             if not self._text.startswith(".", self._at):
                 return tuple(parts)
             self._at += 1
+
+    def _string(self, path: tuple[str, ...]) -> _String:
+        character = self._text[self._at]
+        quote = character * 3 if self._text.startswith(character * 3, self._at) else character
+        start = at = self._at + len(quote)
+        while at < len(self._text) and not self._text.startswith(quote, at):
+            at += 2 if character == '"' and self._text[at] == "\\" else 1
+        if len(quote) > 1:  # a multi-line string may end with up to two quotes before its closing delimiter
+            at += next((extra for extra in (2, 1) if self._text.startswith(character * extra, at + 3)), 0)
+        self._at = at + len(quote)
+        return _String(start, at, path, quote)
 
     def _value(self, path: tuple[str, ...]) -> Iterator[_String]:
         self._skip(newlines=False)
@@ -86,16 +115,9 @@ class _TomlScanner:
             while self._at < len(self._text) and self._text[self._at] not in ",]}\n#":
                 self._at += 1
 
-    def _string(self, path: tuple[str, ...]) -> _String:
-        character = self._text[self._at]
-        quote = character * 3 if self._text.startswith(character * 3, self._at) else character
-        start = at = self._at + len(quote)
-        while at < len(self._text) and not self._text.startswith(quote, at):
-            at += 2 if character == '"' and self._text[at] == "\\" else 1
-        if len(quote) > 1:  # a multi-line string may end with up to two quotes before its closing delimiter
-            at += next((extra for extra in (2, 1) if self._text.startswith(character * extra, at + 3)), 0)
-        self._at = at + len(quote)
-        return _String(start, at, path, quote)
+    def _skip_comma(self) -> None:
+        if self._skip(newlines=True) < len(self._text) and self._text[self._at] == ",":
+            self._at += 1
 
     def _inline_table(self, path: tuple[str, ...]) -> Iterator[_String]:
         self._at += 1
@@ -108,40 +130,18 @@ class _TomlScanner:
         self._at += 1
         yield from self._with_kind(path, strings)
 
-    def _with_kind(self, path: tuple[str, ...], strings: list[_String]) -> Iterator[_String]:
-        # tox reads a substitution by its `replace` kind, so carry the kind in the path of its values
-        kind = next((_decode(self._text, item) for item in strings if item.path == (*path, "replace")), None)
-        for item in strings:
-            yield item if kind is None else item._replace(path=(*path, f"{{{kind}}}", *item.path[len(path) :]))
-
-    def _skip_comma(self) -> None:
-        if self._skip(newlines=True) < len(self._text) and self._text[self._at] == ",":
-            self._at += 1
-
-    def _skip(self, *, newlines: bool) -> int:
-        blank = " \t\r\n" if newlines else " \t"
-        while self._at < len(self._text):
-            if self._text[self._at] in blank:
-                self._at += 1
-            elif self._text[self._at] == "#":
-                while self._at < len(self._text) and self._text[self._at] != "\n":
-                    self._at += 1
-            else:
-                break
-        return self._at
-
-
-def _decode(text: str, string: _String) -> str:
-    # a basic string escapes `"` and `\`, a literal string holds its text as written
-    raw = text[string.start : string.end]
-    return raw if string.quote == "'" else load_toml(f"v = {string.quote}{raw}{string.quote}")["v"]
-
 
 class _String(NamedTuple):
     start: int
     end: int
     path: tuple[str, ...]
     quote: str
+
+
+def _decode(text: str, string: _String) -> str:
+    # a basic string escapes `"` and `\`, a literal string holds its text as written
+    raw = text[string.start : string.end]
+    return raw if string.quote == "'" else load_toml(f"v = {string.quote}{raw}{string.quote}")["v"]
 
 
 __all__ = [

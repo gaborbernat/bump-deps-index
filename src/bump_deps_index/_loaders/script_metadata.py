@@ -37,16 +37,44 @@ class ScriptMetadata(Loader):
 
     @override
     def load(self, filename: Path) -> Iterator[Entry]:
-        metadata = _metadata(filename.read_text(encoding="utf-8"))
+        metadata = self._metadata(filename.read_text(encoding="utf-8"))
         uv, index_url = script_uv_indexes(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
         for dependency in strings(metadata.get("dependencies")):
             yield Entry(dependency, PkgType.PYTHON, requires_python=requires_python, uv=uv, index_url=index_url)
 
+    @staticmethod
+    def _metadata(content: str) -> dict[str, Parsed]:
+        lines = content.split("\n")
+        if (span := ScriptMetadata._block(lines)) is None:
+            return {}
+        toml_lines: list[str] = []
+        for line in lines[span[0] : span[1]]:
+            if line.startswith("# "):
+                toml_lines.append(line[2:])
+            elif line.rstrip() == "#":
+                toml_lines.append("")
+            else:
+                return {}
+        try:
+            return load_toml("\n".join(toml_lines))
+        except TOMLDecodeError:
+            return {}
+
+    @staticmethod
+    def _block(lines: list[str]) -> tuple[int, int] | None:
+        start = None
+        for at, line in enumerate(lines):
+            if line.rstrip() == _START:
+                start = at + 1
+            elif line.rstrip() == "# ///" and start is not None:
+                return start, at
+        return None
+
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
-        if (span := _block(lines)) is None:
+        if (span := self._block(lines)) is None:
             return text
         block = lines[span[0] : span[1]]
         toml = replace_strings(
@@ -56,34 +84,6 @@ class ScriptMetadata(Loader):
             f"# {new}" if line.startswith("# ") else line for line, new in zip(block, toml.split("\n"), strict=True)
         ]
         return "\n".join(lines)
-
-
-def _metadata(content: str) -> dict[str, Parsed]:
-    lines = content.split("\n")
-    if (span := _block(lines)) is None:
-        return {}
-    toml_lines: list[str] = []
-    for line in lines[span[0] : span[1]]:
-        if line.startswith("# "):
-            toml_lines.append(line[2:])
-        elif line.rstrip() == "#":
-            toml_lines.append("")
-        else:
-            return {}
-    try:
-        return load_toml("\n".join(toml_lines))
-    except TOMLDecodeError:
-        return {}
-
-
-def _block(lines: list[str]) -> tuple[int, int] | None:
-    start = None
-    for at, line in enumerate(lines):
-        if line.rstrip() == _START:
-            start = at + 1
-        elif line.rstrip() == "# ///" and start is not None:
-            return start, at
-    return None
 
 
 __all__ = [

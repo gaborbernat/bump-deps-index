@@ -37,20 +37,20 @@ class PyProjectToml(SingleFileLoader):
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
-        return replace_strings(text, changes, _is_dependency)
+        return replace_strings(text, changes, self._is_dependency)
 
-
-def _is_dependency(path: tuple[str, ...]) -> bool:
-    match path:
-        case (
-            ("build-system", "requires", "[]")
-            | ("project", "dependencies", "[]")
-            | ("project", "optional-dependencies", _, "[]")
-            | ("dependency-groups", _, "[]")
-            | ("tool", "uv", "dev-dependencies", "[]")
-        ):
-            return True
-    return False
+    @staticmethod
+    def _is_dependency(path: tuple[str, ...]) -> bool:
+        match path:
+            case (
+                ("build-system", "requires", "[]")
+                | ("project", "dependencies", "[]")
+                | ("project", "optional-dependencies", _, "[]")
+                | ("dependency-groups", _, "[]")
+                | ("tool", "uv", "dev-dependencies", "[]")
+            ):
+                return True
+        return False
 
 
 __all__ = [
