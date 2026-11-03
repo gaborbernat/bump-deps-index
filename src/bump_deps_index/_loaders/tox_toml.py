@@ -40,7 +40,7 @@ class ToxToml(SingleFileLoader):
 
     @staticmethod
     def _requirements(value: Parsed) -> Iterator[str]:
-        # follow lists and the branches of a tox substitution that can hold requirements
+        # tox substitutions can hold requirements in their branches, so the walk follows those too
         match value:
             case str() if value and value[0] not in {"-", "{"}:
                 yield value
