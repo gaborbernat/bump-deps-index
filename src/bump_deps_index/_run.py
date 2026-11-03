@@ -20,7 +20,7 @@ from ._config import (
     npm_settings,
     pip_extra_indexes,
 )
-from ._loaders import get_loaders
+from ._loaders._registry import get_loaders
 from ._lookup import Lookup, PkgType, package_type
 from ._npm_registry import NpmRegistry
 from ._pep440 import python_floor
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from ._cli import Options
     from ._config import Project
-    from ._loaders import Loader
+    from ._loaders._base import Loader
 
 
 def run(options: Options) -> bool:

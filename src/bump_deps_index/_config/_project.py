@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from packaging.version import Version
 
-    from bump_deps_index._loaders import Entry
+    from bump_deps_index._loaders._base import Entry
 
     from ._npm import NpmSettings
 

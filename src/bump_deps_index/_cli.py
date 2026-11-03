@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from ._config import npm_registry, python_exclude_newer, python_index_url
 from ._cutoff import parse_exclude_newer
-from ._loaders import get_loaders
+from ._loaders._registry import get_loaders
 from ._redact import redact_url
 from .version import version
 
