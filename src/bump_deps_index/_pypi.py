@@ -40,25 +40,19 @@ class IndexLookup(NamedTuple):
 class SimpleIndex:
     """Reads PyPI simple index pages, fetching each page once across threads."""
 
-    def __init__(self, client: Client) -> None:
+    def __init__(self, client: Client, exclude_newer: datetime | None) -> None:
         self.client = client
+        self.exclude_newer = exclude_newer
         self._pages: dict[str, _Page] = {}
         self._lock = Lock()
 
     def versions(
-        self,
-        lookup: IndexLookup,
-        package: str,
-        *,
-        python_version: Version | None,
-        pre_release: bool,
-        exclude_newer: datetime | None,
+        self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
     ) -> list[Version]:
         name = canonicalize_name(package)
         versions: set[Version] = set()
         for file in self._project_files(lookup, name):
-            # a file without an upload time is not a candidate under a cutoff, as uv treats it
-            if exclude_newer is not None and (file.uploaded is None or file.uploaded >= exclude_newer):
+            if not self.accepts_upload(file.uploaded):
                 continue
             if (
                 python_version is not None
@@ -74,6 +68,10 @@ class SimpleIndex:
             if project == name:  # an index page may list files of other projects, as pip and uv skip them
                 versions.add(version)
         return sorted((version for version in versions if pre_release or not version.is_prerelease), reverse=True)
+
+    def accepts_upload(self, uploaded: datetime | None) -> bool:
+        # uv skips a file without an upload time under a cutoff, so only a dated file before the cutoff counts
+        return self.exclude_newer is None or (uploaded is not None and uploaded < self.exclude_newer)
 
     def _project_files(self, lookup: IndexLookup, name: str) -> list[_IndexFile]:
         # uv takes a package from the first of its indexes that has it; pip merges its index with the extra indexes

@@ -65,7 +65,7 @@ def _named_lookup(raw: str, project: _Project, settings: _IndexSettings, *, pre_
     else:  # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
         python = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
         indexes = python or IndexLookup(settings.index_url)
-    return Lookup(package, pkg_type, pre_release, project.python_floor, indexes, settings.exclude_newer)
+    return Lookup(package, pkg_type, pre_release, project.python_floor, indexes)
 
 
 def _run_files(filenames: Sequence[Path], settings: _IndexSettings, *, pre_release: bool | None) -> bool:
@@ -114,7 +114,7 @@ def _load_lookups(
     for entry in entries:
         if (name := entry.spec.strip()) and (indexes := _entry_indexes(name, entry, project, own_uv, settings)):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
-            lookups[Lookup(name, entry.pkg_type, pre_release, floor, indexes, settings.exclude_newer)] = None
+            lookups[Lookup(name, entry.pkg_type, pre_release, floor, indexes)] = None
     return list(lookups)
 
 
@@ -164,7 +164,7 @@ def _resolve(settings: _IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[
         ) as client,
         ThreadPoolExecutor(max_workers=parallel) as executor,
     ):
-        index = SimpleIndex(client)
+        index = SimpleIndex(client, settings.exclude_newer)
         futures = {
             executor.submit(
                 update,

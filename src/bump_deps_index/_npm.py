@@ -8,9 +8,8 @@ from bump_deps_index._cutoff import parse_timestamp
 from bump_deps_index._parsed import json_field, table
 
 if TYPE_CHECKING:
-    from httpx import Client
-
     from bump_deps_index._parsed import Parsed
+    from bump_deps_index._pypi import SimpleIndex
     from bump_deps_index._spec import Lookup
 
 _ACCEPT: Final[str] = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
@@ -22,11 +21,11 @@ _SEMVER: Final[re.Pattern[str]] = re.compile(
 _PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
 
 
-def update_js(client: Client, lookup: Lookup, authorization: str | None) -> str:
+def update_js(index: SimpleIndex, lookup: Lookup, authorization: str | None) -> str:
     spec = lookup.requirement
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    versions, latest = _versions(client, package, lookup, authorization)
+    versions, latest = _versions(index, package, lookup, authorization)
     if not wanted or _PIN.fullmatch(wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
         candidates = [version for key, version in versions if pinned is None or key >= pinned]
@@ -50,20 +49,19 @@ def update_js(client: Client, lookup: Lookup, authorization: str | None) -> str:
 
 
 def _versions(
-    client: Client, package: str, lookup: Lookup, authorization: str | None
+    index: SimpleIndex, package: str, lookup: Lookup, authorization: str | None
 ) -> tuple[list[tuple[_Semver, str]], Parsed]:
-    exclude_newer = lookup.exclude_newer
-    response = client.get(
+    response = index.client.get(
         f"{lookup.indexes.url.rstrip('/')}/{quote(package, safe='@')}",
         headers={
             # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
-            "Accept": _ACCEPT if exclude_newer is None else "application/json",
+            "Accept": _ACCEPT if index.exclude_newer is None else "application/json",
             **({} if authorization is None else {"Authorization": authorization}),
         },
         follow_redirects=True,
     )
     response.raise_for_status()
-    times = {} if exclude_newer is None else table(response.json(), "time")
+    times = {} if index.exclude_newer is None else table(response.json(), "time")
     return sorted(
         (
             (key, version)
@@ -71,10 +69,7 @@ def _versions(
             if (key := _semver(version)) is not None
             and (lookup.pre_release or key.release)
             and not (isinstance(meta, dict) and meta.get("deprecated"))
-            and (
-                exclude_newer is None
-                or ((uploaded := parse_timestamp(times.get(version))) is not None and uploaded < exclude_newer)
-            )
+            and index.accepts_upload(parse_timestamp(times.get(version)))
         ),
         reverse=True,
     ), table(response.json(), "dist-tags").get("latest")
