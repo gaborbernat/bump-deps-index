@@ -76,7 +76,7 @@ def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
     sections: list[str] = []
     for category in loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["towncrier"]["type"]:
         entries = [
-            f"- {fragment.read_text(encoding='utf-8').strip()}"
+            f"- {' '.join(fragment.read_text(encoding='utf-8').split())}"
             for fragment in sorted(fragments.glob(f"*.{category['directory']}.rst"))
         ]
         if entries:

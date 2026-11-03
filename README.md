@@ -76,17 +76,21 @@ fits the range. In `package.json` you get updates for `dependencies`, `devDepend
 
 With `--exclude-newer` you only move to releases uploaded before the cutoff, and the flag beats every other source.
 `--no-exclude-newer` drops the cutoff altogether, beating every other source as well, and the two flags cannot be
-combined. Without a flag you get the cutoff from `PIP_UPLOADED_PRIOR_TO`, then `UV_EXCLUDE_NEWER` (the variable uv reads
-for its lock step), then `exclude-newer` in the nearest `uv.toml` or `[tool.uv]` table, then `uploaded-prior-to` in your
-pip configuration, then `exclude-newer` in your user `uv.toml`. The first one set wins. An `exclude-newer = false` in a
-uv file disables the cutoff and stops the lookup, so the pip configuration and the user `uv.toml` are not read; an
+combined.
+
+Without a flag you get the cutoff from `PIP_UPLOADED_PRIOR_TO`, then `UV_EXCLUDE_NEWER` (the variable uv reads for its
+lock step), then `exclude-newer` in the nearest `uv.toml` or `[tool.uv]` table, then `uploaded-prior-to` in your pip
+configuration, then `exclude-newer` in your user `uv.toml`. The first one set wins. An `exclude-newer = false` in a uv
+file disables the cutoff and stops the lookup, so the pip configuration and the user `uv.toml` are not read; an
 environment variable still ranks above it.
 
 The cutoff is an RFC 3339 timestamp, a local date, a datetime without an offset (read as local time), or a duration
 counted back from now, such as `P7D` or `7 days`. As uv does, you skip a file without an upload time. You read upload
 times from the PEP 700 fields of the JSON simple API and from the `time` map of the npm registry, so an index that
-serves only HTML offers no candidates under a cutoff. A requirement already above the newest eligible release keeps its
-floor. Pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to their dependencies too.
+serves only HTML offers no candidates under a cutoff.
+
+A requirement already above the newest eligible release keeps its floor. Pre-commit hooks take their versions from PyPI
+or npm, so the cutoff applies to their dependencies too.
 
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates
 for hooks in other languages. For a remote hook without a `language`, you get the language from the
