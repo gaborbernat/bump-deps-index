@@ -9,10 +9,10 @@ import httpx
 import pytest
 from packaging.utils import canonicalize_name
 
-from bump_deps_index import Options, run
+from bump_deps_index import Options, main, run
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
     from pytest_httpx import HTTPXMock
@@ -95,3 +95,31 @@ class FakeIndex:
             for version in versions
         )
         return httpx.Response(200, text="".join(links))
+
+
+@pytest.fixture
+def bump(
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Callable[..., str]:
+    # look a spec up on the command line, from a folder whose project sets only `requires-python`
+    monkeypatch.chdir(tmp_path)
+
+    def run_main(
+        spec: str,
+        pages: Mapping[str, httpx.Response],
+        *,
+        pre_release: bool = False,
+        requires_python: str | None = None,
+        exclude_newer: str | None = None,
+    ) -> str:
+        for url, response in pages.items():
+            httpx_mock.add_callback(lambda _, served=response: served, url=url, is_optional=True)
+        if requires_python is not None:
+            (tmp_path / "pyproject.toml").write_text(f'[project]\nrequires-python = "{requires_python}"\n', "utf-8")
+        args = ["-i", "https://I.com", "-n", "https://N.com", "-p", "yes" if pre_release else "no"]
+        if exclude_newer is not None:
+            args += ["--exclude-newer", exclude_newer]
+        main([*args, spec])
+        return capsys.readouterr().out.splitlines()[-1].rpartition(" -> ")[2]
+
+    return run_main

@@ -2,16 +2,10 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Final, NamedTuple
-from urllib.parse import quote
-
-from bump_deps_index._parsed import json_field, parse_timestamp, table
 
 if TYPE_CHECKING:
-    from bump_deps_index._parsed import Parsed
-    from bump_deps_index._pypi import SimpleIndex
-    from bump_deps_index._spec import Lookup
+    from collections.abc import Iterable
 
-_ACCEPT: Final[str] = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
 _SEMVER: Final[re.Pattern[str]] = re.compile(
     r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
@@ -20,14 +14,19 @@ _SEMVER: Final[re.Pattern[str]] = re.compile(
 _PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
 
 
-def update_js(index: SimpleIndex, lookup: Lookup, authorization: str | None) -> str:
-    spec = lookup.requirement
-    at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
-    package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    versions, latest = _versions(index, package, lookup, authorization)
+def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_release: bool) -> str:
+    package, wanted = split_npm_spec(spec)
+    ranked = sorted(
+        (
+            (key, version)
+            for version in versions
+            if (key := _semver(version)) is not None and (pre_release or key.release)
+        ),
+        reverse=True,
+    )
     if not wanted or _PIN.fullmatch(wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
-        candidates = [version for key, version in versions if pinned is None or key >= pinned]
+        candidates = [version for key, version in ranked if pinned is None or key >= pinned]
     else:
         operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
         # keep ranges this tool cannot compare, such as `<2` or a dist-tag
@@ -40,38 +39,16 @@ def update_js(index: SimpleIndex, lookup: Lookup, authorization: str | None) -> 
                 depth = 2
             case _:  # `^1.2.3` keeps the major inside its range, `^0.2.3` the minor and `^0.0.3` the patch
                 depth = 1 if current.major else 2 if current.minor else 3
-        candidates = [version for key, version in versions if key >= current and key[:depth] == current[:depth]]
+        candidates = [version for key, version in ranked if key >= current and key[:depth] == current[:depth]]
     if not candidates:  # the registry has no release you accept, such as only pre-releases
         return spec
     # npm installs the `latest` dist-tag when it fits the range, and the highest version otherwise
     return f"{package}@{operator}{latest if latest in candidates else candidates[0]}"
 
 
-def _versions(
-    index: SimpleIndex, package: str, lookup: Lookup, authorization: str | None
-) -> tuple[list[tuple[_Semver, str]], Parsed]:
-    response = index.client.get(
-        f"{lookup.indexes.url.rstrip('/')}/{quote(package, safe='@')}",
-        headers={
-            # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
-            "Accept": _ACCEPT if index.exclude_newer is None else "application/json",
-            **({} if authorization is None else {"Authorization": authorization}),
-        },
-        follow_redirects=True,
-    )
-    response.raise_for_status()
-    times = {} if index.exclude_newer is None else table(response.json(), "time")
-    return sorted(
-        (
-            (key, version)
-            for version, meta in json_field(response, "versions", dict).items()
-            if (key := _semver(version)) is not None
-            and (lookup.pre_release or key.release)
-            and not (isinstance(meta, dict) and meta.get("deprecated"))
-            and index.accepts_upload(parse_timestamp(times.get(version)))
-        ),
-        reverse=True,
-    ), table(response.json(), "dist-tags").get("latest")
+def split_npm_spec(spec: str) -> tuple[str, str]:
+    at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
+    return (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
 
 
 class _Semver(NamedTuple):
@@ -101,5 +78,6 @@ def _semver(version: str) -> _Semver | None:
 
 
 __all__ = [
-    "update_js",
+    "bump_js",
+    "split_npm_spec",
 ]

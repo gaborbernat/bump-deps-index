@@ -6,44 +6,13 @@ from typing import TYPE_CHECKING, Final
 import httpx
 import pytest
 
-from bump_deps_index import main
-
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
     from pathlib import Path
 
     from conftest import FakeIndex
-    from pytest_httpx import HTTPXMock
 
 pytestmark = pytest.mark.usefixtures("isolated_index_settings")
-
-
-@pytest.fixture
-def bump(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> Callable[..., str]:
-    # look a spec up on the command line, from a folder whose project sets only `requires-python`
-    monkeypatch.chdir(tmp_path)
-
-    def run_main(
-        spec: str,
-        pages: Mapping[str, httpx.Response],
-        *,
-        pre_release: bool = False,
-        requires_python: str | None = None,
-        exclude_newer: str | None = None,
-    ) -> str:
-        for url, response in pages.items():
-            httpx_mock.add_callback(lambda _, served=response: served, url=url, is_optional=True)
-        if requires_python is not None:
-            (tmp_path / "pyproject.toml").write_text(f'[project]\nrequires-python = "{requires_python}"\n', "utf-8")
-        args = ["-i", "https://I.com", "-n", "https://N.com", "-p", "yes" if pre_release else "no"]
-        if exclude_newer is not None:
-            args += ["--exclude-newer", exclude_newer]
-        main([*args, spec])
-        return capsys.readouterr().out.splitlines()[-1].rpartition(" -> ")[2]
-
-    return run_main
 
 
 def test_update_python_parses_index_file_names(bump: Callable[..., str]) -> None:
@@ -166,92 +135,10 @@ def test_update_python(
     assert bump(spec, {"https://I.com/a/": httpx.Response(200, text=index)}, pre_release=pre_release) == result
 
 
-@pytest.mark.parametrize(
-    ("spec", "versions", "pre_release", "result"),
-    [
-        pytest.param("a@1", ["1.0.0", "2.0.0"], False, "a@2.0.0", id="versioned"),
-        pytest.param("a@", ["2.0.0"], False, "a@2.0.0", id="bare"),
-        pytest.param("a@", ["1.0.0", "1.1.0", "bad", "1.2.0-a.1"], False, "a@1.1.0", id="skip-invalid-and-pre"),
-        pytest.param("a@", ["1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1"], True, "a@1.0.0-rc.1", id="pre-rc"),
-        pytest.param("a@", ["1.0.0-beta.2", "1.0.0-beta.11"], True, "a@1.0.0-beta.11", id="pre-numeric-order"),
-        pytest.param("a@v1.0.0", ["1.0.0", "2.0.0"], False, "a@2.0.0", id="v-prefixed-pin"),
-        pytest.param("a@^1.0.0", ["1.0.0", "1.2.0", "2.0.0"], False, "a@^1.2.0", id="caret-keeps-major"),
-        pytest.param("a@^0.2.0", ["0.2.0", "0.2.5", "0.3.0"], False, "a@^0.2.5", id="caret-zero-major-keeps-minor"),
-        pytest.param("a@^0.0.1", ["0.0.1", "0.0.2"], False, "a@^0.0.1", id="caret-zero-minor-keeps-patch"),
-        pytest.param("a@~1.2.0", ["1.2.0", "1.2.3", "1.3.0"], False, "a@~1.2.3", id="tilde-keeps-minor"),
-        pytest.param("a@>=1.0.0", ["1.0.0", "2.0.0"], False, "a@>=2.0.0", id="lower-bound"),
-        pytest.param("a@^2.0.0", ["1.0.0"], False, "a@^2.0.0", id="no-release-in-range"),
-        pytest.param("a@<2", ["1.0.0"], False, "a@<2", id="unsupported-operator"),
-        pytest.param("a@^1.x", ["1.0.0"], False, "a@^1.x", id="unsupported-version"),
-        pytest.param("a@latest", ["1.0.0"], False, "a@latest", id="dist-tag"),
-        pytest.param("a@1.2", ["1.0.0", "2.0.0"], False, "a@2.0.0", id="partial-pin"),
-        pytest.param("a@1 || 2", ["1.0.0", "3.0.0"], False, "a@1 || 2", id="union-range"),
-        pytest.param("a@2.0.0-beta.1", ["1.9.0", "2.0.0-beta.1"], False, "a@2.0.0-beta.1", id="pin-no-downgrade"),
-        pytest.param("a@3", ["2.0.0"], False, "a@3", id="partial-pin-no-downgrade"),
-        pytest.param("a@1.0.0", ["1.1.0-beta"], False, "a@1.0.0", id="only-pre-releases"),
-        pytest.param("a@1.x", ["1.0.0", "2.0.0"], False, "a@1.x", id="x-range"),
-    ],
-)
-def test_update_js(spec: str, versions: list[str], pre_release: bool, result: str, bump: Callable[..., str]) -> None:
-
-    assert (
-        bump(
-            spec,
-            {"https://N.com/a": httpx.Response(200, json={"versions": {key: {} for key in versions}})},
-            pre_release=pre_release,
-        )
-        == result
-    )
-
-
-@pytest.mark.parametrize(
-    ("spec", "result"),
-    [
-        pytest.param("a@", "a@1.4.0", id="bare"),
-        pytest.param("a@1.0.0", "a@1.4.0", id="pin"),
-        pytest.param("a@^1.0.0", "a@^1.4.0", id="range"),
-        pytest.param("a@^1.5.0", "a@^1.5.0", id="range-above-latest"),
-        pytest.param("a@~1.0.0", "a@~1.0.0", id="range-below-latest"),
-    ],
-)
-def test_update_js_prefers_latest_tag_inside_range(spec: str, result: str, bump: Callable[..., str]) -> None:
-    versions = {key: {} for key in ("1.0.0", "1.4.0", "1.5.0", "2.0.0")}
-
-    assert (
-        bump(
-            spec,
-            {"https://N.com/a": httpx.Response(200, json={"dist-tags": {"latest": "1.4.0"}, "versions": versions})},
-        )
-        == result
-    )
-
-
 def test_update_python_skips_files_of_other_projects(bump: Callable[..., str]) -> None:
     files = "<a>foo-2.0.tar.gz</a><a>foo_bar-9.0.tar.gz</a><a>foo.bar-8.0-py3-none-any.whl</a><a>foo-bar-7.tar.bz2</a>"
 
     assert bump("foo>=1", {"https://I.com/foo/": httpx.Response(200, text=files)}) == "foo>=2"
-
-
-def test_update_js_encodes_scoped_package(bump: Callable[..., str]) -> None:
-
-    assert (
-        bump(
-            "@scope/package", {"https://N.com/@scope%2Fpackage": httpx.Response(200, json={"versions": {"1.0.0": {}}})}
-        )
-        == "@scope/package@1.0.0"
-    )
-
-
-def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(
-    httpx_mock: HTTPXMock, bump: Callable[..., str]
-) -> None:
-    httpx_mock.add_response(
-        url="https://N.com/a",
-        match_headers={"Accept": "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"},
-        json={"versions": {"1.0.0": {}, "2.0.0": {"deprecated": "broken"}}},
-    )
-
-    assert bump("a@", {}) == "a@1.0.0"
 
 
 def test_run_prints_index_once_without_credentials(
@@ -309,35 +196,6 @@ def test_update_python_filters_files(content_type: str, body: str, bump: Callabl
             requires_python=">=3.11",
         )
         == "A>=2"
-    )
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        pytest.param({"versions": None}, id="null-versions"),
-        pytest.param({"versions": ["1.0.0"]}, id="list-versions"),
-        pytest.param(["1.0.0"], id="list-payload"),
-    ],
-)
-def test_update_js_rejects_malformed_metadata(
-    capsys: pytest.CaptureFixture[str], bump: Callable[..., str], payload: dict[str, list[str] | None] | list[str]
-) -> None:
-
-    with pytest.raises(SystemExit):
-        bump("a@", {"https://N.com/a": httpx.Response(200, json=payload)})
-
-    assert capsys.readouterr().err == "failed a@ with TypeError('https://n.com/a has no versions dict')\n"
-
-
-def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) -> None:
-
-    assert (
-        bump(
-            "a@",
-            {"https://N.com/a": httpx.Response(200, json={"versions": {"1.0.0": "x", "2.0.0": {"deprecated": "y"}}})},
-        )
-        == "a@1.0.0"
     )
 
 
@@ -486,65 +344,3 @@ def test_update_python_html_index_has_no_upload_times(
     html = "<a>A-1.tar.gz</a><a>A-2.tar.gz</a>"
 
     assert bump("A>=1", {"https://I.com/a/": httpx.Response(200, text=html)}, exclude_newer=exclude_newer) == result
-
-
-@pytest.mark.parametrize(
-    ("spec", "uploads", "latest", "result"),
-    [
-        pytest.param("a@", {"1.0.0": _BEFORE_CUTOFF, "2.0.0": _AFTER_CUTOFF}, "2.0.0", "a@1.0.0", id="latest-too-new"),
-        pytest.param(
-            "a@^2.0.0",
-            {"2.0.0": _BEFORE_CUTOFF, "2.5.0": _BEFORE_CUTOFF, "2.9.0": _AFTER_CUTOFF},
-            "2.9.0",
-            "a@^2.5.0",
-            id="range-skips-too-new",
-        ),
-        pytest.param(
-            "a@^1.0.0",
-            {"1.0.0": _BEFORE_CUTOFF, "1.2.0": _BEFORE_CUTOFF, "2.0.0": _AFTER_CUTOFF},
-            "2.0.0",
-            "a@^1.2.0",
-            id="caret",
-        ),
-        pytest.param(
-            "a@1.0.0", {"1.0.0": _BEFORE_CUTOFF, "1.1.0": None}, "1.1.0", "a@1.0.0", id="missing-upload-time-skipped"
-        ),
-        pytest.param(
-            "a@", {"1.0.0": _BEFORE_CUTOFF, "2.0.0": None}, "2.0.0", "a@1.0.0", id="version-without-upload-time"
-        ),
-        pytest.param(
-            "a@>=2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "3.0.0": _AFTER_CUTOFF},
-            "3.0.0",
-            "a@>=2.5.0",
-            id="floor-above-eligible-kept",
-        ),
-        pytest.param(
-            "a@^2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "3.0.0": _AFTER_CUTOFF},
-            "3.0.0",
-            "a@^2.5.0",
-            id="caret-above-eligible-kept",
-        ),
-        pytest.param(
-            "a@2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "2.6.0": _AFTER_CUTOFF},
-            "2.6.0",
-            "a@2.5.0",
-            id="pin-above-eligible-kept",
-        ),
-    ],
-)
-def test_update_js_respects_upload_cutoff(
-    spec: str, uploads: dict[str, str | None], latest: str, result: str, bump: Callable[..., str]
-) -> None:
-    times = {version: uploaded for version, uploaded in uploads.items() if uploaded is not None}
-    document = {"versions": {version: {} for version in uploads}, "time": times, "dist-tags": {"latest": latest}}
-
-    assert bump(spec, {"https://N.com/a": httpx.Response(200, json=document)}, exclude_newer=_CUTOFF) == result
-
-
-def test_update_js_without_time_map_offers_no_candidates(bump: Callable[..., str]) -> None:
-    response = httpx.Response(200, json={"versions": {"1.0.0": {}}, "dist-tags": {"latest": "1.0.0"}})
-
-    assert bump("a@", {"https://N.com/a": response}, exclude_newer=_CUTOFF) == "a@"

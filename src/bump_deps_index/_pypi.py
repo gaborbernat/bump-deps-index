@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from functools import cache
 from html.parser import HTMLParser
-from threading import Lock
 from typing import TYPE_CHECKING, Final, NamedTuple
 
 from httpx import HTTPStatusError, codes
@@ -17,12 +15,15 @@ from packaging.utils import (
 )
 from packaging.version import Version
 
+from bump_deps_index._cache import FetchCache
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from httpx import Client
+
+    from bump_deps_index._npm_registry import NpmRelease
 
 _SIMPLE_JSON: Final[str] = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final[str] = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
@@ -42,8 +43,8 @@ class SimpleIndex:
     def __init__(self, client: Client, exclude_newer: datetime | None) -> None:
         self.client = client
         self.exclude_newer = exclude_newer
-        self._pages: dict[str, _Page] = {}
-        self._lock = Lock()
+        self.npm_releases: FetchCache[NpmRelease] = FetchCache()
+        self._pages: FetchCache[list[_IndexFile]] = FetchCache()
 
     def versions(
         self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
@@ -79,7 +80,7 @@ class SimpleIndex:
             missing: list[HTTPStatusError] = []
             for url in urls:
                 try:
-                    pages.append(self._files(f"{url.rstrip('/')}/{name}/"))
+                    pages.append(self._pages.get(f"{url.rstrip('/')}/{name}/", self._fetch))
                 except HTTPStatusError as exc:
                     if exc.response.status_code != codes.NOT_FOUND:
                         raise
@@ -87,14 +88,6 @@ class SimpleIndex:
             if pages:
                 return [file for page in pages for file in page]
         raise missing[0]  # no index has the package; report the not found answer of the main index
-
-    def _files(self, url: str) -> list[_IndexFile]:
-        with self._lock:
-            page = self._pages.setdefault(url, _Page())
-        with page.lock:
-            if page.files is None:
-                page.files = self._fetch(url)
-            return page.files
 
     def _fetch(self, url: str) -> list[_IndexFile]:
         response = self.client.get(url, headers={"Accept": _SIMPLE_ACCEPT}, follow_redirects=True)
@@ -113,12 +106,6 @@ class SimpleIndex:
         parser = _IndexParser()
         parser.feed(response.text)
         return parser.files
-
-
-@dataclass
-class _Page:
-    lock: Lock = field(default_factory=Lock)
-    files: list[_IndexFile] | None = None
 
 
 class _IndexFile(NamedTuple):
