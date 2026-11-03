@@ -16,26 +16,14 @@ def npm_registry() -> str:
     return _npm_env("NPM_CONFIG_REGISTRY") or _npmrc().get("registry") or "https://registry.npmjs.org"
 
 
-def npm_settings() -> NpmSettings:
-    npmrc = _npmrc()
-    return NpmSettings(
-        registry_by_scope={
-            key.removesuffix(":registry"): value
-            for key, value in npmrc.items()
-            if key.startswith("@") and key.endswith(":registry")
-        },
-        authorization_by_key=_npm_authorizations(npmrc),
-    )
+def _npm_env(name: str) -> str | None:
+    # npm reads its settings from the environment in any letter case, such as `npm_config_registry`
+    return next((value for key, value in os.environ.items() if key.upper() == name and value), None)
 
 
 def _npmrc() -> dict[str, str]:
     user_npmrc = Path(_npm_env("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
     return {**_read_npmrc(user_npmrc), **_read_npmrc(Path.cwd() / ".npmrc")}
-
-
-def _npm_env(name: str) -> str | None:
-    # npm reads its settings from the environment in any letter case, such as `npm_config_registry`
-    return next((value for key, value in os.environ.items() if key.upper() == name and value), None)
 
 
 def _read_npmrc(path: Path) -> dict[str, str]:
@@ -66,6 +54,37 @@ def _npmrc_value(raw: str) -> str:
     )
 
 
+def npm_settings() -> NpmSettings:
+    npmrc = _npmrc()
+    return NpmSettings(
+        registry_by_scope={
+            key.removesuffix(":registry"): value
+            for key, value in npmrc.items()
+            if key.startswith("@") and key.endswith(":registry")
+        },
+        authorization_by_key=_npm_authorizations(npmrc),
+    )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NpmSettings:
+    registry_by_scope: Mapping[str, str]
+    authorization_by_key: Mapping[str, str]
+
+    def authorization(self, registry: str) -> str | None:
+        parsed = urlsplit(registry)
+        host, parts = parsed.netloc.rpartition("@")[2], [part for part in parsed.path.split("/") if part]
+        # npm walks up the registry path one segment at a time and sends the first credential it finds
+        for depth in range(len(parts), -1, -1):
+            key = "".join((f"//{host}", *(f"/{part}" for part in parts[:depth])))
+            if value := self.authorization_by_key.get(f"{key}/") or self.authorization_by_key.get(key):
+                return value
+        return None
+
+    def registry(self, spec: str, default: str) -> str:
+        return self.registry_by_scope.get(spec.partition("/")[0], default) if spec.startswith("@") else default
+
+
 def _npm_authorizations(npmrc: dict[str, str]) -> dict[str, str]:
     # npm sends a token over a `_auth` value, and that over a `username` with a base64 `_password`
     authorizations: dict[str, str] = {}
@@ -89,25 +108,6 @@ def _basic(username: str, encoded_password: str | None) -> str | None:
     except ValueError:  # skip a password that is not base64, as you could not log in with it
         return None
     return b64encode(f"{username}:{password}".encode()).decode() if password else None
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NpmSettings:
-    registry_by_scope: Mapping[str, str]
-    authorization_by_key: Mapping[str, str]
-
-    def registry(self, spec: str, default: str) -> str:
-        return self.registry_by_scope.get(spec.partition("/")[0], default) if spec.startswith("@") else default
-
-    def authorization(self, registry: str) -> str | None:
-        parsed = urlsplit(registry)
-        host, parts = parsed.netloc.rpartition("@")[2], [part for part in parsed.path.split("/") if part]
-        # npm walks up the registry path one segment at a time and sends the first credential it finds
-        for depth in range(len(parts), -1, -1):
-            key = "".join((f"//{host}", *(f"/{part}" for part in parts[:depth])))
-            if value := self.authorization_by_key.get(f"{key}/") or self.authorization_by_key.get(key):
-                return value
-        return None
 
 
 __all__ = [

@@ -16,6 +16,15 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+def parse_cli(args: Sequence[str] | None) -> Options:
+    options = Options()
+    _build_parser().parse_args(args, namespace=options)
+    if options.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
+        found = () if options.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
+        options.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
+    return options
+
+
 class Options(Namespace):
     index_url: str
     """The PyPI Index URL to query for Python versions."""
@@ -40,15 +49,6 @@ class Options(Namespace):
     """Accept pre-releases: yes, no or decide per file type"""
     exclude_newer: datetime | None
     """Only candidates uploaded before this instant; None accepts every release"""
-
-
-def parse_cli(args: Sequence[str] | None) -> Options:
-    options = Options()
-    _build_parser().parse_args(args, namespace=options)
-    if options.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
-        found = () if options.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
-        options.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
-    return options
 
 
 def _build_parser() -> ArgumentParser:
@@ -110,11 +110,9 @@ def _build_parser() -> ArgumentParser:
     return parser
 
 
-def _cutoff_argument(value: str) -> datetime:
-    try:
-        return parse_exclude_newer(value, datetime.now(UTC))
-    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
-        raise ArgumentTypeError(str(exc)) from exc
+class _HelpFormatter(RawDescriptionHelpFormatter):
+    def __init__(self, prog: str) -> None:
+        super().__init__(prog, max_help_position=35, width=190)
 
 
 def _pre_release_argument(value: str) -> bool | None:
@@ -125,9 +123,11 @@ def _pre_release_argument(value: str) -> bool | None:
     return choices[value]
 
 
-class _HelpFormatter(RawDescriptionHelpFormatter):
-    def __init__(self, prog: str) -> None:
-        super().__init__(prog, max_help_position=35, width=190)
+def _cutoff_argument(value: str) -> datetime:
+    try:
+        return parse_exclude_newer(value, datetime.now(UTC))
+    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
+        raise ArgumentTypeError(str(exc)) from exc
 
 
 __all__ = [

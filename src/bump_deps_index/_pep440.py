@@ -140,13 +140,13 @@ def _lower_bound(operator: str, raw_version: str) -> Version:
     return _next_release(version)
 
 
+def _release(parts: Iterable[int]) -> Version:
+    return Version(".".join(str(part) for part in parts))
+
+
 def _next_release(version: Version) -> Version:
     release = (*version.release, *(0 for _ in range(3 - len(version.release))))
     return _release((*release[:-1], release[-1] + 1))
-
-
-def _release(parts: Iterable[int]) -> Version:
-    return Version(".".join(str(part) for part in parts))
 
 
 __all__ = [

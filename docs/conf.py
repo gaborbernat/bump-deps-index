@@ -81,6 +81,19 @@ def setup(app: Sphinx) -> None:
     app.connect("source-read", _include_unreleased)
 
 
+def _resolve_private_path(
+    app: Sphinx,
+    env: BuildEnvironment,
+    node: pending_xref,
+    contnode: Element,
+) -> reference | None:
+    if node["reftarget"] != "pathlib._local.Path":
+        return None
+    node["reftarget"] = "pathlib.Path"
+    domain = env.get_domain("py")
+    return domain.resolve_xref(env, node["refdoc"], app.builder, node["reftype"], node["reftarget"], node, contnode)
+
+
 def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
     if docname != "changelog":
         return
@@ -109,16 +122,3 @@ def _include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
             ".. towncrier release notes start",
             f".. _release-unreleased:\n\nUnreleased\n----------\n\n{joined}\n.. towncrier release notes start",
         )
-
-
-def _resolve_private_path(
-    app: Sphinx,
-    env: BuildEnvironment,
-    node: pending_xref,
-    contnode: Element,
-) -> reference | None:
-    if node["reftarget"] != "pathlib._local.Path":
-        return None
-    node["reftarget"] = "pathlib.Path"
-    domain = env.get_domain("py")
-    return domain.resolve_xref(env, node["refdoc"], app.builder, node["reftype"], node["reftarget"], node, contnode)

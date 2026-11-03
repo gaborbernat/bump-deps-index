@@ -48,25 +48,6 @@ def split_npm_spec(spec: str) -> tuple[str, str]:
     return (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
 
 
-@dataclass(frozen=True, slots=True, kw_only=True, order=True)
-class _Semver:
-    major: int
-    minor: int
-    patch: int
-    # a release sorts above its pre-releases
-    release: bool
-    pre: tuple[tuple[int, int, str], ...]
-
-    def prefix(self, depth: int) -> tuple[int, ...]:
-        return (self.major, self.minor, self.patch)[:depth]
-
-
-def _pad_version(version: str) -> str:
-    release, dash, pre = version.partition("-")
-    parts = release.split(".")
-    return f"{'.'.join([*parts, *['0'] * (3 - len(parts))])}{dash}{pre}"
-
-
 def _semver(version: str) -> _Semver | None:
     pattern = (
         r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
@@ -86,6 +67,25 @@ def _semver(version: str) -> _Semver | None:
         release=pre is None,
         pre=identifiers,
     )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True, order=True)
+class _Semver:
+    major: int
+    minor: int
+    patch: int
+    # a release sorts above its pre-releases
+    release: bool
+    pre: tuple[tuple[int, int, str], ...]
+
+    def prefix(self, depth: int) -> tuple[int, ...]:
+        return (self.major, self.minor, self.patch)[:depth]
+
+
+def _pad_version(version: str) -> str:
+    release, dash, pre = version.partition("-")
+    parts = release.split(".")
+    return f"{'.'.join([*parts, *['0'] * (3 - len(parts))])}{dash}{pre}"
 
 
 __all__ = [

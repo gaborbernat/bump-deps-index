@@ -47,6 +47,14 @@ def get_project(directory: Path) -> Project:
         return Project(pyproject=pyproject)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Project:
+    pyproject: Path | None = None
+    name: str | None = None
+    python_floor: Version | None = None
+    uv: UvIndexes | None = None
+
+
 def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: IndexSettings) -> IndexLookup:
     if pkg_type is PkgType.JS:
         return IndexLookup(url=settings.npm.registry(package, settings.npm_registry))
@@ -83,14 +91,6 @@ def entry_indexes(
         entry.index_url or settings.index_url,
         (*settings.pip_extras, *entry.extra_index_urls),
     )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Project:
-    pyproject: Path | None = None
-    name: str | None = None
-    python_floor: Version | None = None
-    uv: UvIndexes | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

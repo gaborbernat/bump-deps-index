@@ -11,11 +11,6 @@ if TYPE_CHECKING:
     from packaging.version import Version
 
 
-class PkgType(StrEnum):
-    PYTHON = "Python"
-    JS = "JavaScript"
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class IndexLookup:
     url: str
@@ -40,6 +35,11 @@ def package_type(spec: str) -> PkgType:
     except InvalidRequirement:
         return PkgType.JS
     return PkgType.PYTHON if requirement.url is None or urlsplit(requirement.url).scheme else PkgType.JS
+
+
+class PkgType(StrEnum):
+    PYTHON = "Python"
+    JS = "JavaScript"
 
 
 __all__ = [

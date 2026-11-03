@@ -17,12 +17,6 @@ if TYPE_CHECKING:
     from ._config import NpmSettings
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NpmRelease:
-    versions: tuple[str, ...]
-    latest: str | None
-
-
 class NpmRegistry:
     def __init__(self, client: Client, exclude_newer: datetime | None, settings: NpmSettings) -> None:
         self.client = client
@@ -61,6 +55,12 @@ class NpmRegistry:
             ),
             latest=latest if isinstance(latest, str) else None,
         )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NpmRelease:
+    versions: tuple[str, ...]
+    latest: str | None
 
 
 __all__ = [

@@ -27,13 +27,6 @@ _FILES: Final[dict[str, str]] = {
 }
 
 
-@pytest.fixture
-def project(index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    index.pypi["foo"] = ["2"]
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
 @pytest.mark.parametrize(
     "names",
     [
@@ -49,6 +42,13 @@ def test_cli_updates_the_files_it_finds(index: FakeIndex, project: Path, names: 
     main(["-i", index.index_url])
 
     assert {path.name for path in project.iterdir() if "foo>=2" in path.read_text(encoding="utf-8")} == names
+
+
+@pytest.fixture
+def project(index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    index.pypi["foo"] = ["2"]
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 def test_cli_updates_only_the_files_you_name(index: FakeIndex, project: Path) -> None:

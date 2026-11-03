@@ -532,14 +532,6 @@ def test_main_applies_uv_sources_where_uv_reads_them(
     ]
 
 
-def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
-    def serve(request: httpx.Request) -> httpx.Response:
-        url = request.url.copy_with(username=None, password=None)
-        return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)
-
-    return serve
-
-
 def test_main_merges_pip_extra_indexes(
     httpx_mock: HTTPXMock, isolated_index_settings: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -563,6 +555,14 @@ def test_main_merges_pip_extra_indexes(
     main(["-i", "https://pypi.example/simple", "-f", "requirements.txt"])
 
     assert requirements.read_text(encoding="utf-8").splitlines()[1:] == ["shared>=5", "conf>=3", "file>=4"]
+
+
+def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
+    def serve(request: httpx.Request) -> httpx.Response:
+        url = request.url.copy_with(username=None, password=None)
+        return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)
+
+    return serve
 
 
 def test_main_takes_a_package_from_the_first_uv_index_that_has_it(

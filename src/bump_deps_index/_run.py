@@ -71,6 +71,50 @@ def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_re
     )
 
 
+def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
+    if not lookups:
+        return {}, True
+    for pkg_type, registry in ((PkgType.PYTHON, settings.index_url), (PkgType.JS, settings.npm_registry)):
+        if any(lookup.pkg_type is pkg_type for lookup in lookups):
+            sys.stdout.write(f"Using {pkg_type} index: {redact_url(registry)}\n")
+    changes: dict[Lookup, str] = {}
+    successful = True
+    parallel = min(len(lookups), 10)
+    with (
+        Client(
+            verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+            limits=Limits(max_keepalive_connections=parallel, max_connections=parallel),
+        ) as client,
+        ThreadPoolExecutor(max_workers=parallel) as executor,
+    ):
+        index = SimpleIndex(client, settings.exclude_newer)
+        npm = NpmRegistry(client, settings.exclude_newer, settings.npm)
+        futures = {
+            executor.submit(
+                update,
+                index,
+                npm,
+                lookup,
+            ): lookup
+            for lookup in lookups
+        }
+        # report in submission order to keep the output stable between runs
+        for future, lookup in futures.items():
+            try:
+                result = future.result()
+            except (HTTPError, TypeError, ValueError) as exc:
+                successful = False
+                sys.stderr.write(
+                    f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(exc))}\n"
+                )
+            else:
+                changes[lookup] = result
+                sys.stdout.write(
+                    redact_text(f"{lookup.requirement}{f' -> {result}' if result != lookup.requirement else ''}\n")
+                )
+    return changes, successful
+
+
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
     successful = bool(filenames)
     if not successful:
@@ -127,50 +171,6 @@ def _load_lookups(
                 )
             ] = None
     return list(lookups)
-
-
-def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
-    if not lookups:
-        return {}, True
-    for pkg_type, registry in ((PkgType.PYTHON, settings.index_url), (PkgType.JS, settings.npm_registry)):
-        if any(lookup.pkg_type is pkg_type for lookup in lookups):
-            sys.stdout.write(f"Using {pkg_type} index: {redact_url(registry)}\n")
-    changes: dict[Lookup, str] = {}
-    successful = True
-    parallel = min(len(lookups), 10)
-    with (
-        Client(
-            verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT),
-            limits=Limits(max_keepalive_connections=parallel, max_connections=parallel),
-        ) as client,
-        ThreadPoolExecutor(max_workers=parallel) as executor,
-    ):
-        index = SimpleIndex(client, settings.exclude_newer)
-        npm = NpmRegistry(client, settings.exclude_newer, settings.npm)
-        futures = {
-            executor.submit(
-                update,
-                index,
-                npm,
-                lookup,
-            ): lookup
-            for lookup in lookups
-        }
-        # report in submission order to keep the output stable between runs
-        for future, lookup in futures.items():
-            try:
-                result = future.result()
-            except (HTTPError, TypeError, ValueError) as exc:
-                successful = False
-                sys.stderr.write(
-                    f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(exc))}\n"
-                )
-            else:
-                changes[lookup] = result
-                sys.stdout.write(
-                    redact_text(f"{lookup.requirement}{f' -> {result}' if result != lookup.requirement else ''}\n")
-                )
-    return changes, successful
 
 
 __all__ = [

@@ -88,6 +88,24 @@ class SimpleIndex:
         return parser.files
 
 
+@cache
+def _requires_python(value: str) -> SpecifierSet | None:
+    try:
+        return SpecifierSet(value)
+    except InvalidSpecifier:  # accept invalid legacy metadata to match pip
+        return None
+
+
+def _parse_filename(filename: str) -> tuple[str, Version]:
+    if filename.endswith(".whl"):
+        name, version, *_ = parse_wheel_filename(filename)
+        return name, version
+    if filename.endswith((".tar.gz", ".zip")):
+        return parse_sdist_filename(filename)
+    name, _, version = filename.removesuffix(".tar.bz2").rpartition("-")
+    return canonicalize_name(name), Version(version)
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _IndexFile:
     filename: str
@@ -121,24 +139,6 @@ class _IndexParser(HTMLParser):
         ):
             requires_python = next((value for key, value in self._attrs if key == "data-requires-python"), None)
             self.files.append(_IndexFile(filename=data.strip(), requires_python=requires_python))
-
-
-@cache
-def _requires_python(value: str) -> SpecifierSet | None:
-    try:
-        return SpecifierSet(value)
-    except InvalidSpecifier:  # accept invalid legacy metadata to match pip
-        return None
-
-
-def _parse_filename(filename: str) -> tuple[str, Version]:
-    if filename.endswith(".whl"):
-        name, version, *_ = parse_wheel_filename(filename)
-        return name, version
-    if filename.endswith((".tar.gz", ".zip")):
-        return parse_sdist_filename(filename)
-    name, _, version = filename.removesuffix(".tar.bz2").rpartition("-")
-    return canonicalize_name(name), Version(version)
 
 
 __all__ = [

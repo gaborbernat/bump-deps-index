@@ -35,6 +35,14 @@ def _workspace_root(folder: Path) -> list[tuple[Path, dict[str, Parsed]]]:
     return []
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UvIndexes:
+    # the index each source pins a package to, or None for a package from git, a path or a URL
+    sources: dict[str, str | None]
+    # the indexes uv checks before its default one; it takes a package from the first that has it
+    first: tuple[str, ...]
+
+
 def _sources(layers: list[tuple[dict[str, Parsed], dict[str, Parsed]]]) -> dict[str, str | None]:
     named = {
         name: url
@@ -49,6 +57,27 @@ def _sources(layers: list[tuple[dict[str, Parsed], dict[str, Parsed]]]) -> dict[
         index = entry.get("index") if isinstance(entry, dict) else None
         sources[canonicalize_name(package)] = named.get(index) if isinstance(index, str) else None
     return sources
+
+
+def _indexes(uv: dict[str, Parsed]) -> list[dict[str, Parsed]]:
+    return mappings(uv.get("index"))
+
+
+def _index_url(index: dict[str, Parsed]) -> str | None:
+    if not isinstance(url := index.get("url"), str):
+        return None
+    return _with_credentials(name, url) if isinstance(name := index.get("name"), str) else url
+
+
+def _with_credentials(name: str, url: str) -> str:
+    # uv reads the credentials of a named index from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`
+    prefix = f"UV_INDEX_{re.sub(r'[^A-Za-z0-9]', '_', name).upper()}"
+    username, password = (os.environ.get(f"{prefix}_{part}", "") for part in ("USERNAME", "PASSWORD"))
+    if not (username or password):
+        return url
+    parsed = urlsplit(url)
+    userinfo = f"{quote(username, safe='')}:{quote(password, safe='')}"
+    return parsed._replace(netloc=f"{userinfo}@{parsed.netloc.rpartition('@')[2]}").geturl()
 
 
 def _first_indexes(settings: list[dict[str, Parsed]]) -> tuple[str, ...]:
@@ -79,25 +108,10 @@ def _extra_indexes(uv: dict[str, Parsed]) -> list[str]:
     ]
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class UvIndexes:
-    # the index each source pins a package to, or None for a package from git, a path or a URL
-    sources: dict[str, str | None]
-    # the indexes uv checks before its default one; it takes a package from the first that has it
-    first: tuple[str, ...]
-
-
 def script_uv_indexes(metadata: dict[str, Parsed]) -> tuple[UvIndexes, str | None]:
     # `uv run --script` reads the `[tool.uv]` table of the script, outside any project
     uv = table(metadata, "tool", "uv")
     return UvIndexes(sources=_sources([(uv, {})]), first=_first_indexes([uv])), default_index(uv)
-
-
-def uv_settings(folder: Path) -> dict[str, Parsed]:
-    # uv reads `uv.toml` over the `[tool.uv]` table next to it
-    if (uv_toml := folder / "uv.toml").is_file():
-        return read_toml(uv_toml)
-    return table(read_toml(folder / "pyproject.toml"), "tool", "uv")
 
 
 def default_index(uv: dict[str, Parsed]) -> str | None:
@@ -105,25 +119,11 @@ def default_index(uv: dict[str, Parsed]) -> str | None:
     return default or (url if isinstance(url := uv.get("index-url"), str) else None)
 
 
-def _indexes(uv: dict[str, Parsed]) -> list[dict[str, Parsed]]:
-    return mappings(uv.get("index"))
-
-
-def _index_url(index: dict[str, Parsed]) -> str | None:
-    if not isinstance(url := index.get("url"), str):
-        return None
-    return _with_credentials(name, url) if isinstance(name := index.get("name"), str) else url
-
-
-def _with_credentials(name: str, url: str) -> str:
-    # uv reads the credentials of a named index from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`
-    prefix = f"UV_INDEX_{re.sub(r'[^A-Za-z0-9]', '_', name).upper()}"
-    username, password = (os.environ.get(f"{prefix}_{part}", "") for part in ("USERNAME", "PASSWORD"))
-    if not (username or password):
-        return url
-    parsed = urlsplit(url)
-    userinfo = f"{quote(username, safe='')}:{quote(password, safe='')}"
-    return parsed._replace(netloc=f"{userinfo}@{parsed.netloc.rpartition('@')[2]}").geturl()
+def uv_settings(folder: Path) -> dict[str, Parsed]:
+    # uv reads `uv.toml` over the `[tool.uv]` table next to it
+    if (uv_toml := folder / "uv.toml").is_file():
+        return read_toml(uv_toml)
+    return table(read_toml(folder / "pyproject.toml"), "tool", "uv")
 
 
 __all__ = [
