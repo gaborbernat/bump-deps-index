@@ -30,13 +30,28 @@ def test_update_python_parses_index_file_names(bump: Callable[..., str]) -> None
     </body></html>
     """
 
-    assert bump("A-B", {"https://I.com/a-b/": httpx.Response(200, text=raw_html)}) == "A-B>=1.0.3"
+    assert (
+        bump(
+            "A-B",
+            {"https://I.com/a-b/": httpx.Response(200, text=raw_html)},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
+        )
+        == "A-B>=1.0.3"
+    )
 
 
 def test_update_python_accepts_release_without_requires_python(bump: Callable[..., str]) -> None:
 
     assert (
-        bump("A", {"https://I.com/a/": httpx.Response(200, text="<a>A-2.tar.gz</a>")}, requires_python=">=3.9")
+        bump(
+            "A",
+            {"https://I.com/a/": httpx.Response(200, text="<a>A-2.tar.gz</a>")},
+            requires_python=">=3.9",
+            pre_release=False,
+            exclude_newer=None,
+        )
         == "A>=2"
     )
 
@@ -132,13 +147,31 @@ def test_update_python(
 ) -> None:
     page = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
 
-    assert bump(spec, {"https://I.com/a/": httpx.Response(200, text=page)}, pre_release=pre_release) == result
+    assert (
+        bump(
+            spec,
+            {"https://I.com/a/": httpx.Response(200, text=page)},
+            pre_release=pre_release,
+            requires_python=None,
+            exclude_newer=None,
+        )
+        == result
+    )
 
 
 def test_update_python_skips_files_of_other_projects(bump: Callable[..., str]) -> None:
     files = "<a>foo-2.0.tar.gz</a><a>foo_bar-9.0.tar.gz</a><a>foo.bar-8.0-py3-none-any.whl</a><a>foo-bar-7.tar.bz2</a>"
 
-    assert bump("foo>=1", {"https://I.com/foo/": httpx.Response(200, text=files)}) == "foo>=2"
+    assert (
+        bump(
+            "foo>=1",
+            {"https://I.com/foo/": httpx.Response(200, text=files)},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
+        )
+        == "foo>=2"
+    )
 
 
 def test_run_prints_index_once_without_credentials(
@@ -194,6 +227,8 @@ def test_update_python_filters_files(content_type: str, body: str, bump: Callabl
             "A",
             {"https://I.com/a/": httpx.Response(200, headers={"Content-Type": content_type}, text=body)},
             requires_python=">=3.11",
+            pre_release=False,
+            exclude_newer=None,
         )
         == "A>=2"
     )
@@ -211,6 +246,9 @@ def test_update_python_skips_malformed_json_files(bump: Callable[..., str]) -> N
                     json={"files": [{"filename": 5}, "a-3.tar.gz", {"filename": "a-2.tar.gz", "requires-python": 3}]},
                 )
             },
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
         )
         == "a>=2"
     )
@@ -233,7 +271,13 @@ def test_update_python_reports_index_errors(
     monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "https://E.com")
 
     with pytest.raises(SystemExit):
-        bump("A", {"https://I.com/a/": httpx.Response(404), "https://E.com/a/": httpx.Response(extra_status)})
+        bump(
+            "A",
+            {"https://I.com/a/": httpx.Response(404), "https://E.com/a/": httpx.Response(extra_status)},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
+        )
 
     assert capsys.readouterr().err.startswith(f'failed to look up A, so it was not updated: HTTPStatusError("{raised}')
 
@@ -326,7 +370,10 @@ def test_update_python_respects_upload_cutoff(
         200, json={"files": entries}, headers={"content-type": "application/vnd.pypi.simple.v1+json"}
     )
 
-    assert bump(spec, {"https://I.com/a/": response}, exclude_newer=exclude_newer) == result
+    assert (
+        bump(spec, {"https://I.com/a/": response}, exclude_newer=exclude_newer, pre_release=False, requires_python=None)
+        == result
+    )
 
 
 @pytest.mark.parametrize(
@@ -341,4 +388,13 @@ def test_update_python_html_index_has_no_upload_times(
 ) -> None:
     html = "<a>A-1.tar.gz</a><a>A-2.tar.gz</a>"
 
-    assert bump("A>=1", {"https://I.com/a/": httpx.Response(200, text=html)}, exclude_newer=exclude_newer) == result
+    assert (
+        bump(
+            "A>=1",
+            {"https://I.com/a/": httpx.Response(200, text=html)},
+            exclude_newer=exclude_newer,
+            pre_release=False,
+            requires_python=None,
+        )
+        == result
+    )

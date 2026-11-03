@@ -23,7 +23,11 @@ def test_update_js_encodes_scoped_package(bump: Callable[..., str]) -> None:
 
     assert (
         bump(
-            "@scope/package", {"https://N.com/@scope%2Fpackage": httpx.Response(200, json={"versions": {"1.0.0": {}}})}
+            "@scope/package",
+            {"https://N.com/@scope%2Fpackage": httpx.Response(200, json={"versions": {"1.0.0": {}}})},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
         )
         == "@scope/package@1.0.0"
     )
@@ -38,7 +42,7 @@ def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(
         json={"versions": {"1.0.0": {}, "2.0.0": {"deprecated": "broken"}}},
     )
 
-    assert bump("a@", {}) == "a@1.0.0"
+    assert bump("a@", {}, pre_release=False, requires_python=None, exclude_newer=None) == "a@1.0.0"
 
 
 @pytest.mark.parametrize(
@@ -54,7 +58,13 @@ def test_update_js_rejects_malformed_metadata(
 ) -> None:
 
     with pytest.raises(SystemExit):
-        bump("a@", {"https://N.com/a": httpx.Response(200, json=payload)})
+        bump(
+            "a@",
+            {"https://N.com/a": httpx.Response(200, json=payload)},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
+        )
 
     assert (
         capsys.readouterr().err
@@ -68,6 +78,9 @@ def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) ->
         bump(
             "a@",
             {"https://N.com/a": httpx.Response(200, json={"versions": {"1.0.0": "x", "2.0.0": {"deprecated": "y"}}})},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
         )
         == "a@1.0.0"
     )
@@ -148,13 +161,25 @@ def test_update_js_respects_upload_cutoff(
     times = {version: uploaded for version, uploaded in uploads.items() if uploaded is not None}
     document = {"versions": {version: {} for version in uploads}, "time": times, "dist-tags": {"latest": latest}}
 
-    assert bump(spec, {"https://N.com/a": httpx.Response(200, json=document)}, exclude_newer=_CUTOFF) == result
+    assert (
+        bump(
+            spec,
+            {"https://N.com/a": httpx.Response(200, json=document)},
+            exclude_newer=_CUTOFF,
+            pre_release=False,
+            requires_python=None,
+        )
+        == result
+    )
 
 
 def test_update_js_without_time_map_offers_no_candidates(bump: Callable[..., str]) -> None:
     response = httpx.Response(200, json={"versions": {"1.0.0": {}}, "dist-tags": {"latest": "1.0.0"}})
 
-    assert bump("a@", {"https://N.com/a": response}, exclude_newer=_CUTOFF) == "a@"
+    assert (
+        bump("a@", {"https://N.com/a": response}, exclude_newer=_CUTOFF, pre_release=False, requires_python=None)
+        == "a@"
+    )
 
 
 def test_npm_package_listed_twice_is_fetched_once(

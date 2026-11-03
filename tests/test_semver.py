@@ -45,6 +45,8 @@ def test_update_js(spec: str, versions: list[str], pre_release: bool, result: st
             spec,
             {"https://N.com/a": httpx.Response(200, json={"versions": {key: {} for key in versions}})},
             pre_release=pre_release,
+            requires_python=None,
+            exclude_newer=None,
         )
         == result
     )
@@ -67,6 +69,9 @@ def test_update_js_prefers_latest_tag_inside_range(spec: str, result: str, bump:
         bump(
             spec,
             {"https://N.com/a": httpx.Response(200, json={"dist-tags": {"latest": "1.4.0"}, "versions": versions})},
+            pre_release=False,
+            requires_python=None,
+            exclude_newer=None,
         )
         == result
     )

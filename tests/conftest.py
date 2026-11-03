@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html import escape
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
@@ -44,20 +44,28 @@ def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 @pytest.fixture
 def index(httpx_mock: HTTPXMock) -> FakeIndex:
-    fake = FakeIndex()
+    fake = FakeIndex(
+        pypi={},
+        npm={},
+        requires_python={},
+        index_url="https://pypi.example/simple",
+        npm_registry="https://npm.example",
+        responses={},
+        hooks=[],
+    )
     httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)
     return fake
 
 
 @dataclass
 class FakeIndex:
-    pypi: dict[str, list[str]] = field(default_factory=dict)
-    npm: dict[str, list[str]] = field(default_factory=dict)
-    requires_python: dict[str, str] = field(default_factory=dict)
-    index_url: str = "https://pypi.example/simple"
-    npm_registry: str = "https://npm.example"
-    responses: dict[str, httpx.Response] = field(default_factory=dict)
-    hooks: list[Callable[[httpx.Request], None]] = field(default_factory=list)
+    pypi: dict[str, list[str]]
+    npm: dict[str, list[str]]
+    requires_python: dict[str, str]
+    index_url: str
+    npm_registry: str
+    responses: dict[str, httpx.Response]
+    hooks: list[Callable[[httpx.Request], None]]
 
     def run(
         self,
@@ -107,9 +115,9 @@ def bump(
         spec: str,
         pages: Mapping[str, httpx.Response],
         *,
-        pre_release: bool = False,
-        requires_python: str | None = None,
-        exclude_newer: str | None = None,
+        pre_release: bool,
+        requires_python: str | None,
+        exclude_newer: str | None,
     ) -> str:
         for url, response in pages.items():
             httpx_mock.add_callback(lambda _, served=response: served, url=url, is_optional=True)
