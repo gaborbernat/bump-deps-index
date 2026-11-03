@@ -74,6 +74,12 @@ On npm ranges you stay inside the range, so `^1.2.0` goes to the newest `1.x` re
 `1 || 2`, `latest` or an empty one untouched. As npm does, you get the `latest` dist-tag over a newer release when it
 fits the range. In `package.json` you get updates for `dependencies`, `devDependencies` and `optionalDependencies`.
 
+With `--exclude-newer`, or the `UV_EXCLUDE_NEWER` variable that uv reads for its lock step, you only move to releases
+uploaded before the cutoff. The cutoff is an RFC 3339 timestamp, a local date, or a duration counted back from now, such
+as `P7D` or `7 days`. As uv does, you skip a file without an upload time. You read upload times from the PEP 700 fields
+of the JSON simple API and from the `time` map of the npm registry, so an index that serves only HTML offers no
+candidates under a cutoff. A requirement already above the newest eligible release keeps its floor.
+
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates
 for hooks in other languages. For a remote hook without a `language`, you get the language from the
 `.pre-commit-hooks.yaml` of its GitHub or GitLab repository at `rev`; when that file is out of reach, you get a guess
