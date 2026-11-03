@@ -36,11 +36,10 @@ if TYPE_CHECKING:
 
 def run(opt: Options) -> bool:
     """Update dependencies selected by the CLI options."""
-    pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
     settings = IndexSettings(opt.index_url, pip_extra_indexes(), opt.npm_registry, npm_settings(), opt.exclude_newer)
     if opt.pkgs:
-        return _run_packages(opt.pkgs, settings, pre_release=False if pre_release is None else pre_release)
-    return _run_files(opt.filenames, settings, pre_release=pre_release)
+        return _run_packages(opt.pkgs, settings, pre_release=False if opt.pre_release is None else opt.pre_release)
+    return _run_files(opt.filenames, settings, pre_release=opt.pre_release)
 
 
 def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_release: bool) -> bool:

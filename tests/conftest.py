@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from html import escape
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 import httpx
@@ -63,7 +63,7 @@ class FakeIndex:
         self,
         *filenames: Path,
         pkgs: Sequence[str] = (),
-        pre_release: Literal["yes", "no", "file-default"] = "no",
+        pre_release: bool | None = False,
     ) -> bool:
         return run(
             Options(

@@ -176,3 +176,29 @@ def test_cli_exclude_newer_flags_conflict(args: list[str], capsys: pytest.Captur
         parse_cli(args)
 
     assert (error.value.code, "not allowed with argument" in capsys.readouterr().err) == (2, True)
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        pytest.param([], None, id="default"),
+        pytest.param(["-p", "yes"], True, id="yes"),
+        pytest.param(["-p", "no"], False, id="no"),
+        pytest.param(["-p", "file-default"], None, id="file-default"),
+    ],
+)
+def test_cli_maps_pre_release_choice(args: list[str], expected: bool | None) -> None:
+    assert parse_cli([*args, "foo"]).pre_release is expected
+
+
+def test_cli_rejects_unknown_pre_release_choice(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["-p", "bogus", "foo"])
+
+    assert (error.value.code, capsys.readouterr().err.splitlines()[-1]) == (
+        2,
+        (
+            "bump-deps-index: error: argument -p/--pre-release: "
+            "invalid choice: 'bogus' (choose from 'yes', 'no', 'file-default')"
+        ),
+    )

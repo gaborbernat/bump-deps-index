@@ -181,7 +181,7 @@ def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, index
     )
     index.pypi.update({key: ["2.0.0rc1"] for key in ("build-dep", "runtime-dep", "optional-dep", "group-dep")})
 
-    assert index.run(pyproject, pre_release="yes")
+    assert index.run(pyproject, pre_release=True)
 
     assert pyproject.read_text(encoding="utf-8").count(">=2.0.0rc1") == 4
 

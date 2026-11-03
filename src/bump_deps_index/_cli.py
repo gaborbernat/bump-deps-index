@@ -4,7 +4,7 @@ from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace, Raw
 from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from bump_deps_index._config import npm_registry, python_exclude_newer, python_index_url
 from bump_deps_index._cutoff import parse_exclude_newer
@@ -38,7 +38,7 @@ class Options(Namespace):
     - requirements and constraints files, ending in ``.txt`` or ``.in``
     - Python scripts with PEP 723 inline metadata
     """
-    pre_release: Literal["yes", "no", "file-default"]
+    pre_release: bool | None
     """Accept pre-releases: yes, no or decide per file type"""
     exclude_newer: datetime | None
     """Only candidates uploaded before this instant; None accepts every release"""
@@ -62,7 +62,14 @@ def _build_parser() -> ArgumentParser:
     msg = f"NPM registry (default: {redact_url(registry := npm_registry())})"
     parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=registry, help=msg)
     msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
-    parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
+    parser.add_argument(
+        "-p",
+        "--pre-release",
+        type=_pre_release_argument,
+        metavar="{yes,no,file-default}",
+        default="file-default",
+        help=msg,
+    )
     msg = (
         "only use releases uploaded before this cutoff, a timestamp or a duration such as P7D "
         "(default: from pip and uv settings)"
@@ -108,6 +115,14 @@ def _cutoff_argument(value: str) -> datetime:
         return parse_exclude_newer(value, datetime.now(UTC))
     except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
         raise ArgumentTypeError(str(exc)) from exc
+
+
+def _pre_release_argument(value: str) -> bool | None:
+    choices = {"yes": True, "no": False, "file-default": None}
+    if value not in choices:  # the message matches the one argparse gives for a `choices` mismatch
+        msg = f"invalid choice: {value!r} (choose from {', '.join(map(repr, choices))})"
+        raise ArgumentTypeError(msg)
+    return choices[value]
 
 
 class _HelpFormatter(RawDescriptionHelpFormatter):
