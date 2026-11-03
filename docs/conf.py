@@ -17,6 +17,15 @@ if TYPE_CHECKING:
     from sphinx.environment import BuildEnvironment
 
 
+def _inheritance_aliases() -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for entry in bump_deps_index.__all__:
+        to_module = getattr(getattr(bump_deps_index, entry), "__module__", "")
+        of = f"{to_module}{'.' if to_module else ''}{entry}"
+        aliases.setdefault(of, f"{bump_deps_index.__name__}.{entry}")  # first instance wins
+    return aliases
+
+
 project = name = "bump-deps-index"
 now = datetime.now(tz=UTC)
 globals()["copyright"] = f"2022-{now.year}"
@@ -42,7 +51,7 @@ html_css_files = ["changelog-toc.css"]
 pygments_style, pygments_dark_style = "sphinx", "monokai"
 
 autoclass_content, autodoc_typehints, autodoc_typehints_format = "both", "description", "short"
-inheritance_alias, inheritance_graph_attrs = {}, {"rankdir": "TB"}
+inheritance_alias, inheritance_graph_attrs = _inheritance_aliases(), {"rankdir": "TB"}
 autodoc_default_options = {"members": True, "member-order": "bysource", "undoc-members": True, "show-inheritance": True}
 
 intersphinx_mapping = {"python": ("https://docs.python.org/3.11", None)}
@@ -52,13 +61,6 @@ extlinks = {
 }
 nitpicky = True
 nitpick_ignore = []
-
-for module in (bump_deps_index,):
-    for entry in module.__all__:
-        to_module = getattr(getattr(module, entry), "__module__", "")
-        of = f"{to_module}{'.' if to_module else ''}{entry}"
-        if of not in inheritance_alias:  # first instance wins
-            inheritance_alias[of] = f"{module.__name__}.{entry}"
 
 
 def setup(app: Sphinx) -> None:
