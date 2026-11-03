@@ -82,23 +82,21 @@ def _build_parser() -> ArgumentParser:
         help=msg,
     )
     # SUPPRESS keeps the flag out of the defaults, so the mutual exclusion check sees it when it is given
-    msg = "ignore every cutoff, including the one from the environment and config files; overrides --exclude-newer"
     cutoff_flags.add_argument(
         "--no-exclude-newer",
         dest="exclude_newer",
         action="store_const",
         const=None,
         default=SUPPRESS,
-        help=msg,
+        help="ignore every cutoff, including the one from the environment and config files; overrides --exclude-newer",
     )
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
-    msg = "files to update (default: supported files in the working directory)"
     source.add_argument(
         "--file",
         "-f",
         dest="filenames",
-        help=msg,
+        help="files to update (default: supported files in the working directory)",
         default=None,
         action="store",
         nargs="*",

@@ -145,8 +145,9 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
                 )
             else:
                 changes[lookup] = result
-                arrow = f" -> {result}" if result != lookup.requirement else ""
-                sys.stdout.write(redact_text(f"{lookup.requirement}{arrow}\n"))
+                sys.stdout.write(
+                    redact_text(f"{lookup.requirement}{f' -> {result}' if result != lookup.requirement else ''}\n")
+                )
     return changes, successful
 
 

@@ -33,8 +33,7 @@ class NpmRegistry:
     def release(self, registry: str, spec: str) -> NpmRelease:
         package, _ = split_npm_spec(spec)
         url = f"{registry.rstrip('/')}/{quote(package, safe='@')}"
-        authorization = self._settings.authorization(registry)
-        return self._documents.get(url, lambda url: self._fetch(url, authorization))
+        return self._documents.get(url, lambda url: self._fetch(url, self._settings.authorization(registry)))
 
     def _fetch(self, url: str, authorization: str | None) -> NpmRelease:
         response = self.client.get(

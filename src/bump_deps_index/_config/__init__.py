@@ -38,10 +38,9 @@ def _python_setting(
 
 
 def python_exclude_newer() -> str | None:
-    names = ("PIP_UPLOADED_PRIOR_TO", "UV_EXCLUDE_NEWER")
     # uv accepts `exclude-newer = false` to disable the cutoff, so a false stops the lookup and a non-string is ignored
     return _python_setting(
-        names,
+        ("PIP_UPLOADED_PRIOR_TO", "UV_EXCLUDE_NEWER"),
         lambda uv: False if (value := uv.get("exclude-newer")) is False else value if isinstance(value, str) else None,
         "uploaded-prior-to",
     )
