@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal
 from ._files import user_uv_settings
 from ._npm import NpmSettings, npm_registry, npm_settings
 from ._pip import pip_extra_indexes, pip_setting
+from ._project import IndexSettings, Project, entry_indexes, get_project, named_indexes
 from ._uv import UvIndexes, default_index, script_uv_indexes, uv_project_indexes, uv_settings
 
 if TYPE_CHECKING:
@@ -47,8 +48,13 @@ def python_exclude_newer() -> str | None:
 
 
 __all__ = [
+    "IndexSettings",
     "NpmSettings",
+    "Project",
     "UvIndexes",
+    "entry_indexes",
+    "get_project",
+    "named_indexes",
     "npm_registry",
     "npm_settings",
     "pip_extra_indexes",
