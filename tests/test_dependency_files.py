@@ -9,12 +9,17 @@ from typing import TYPE_CHECKING, Final
 
 import pytest
 
+from bump_deps_index import _run
+
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import httpx
     from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
+
+    from bump_deps_index._lookup import Lookup
+    from bump_deps_index._npm_registry import NpmRegistry
+    from bump_deps_index._pypi import SimpleIndex
 
 
 @pytest.mark.parametrize(
@@ -1037,18 +1042,22 @@ def test_package_shared_across_files_is_fetched_once(tmp_path: Path, httpx_mock:
     assert len(httpx_mock.get_requests()) == 1
 
 
-def test_output_follows_file_order(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
+def test_output_follows_file_order(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path, index: FakeIndex
+) -> None:
     index.pypi.update(a=["2"], b=["2"])
-    b_served = Event()
+    b_updated = Event()
+    update = _run.update
 
-    def finish_b_first(request: httpx.Request) -> None:
-        if request.url.path.endswith("/a/"):
-            b_served.wait(timeout=5)  # answer `a` last to finish its lookup after `b`
-            time.sleep(0.05)
-        else:
-            b_served.set()
+    def update_b_first(pypi: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
+        if lookup.requirement == "a":
+            b_updated.wait(timeout=5)  # `a` finishes after `b`, so only the reporting keeps the file order
+        result = update(pypi, npm, lookup)
+        if lookup.requirement == "b":
+            b_updated.set()
+        return result
 
-    index.hooks.append(finish_b_first)
+    monkeypatch.setattr(_run, "update", update_b_first)
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("a\nb\n", encoding="utf-8")
 

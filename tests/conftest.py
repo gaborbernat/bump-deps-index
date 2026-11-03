@@ -12,7 +12,7 @@ from packaging.utils import canonicalize_name
 from bump_deps_index import Options, main, run
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from pytest_httpx import HTTPXMock
@@ -57,7 +57,6 @@ def index(httpx_mock: HTTPXMock) -> FakeIndex:
         index_url="https://pypi.example/simple",
         npm_registry="https://npm.example",
         responses={},
-        hooks=[],
     )
     httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)
     return fake
@@ -71,7 +70,6 @@ class FakeIndex:
     index_url: str
     npm_registry: str
     responses: dict[str, httpx.Response]
-    hooks: list[Callable[[httpx.Request], None]]
 
     def run(
         self,
@@ -91,8 +89,6 @@ class FakeIndex:
         )
 
     def serve(self, request: httpx.Request) -> httpx.Response:
-        for hook in self.hooks:
-            hook(request)
         if (response := self.responses.get(str(request.url))) is not None:
             return response
         if request.url.host == "npm.example":
