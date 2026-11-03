@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from conftest import Bump
 
 
 pytestmark = pytest.mark.usefixtures("isolated_index_settings")
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
         pytest.param("a@1.x", ["1.0.0", "2.0.0"], False, "a@1.x", id="x-range"),
     ],
 )
-def test_update_js(spec: str, versions: list[str], pre_release: bool, result: str, bump: Callable[..., str]) -> None:
+def test_update_js(spec: str, versions: list[str], pre_release: bool, result: str, bump: Bump) -> None:
 
     assert (
         bump(
@@ -62,7 +62,7 @@ def test_update_js(spec: str, versions: list[str], pre_release: bool, result: st
         pytest.param("a@~1.0.0", "a@~1.0.0", id="range-below-latest"),
     ],
 )
-def test_update_js_prefers_latest_tag_inside_range(spec: str, result: str, bump: Callable[..., str]) -> None:
+def test_update_js_prefers_latest_tag_inside_range(spec: str, result: str, bump: Bump) -> None:
     versions = {key: {} for key in ("1.0.0", "1.4.0", "1.5.0", "2.0.0")}
 
     assert (

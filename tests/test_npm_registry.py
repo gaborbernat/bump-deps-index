@@ -8,9 +8,9 @@ import pytest
 from bump_deps_index import main
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from pathlib import Path
 
+    from conftest import Bump
     from pytest_httpx import HTTPXMock
 
 pytestmark = pytest.mark.usefixtures("isolated_index_settings")
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
 
 
-def test_update_js_encodes_scoped_package(bump: Callable[..., str]) -> None:
+def test_update_js_encodes_scoped_package(bump: Bump) -> None:
 
     assert (
         bump(
@@ -33,9 +33,7 @@ def test_update_js_encodes_scoped_package(bump: Callable[..., str]) -> None:
     )
 
 
-def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(
-    httpx_mock: HTTPXMock, bump: Callable[..., str]
-) -> None:
+def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(httpx_mock: HTTPXMock, bump: Bump) -> None:
     httpx_mock.add_response(
         url="https://N.com/a",
         match_headers={"Accept": "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"},
@@ -54,7 +52,7 @@ def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(
     ],
 )
 def test_update_js_rejects_malformed_metadata(
-    capsys: pytest.CaptureFixture[str], bump: Callable[..., str], payload: dict[str, list[str] | None] | list[str]
+    capsys: pytest.CaptureFixture[str], bump: Bump, payload: dict[str, list[str] | None] | list[str]
 ) -> None:
 
     with pytest.raises(SystemExit):
@@ -72,7 +70,7 @@ def test_update_js_rejects_malformed_metadata(
     )
 
 
-def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) -> None:
+def test_update_js_skips_malformed_version_metadata(bump: Bump) -> None:
 
     assert (
         bump(
@@ -156,7 +154,7 @@ def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) ->
     ],
 )
 def test_update_js_respects_upload_cutoff(
-    spec: str, uploads: dict[str, str | None], latest: str, result: str, bump: Callable[..., str]
+    spec: str, uploads: dict[str, str | None], latest: str, result: str, bump: Bump
 ) -> None:
     times = {version: uploaded for version, uploaded in uploads.items() if uploaded is not None}
     document = {"versions": {version: {} for version in uploads}, "time": times, "dist-tags": {"latest": latest}}
@@ -173,7 +171,7 @@ def test_update_js_respects_upload_cutoff(
     )
 
 
-def test_update_js_without_time_map_offers_no_candidates(bump: Callable[..., str]) -> None:
+def test_update_js_without_time_map_offers_no_candidates(bump: Bump) -> None:
     response = httpx.Response(200, json={"versions": {"1.0.0": {}}, "dist-tags": {"latest": "1.0.0"}})
 
     assert (

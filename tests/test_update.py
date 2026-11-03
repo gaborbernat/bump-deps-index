@@ -7,15 +7,14 @@ import httpx
 import pytest
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from pathlib import Path
 
-    from conftest import FakeIndex
+    from conftest import Bump, FakeIndex
 
 pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 
 
-def test_update_python_parses_index_file_names(bump: Callable[..., str]) -> None:
+def test_update_python_parses_index_file_names(bump: Bump) -> None:
     raw_html = """
     <html>
     <body>
@@ -42,7 +41,7 @@ def test_update_python_parses_index_file_names(bump: Callable[..., str]) -> None
     )
 
 
-def test_update_python_accepts_release_without_requires_python(bump: Callable[..., str]) -> None:
+def test_update_python_accepts_release_without_requires_python(bump: Bump) -> None:
 
     assert (
         bump(
@@ -142,9 +141,7 @@ def test_update_python_accepts_release_without_requires_python(bump: Callable[..
         pytest.param("A==1.0+cpu", False, ["2.0+cu118", "2.0+cpu"], "A==2+cpu", id="eq-local-newer"),
     ],
 )
-def test_update_python(
-    spec: str, pre_release: bool, versions: list[str], result: str, bump: Callable[..., str]
-) -> None:
+def test_update_python(spec: str, pre_release: bool, versions: list[str], result: str, bump: Bump) -> None:
     page = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
 
     assert (
@@ -159,7 +156,7 @@ def test_update_python(
     )
 
 
-def test_update_python_skips_files_of_other_projects(bump: Callable[..., str]) -> None:
+def test_update_python_skips_files_of_other_projects(bump: Bump) -> None:
     files = "<a>foo-2.0.tar.gz</a><a>foo_bar-9.0.tar.gz</a><a>foo.bar-8.0-py3-none-any.whl</a><a>foo-bar-7.tar.bz2</a>"
 
     assert (
@@ -220,7 +217,7 @@ def test_run_prints_index_once_without_credentials(
         ),
     ],
 )
-def test_update_python_filters_files(content_type: str, body: str, bump: Callable[..., str]) -> None:
+def test_update_python_filters_files(content_type: str, body: str, bump: Bump) -> None:
 
     assert (
         bump(
@@ -234,7 +231,7 @@ def test_update_python_filters_files(content_type: str, body: str, bump: Callabl
     )
 
 
-def test_update_python_skips_malformed_json_files(bump: Callable[..., str]) -> None:
+def test_update_python_skips_malformed_json_files(bump: Bump) -> None:
 
     assert (
         bump(
@@ -264,7 +261,7 @@ def test_update_python_skips_malformed_json_files(bump: Callable[..., str]) -> N
 def test_update_python_reports_index_errors(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
-    bump: Callable[..., str],
+    bump: Bump,
     extra_status: int,
     raised: str,
 ) -> None:
@@ -360,7 +357,7 @@ _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
     ],
 )
 def test_update_python_respects_upload_cutoff(
-    spec: str, files: list[tuple[str, str | None]], exclude_newer: str | None, result: str, bump: Callable[..., str]
+    spec: str, files: list[tuple[str, str | None]], exclude_newer: str | None, result: str, bump: Bump
 ) -> None:
     entries = [
         {"filename": name} if uploaded is None else {"filename": name, "upload-time": uploaded}
@@ -383,9 +380,7 @@ def test_update_python_respects_upload_cutoff(
         pytest.param(_CUTOFF, "A>=1", id="cutoff-has-no-upload-times"),
     ],
 )
-def test_update_python_html_index_has_no_upload_times(
-    exclude_newer: str | None, result: str, bump: Callable[..., str]
-) -> None:
+def test_update_python_html_index_has_no_upload_times(exclude_newer: str | None, result: str, bump: Bump) -> None:
     html = "<a>A-1.tar.gz</a><a>A-2.tar.gz</a>"
 
     assert (

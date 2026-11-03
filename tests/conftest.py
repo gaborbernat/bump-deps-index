@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import unquote
 
 import httpx
@@ -105,10 +105,22 @@ class FakeIndex:
         return httpx.Response(200, text="".join(links))
 
 
+class Bump(Protocol):
+    def __call__(
+        self,
+        spec: str,
+        pages: Mapping[str, httpx.Response],
+        *,
+        pre_release: bool,
+        requires_python: str | None,
+        exclude_newer: str | None,
+    ) -> str: ...
+
+
 @pytest.fixture
 def bump(
     capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> Callable[..., str]:
+) -> Bump:
     monkeypatch.chdir(tmp_path)
 
     def run_main(
@@ -130,3 +142,9 @@ def bump(
         return capsys.readouterr().out.splitlines()[-1].rpartition(" -> ")[2]
 
     return run_main
+
+
+__all__ = [
+    "Bump",
+    "FakeIndex",
+]
