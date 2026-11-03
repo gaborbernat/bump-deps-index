@@ -118,7 +118,10 @@ def test_run_pre_commit_keeps_filtered_inline_dependencies(
 def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
     assert not index.run()
 
-    assert capsys.readouterr() == ("", "no supported dependency files found\n")
+    assert capsys.readouterr() == (
+        "",
+        "no supported dependency files found in the working directory; pass --file or packages\n",
+    )
 
 
 def test_run_pre_commit_node_hook_dependencies_are_javascript(index: FakeIndex, tmp_path: Path) -> None:
@@ -155,7 +158,7 @@ def test_run_pre_commit_reports_missing_npm_package(
 
     assert not index.run(config)
 
-    assert capsys.readouterr().err.startswith("failed nope with HTTPStatusError(")
+    assert capsys.readouterr().err.startswith("failed to look up nope, so it was not updated: HTTPStatusError(")
     assert config.read_text() == dedent(content).lstrip()
 
 

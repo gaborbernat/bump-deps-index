@@ -56,7 +56,10 @@ def test_update_js_rejects_malformed_metadata(
     with pytest.raises(SystemExit):
         bump("a@", {"https://N.com/a": httpx.Response(200, json=payload)})
 
-    assert capsys.readouterr().err == "failed a@ with TypeError('https://n.com/a has no versions dict')\n"
+    assert (
+        capsys.readouterr().err
+        == "failed to look up a@, so it was not updated: TypeError('https://n.com/a has no versions dict')\n"
+    )
 
 
 def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) -> None:

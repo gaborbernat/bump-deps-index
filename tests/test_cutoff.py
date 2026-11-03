@@ -46,5 +46,5 @@ def test_parse_exclude_newer_accepts(value: str, result: datetime) -> None:
     ],
 )
 def test_parse_exclude_newer_rejects(value: str) -> None:
-    with pytest.raises(ValueError, match="is not an RFC 3339 timestamp"):
+    with pytest.raises(ValueError, match="is not a cutoff"):
         parse_exclude_newer(value, _NOW)

@@ -19,7 +19,9 @@ def test_run_args(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
     assert not index.run(pkgs=[" A ", "B", "C", "@scope/pkg@1", "direct @ https://example.com/direct.whl", "pkg@1"])
 
     out, err = capsys.readouterr()
-    assert err.startswith("failed C with HTTPStatusError(\"Client error '404 Not Found' for url ")
+    assert err.startswith(
+        "failed to look up C, so it was not updated: HTTPStatusError(\"Client error '404 Not Found' for url "
+    )
     assert set(out.splitlines()) == {
         "Using Python index: https://pypi.example/simple",
         "Using JavaScript index: https://npm.example",
@@ -62,7 +64,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex
     assert not index.run(dest)
 
     out, err = capsys.readouterr()
-    assert err.startswith("failed D with HTTPStatusError(")
+    assert err.startswith("failed to look up D, so it was not updated: HTTPStatusError(")
     assert set(out.splitlines()) == {
         "Using Python index: https://pypi.example/simple",
         "C -> C>=1",
@@ -198,7 +200,7 @@ def test_run_reports_unparsable_pyproject_and_continues(
 
     error = "TOMLDecodeError(\"Expected ']' at the end of a table declaration (at line 1, column 9)\")"
     assert capsys.readouterr().err.splitlines() == [
-        f"failed to read {pyproject} with {error}",
-        f"ignoring project metadata from {pyproject} due to {error}",
+        f"failed to read {pyproject}, so it was skipped: {error}",
+        f"ignoring project metadata from {pyproject}, so its uv settings are not read: {error}",
     ]
     assert (pyproject.read_text(), requirements.read_text()) == ("[project\n", "A>=1\n")

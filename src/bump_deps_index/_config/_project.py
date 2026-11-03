@@ -42,7 +42,7 @@ def get_project(directory: Path) -> Project:
             uv_project_indexes(pyproject.parent, cfg),
         )
     except (OSError, ValueError) as exc:
-        sys.stderr.write(f"ignoring project metadata from {pyproject} due to {exc!r}\n")
+        sys.stderr.write(f"ignoring project metadata from {pyproject}, so its uv settings are not read: {exc!r}\n")
         return Project(pyproject)
 
 

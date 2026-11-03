@@ -235,7 +235,7 @@ def test_update_python_reports_index_errors(
     with pytest.raises(SystemExit):
         bump("A", {"https://I.com/a/": httpx.Response(404), "https://E.com/a/": httpx.Response(extra_status)})
 
-    assert capsys.readouterr().err.startswith(f'failed A with HTTPStatusError("{raised}')
+    assert capsys.readouterr().err.startswith(f'failed to look up A, so it was not updated: HTTPStatusError("{raised}')
 
 
 _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"

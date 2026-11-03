@@ -61,14 +61,14 @@ def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_re
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
     successful = bool(filenames)
     if not successful:
-        sys.stderr.write("no supported dependency files found\n")
+        sys.stderr.write("no supported dependency files found in the working directory; pass --file or packages\n")
     plans: list[tuple[Path, Loader, list[Lookup]]] = []
     for filename in filenames:
         if not filename.is_file():
-            sys.stderr.write(f"{filename} does not exist\n")
+            sys.stderr.write(f"{filename} does not exist; pass a file that exists to --file\n")
             successful = False
         elif (loader := next((i for i in get_loaders() if i.supports(filename)), None)) is None:
-            sys.stderr.write(f"we do not support {filename}\n")
+            sys.stderr.write(f"{filename} is not a supported dependency file, so it was skipped\n")
             successful = False
         elif (lookups := _load_lookups(loader, filename, settings, pre_release=pre_release)) is None:
             successful = False
@@ -94,7 +94,7 @@ def _load_lookups(
         # prefer a PEP 723 script's own `requires-python` over the project's, since you run the script outside it
         floors = {entry.requires_python: python_floor(entry.requires_python) for entry in entries}
     except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
-        sys.stderr.write(f"failed to read {filename} with {exc!r}\n")
+        sys.stderr.write(f"failed to read {filename}, so it was skipped: {exc!r}\n")
         return None
     project = get_project(filename.resolve().parent)
     # uv reads `[tool.uv]` for the project's own pyproject.toml; pip installs the other files
@@ -141,7 +141,9 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
                 result = future.result()
             except (HTTPError, IndexError, KeyError, TypeError, ValueError) as exc:
                 successful = False
-                sys.stderr.write(f"failed {lookup.requirement} with {redact_text(repr(exc))}\n")
+                sys.stderr.write(
+                    f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(exc))}\n"
+                )
             else:
                 changes[lookup] = result
                 arrow = f" -> {result}" if result != lookup.requirement else ""

@@ -1104,7 +1104,7 @@ def test_failure_message_redacts_index_credentials(
     assert not index.run(requirements)
 
     assert capsys.readouterr().err.startswith(
-        "failed foo with HTTPStatusError(\"Client error '404 Not Found' for url 'https://pypi.example/simple/foo/'"
+        "failed to look up foo, so it was not updated: HTTPStatusError(\"Client error '404 Not Found' for url 'https://pypi.example/simple/foo/'"
     )
 
 

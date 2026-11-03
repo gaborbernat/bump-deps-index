@@ -120,7 +120,7 @@ def _cutoff_argument(value: str) -> datetime:
 def _pre_release_argument(value: str) -> bool | None:
     choices = {"yes": True, "no": False, "file-default": None}
     if value not in choices:  # the message matches the one argparse gives for a `choices` mismatch
-        msg = f"invalid choice: {value!r} (choose from {', '.join(map(repr, choices))})"
+        msg = f"{value!r} is not a valid choice: use yes, no or file-default"
         raise ArgumentTypeError(msg)
     return choices[value]
 

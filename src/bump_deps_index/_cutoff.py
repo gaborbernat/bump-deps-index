@@ -39,7 +39,7 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError as exc:
-        msg = f"{value!r} is not an RFC 3339 timestamp, a local date, an ISO 8601 or a friendly duration"
+        msg = f"{value!r} is not a cutoff: use a timestamp such as 2026-10-27T15:46:26Z, a date or P7D"
         raise ValueError(msg) from exc
     # pip reads a datetime without an offset as local time
     return parsed if parsed.tzinfo is not None else parsed.astimezone()

@@ -272,7 +272,10 @@ def test_script_metadata_reports_invalid_requires_python(
 
     assert not index.run(dest)
 
-    assert capsys.readouterr().err == f"failed to read {dest} with InvalidSpecifier(\"Invalid specifier: '>=3.9.*'\")\n"
+    assert (
+        capsys.readouterr().err
+        == f"failed to read {dest}, so it was skipped: InvalidSpecifier(\"Invalid specifier: '>=3.9.*'\")\n"
+    )
 
 
 def test_script_metadata_discovery_skips_unreadable_and_plain_files(
@@ -302,4 +305,4 @@ def test_script_metadata_rejects_undecodable_file(
 
     assert not index.run(invalid)
 
-    assert capsys.readouterr().err == f"we do not support {invalid}\n"
+    assert capsys.readouterr().err == f"{invalid} is not a supported dependency file, so it was skipped\n"

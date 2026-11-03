@@ -71,7 +71,7 @@ def test_cli_skips_generated_requirements(capsys: pytest.CaptureFixture[str], in
         main(["-i", index.index_url])
 
     assert (capsys.readouterr().err, (project / "requirements.txt").read_text(encoding="utf-8")) == (
-        "no supported dependency files found\n",
+        "no supported dependency files found in the working directory; pass --file or packages\n",
         content,
     )
 
@@ -199,6 +199,6 @@ def test_cli_rejects_unknown_pre_release_choice(capsys: pytest.CaptureFixture[st
         2,
         (
             "bump-deps-index: error: argument -p/--pre-release: "
-            "invalid choice: 'bogus' (choose from 'yes', 'no', 'file-default')"
+            "'bogus' is not a valid choice: use yes, no or file-default"
         ),
     )

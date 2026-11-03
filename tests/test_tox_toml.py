@@ -32,8 +32,8 @@ def test_tox_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path
 @pytest.mark.parametrize(
     ("name", "message"),
     [
-        pytest.param("dependencies.json", "we do not support {}", id="unsupported"),
-        pytest.param("tox.toml", "{} does not exist", id="missing"),
+        pytest.param("dependencies.json", "{} is not a supported dependency file, so it was skipped", id="unsupported"),
+        pytest.param("tox.toml", "{} does not exist; pass a file that exists to --file", id="missing"),
     ],
 )
 def test_run_rejects_file(

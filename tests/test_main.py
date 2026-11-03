@@ -81,5 +81,5 @@ def test_main_reports_malformed_registry_response(
 
     assert (error.value.code, capsys.readouterr().err) == (
         1,
-        "failed a@1 with TypeError('https://npm.example/a has no versions dict')\n",
+        "failed to look up a@1, so it was not updated: TypeError('https://npm.example/a has no versions dict')\n",
     )
