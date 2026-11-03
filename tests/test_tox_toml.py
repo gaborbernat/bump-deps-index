@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -11,22 +12,157 @@ if TYPE_CHECKING:
     from conftest import FakeIndex
 
 
-def test_tox_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"A": ["1"]})
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Case:
+    content: str
+    pypi: dict[str, list[str]]
+    updates: set[str]
+    expected: str
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            _Case(
+                content="""
+            requires = ["A"]
+            """,
+                pypi={"A": ["1"]},
+                updates={"A -> A>=1"},
+                expected="""
+            requires = ["A>=1"]
+            """,
+            ),
+            id="requires",
+        ),
+        pytest.param(
+            _Case(
+                content="""
+            requires = ["A"]
+
+            [env_run_base]
+            deps = ["B"]
+
+            [env.test]
+            deps = ["-r requirements.txt", "C"]
+
+            [env.no_deps]
+            description = "no deps here"
+
+            [ui]
+            deps = ["D"]
+            """,
+                pypi={"A": ["1"], "B": ["2"], "C": ["3"], "D": ["4"]},
+                updates={"A -> A>=1", "B -> B>=2", "C -> C>=3", "D -> D>=4"},
+                expected="""
+            requires = ["A>=1"]
+
+            [env_run_base]
+            deps = ["B>=2"]
+
+            [env.test]
+            deps = ["-r requirements.txt", "C>=3"]
+
+            [env.no_deps]
+            description = "no deps here"
+
+            [ui]
+            deps = ["D>=4"]
+            """,
+            ),
+            id="deps-tables",
+        ),
+        pytest.param(
+            _Case(
+                content="""
+            [env_run_base]
+            deps = [
+                "pytest>=7.0",
+                "coverage>=6.0",
+            ]
+            """,
+                pypi={"pytest": ["8.1"], "coverage": ["7.1"]},
+                updates={"pytest>=7.0 -> pytest>=8.1", "coverage>=6.0 -> coverage>=7.1"},
+                expected="""
+            [env_run_base]
+            deps = [
+                "pytest>=8.1",
+                "coverage>=7.1",
+            ]
+            """,
+            ),
+            id="multiline-array",
+        ),
+        pytest.param(
+            _Case(
+                content="""
+            requires = ["alpha"]
+
+            [env_run_base]
+            deps = [
+              { replace = "if", condition = "true", then = ["bravo"], else = ["charlie"], extend = true },
+              { replace = "posargs", default = ["delta"], extend = true },
+              { replace = "env", name = "X", default = "echo" },
+              { replace = "glob", pattern = "*.txt", default = ["foxtrot"], extend = true },
+              { replace = "ref", of = ["env_run_base", "deps"] },
+            ]
+
+            [env_base.matrix]
+            factors = [["py312", "py313"]]
+            deps = [
+              { replace = "if", condition = "true", then = [
+                { replace = "posargs", default = ["golf"], extend = true },
+              ], extend = true },
+            ]
+
+            [env.type]
+            deps = ["hotel"]
+            """,
+                pypi={key: ["1"] for key in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")},
+                updates={
+                    f"{n} -> {n}>=1" for n in ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")
+                },
+                expected="""
+            requires = ["alpha>=1"]
+
+            [env_run_base]
+            deps = [
+              { replace = "if", condition = "true", then = ["bravo>=1"], else = ["charlie>=1"], extend = true },
+              { replace = "posargs", default = ["delta>=1"], extend = true },
+              { replace = "env", name = "X", default = "echo>=1" },
+              { replace = "glob", pattern = "*.txt", default = ["foxtrot>=1"], extend = true },
+              { replace = "ref", of = ["env_run_base", "deps"] },
+            ]
+
+            [env_base.matrix]
+            factors = [["py312", "py313"]]
+            deps = [
+              { replace = "if", condition = "true", then = [
+                { replace = "posargs", default = ["golf>=1"], extend = true },
+              ], extend = true },
+            ]
+
+            [env.type]
+            deps = ["hotel>=1"]
+            """,
+            ),
+            id="substitutions",
+        ),
+    ],
+)
+def test_tox_toml_updates_dependencies(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, case: _Case
+) -> None:
+    index.pypi.update(case.pypi)
     dest = tmp_path / "tox.toml"
-    toml = """
-    requires = ["A"]
-    """
-    dest.write_text(dedent(toml).lstrip())
+    dest.write_text(dedent(case.content).lstrip())
+
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", "A -> A>=1"})
-
-    toml = """
-    requires = ["A>=1"]
-    """
-    assert dest.read_text() == dedent(toml).lstrip()
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", *case.updates})
+    assert dest.read_text() == dedent(case.expected).lstrip()
 
 
 @pytest.mark.parametrize(
@@ -47,122 +183,6 @@ def test_run_rejects_file(
     assert capsys.readouterr().err == f"{message.format(filename)}\n"
 
 
-def test_tox_toml_deps(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"A": ["1"], "B": ["2"], "C": ["3"], "D": ["4"]})
-    dest = tmp_path / "tox.toml"
-    toml = """
-    requires = ["A"]
-
-    [env_run_base]
-    deps = ["B"]
-
-    [env.test]
-    deps = ["-r requirements.txt", "C"]
-
-    [env.no_deps]
-    description = "no deps here"
-
-    [ui]
-    deps = ["D"]
-    """
-    dest.write_text(dedent(toml).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "A -> A>=1",
-            "B -> B>=2",
-            "C -> C>=3",
-            "D -> D>=4",
-        },
-    )
-
-    toml = """
-    requires = ["A>=1"]
-
-    [env_run_base]
-    deps = ["B>=2"]
-
-    [env.test]
-    deps = ["-r requirements.txt", "C>=3"]
-
-    [env.no_deps]
-    description = "no deps here"
-
-    [ui]
-    deps = ["D>=4"]
-    """
-    assert dest.read_text() == dedent(toml).lstrip()
-
-
-def test_tox_toml_substitutions(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    names = ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel")
-    index.pypi.update({key: ["1"] for key in names})
-    dest = tmp_path / "tox.toml"
-    toml = """
-    requires = ["alpha"]
-
-    [env_run_base]
-    deps = [
-      { replace = "if", condition = "true", then = ["bravo"], else = ["charlie"], extend = true },
-      { replace = "posargs", default = ["delta"], extend = true },
-      { replace = "env", name = "X", default = "echo" },
-      { replace = "glob", pattern = "*.txt", default = ["foxtrot"], extend = true },
-      { replace = "ref", of = ["env_run_base", "deps"] },
-    ]
-
-    [env_base.matrix]
-    factors = [["py312", "py313"]]
-    deps = [
-      { replace = "if", condition = "true", then = [
-        { replace = "posargs", default = ["golf"], extend = true },
-      ], extend = true },
-    ]
-
-    [env.type]
-    deps = ["hotel"]
-    """
-    dest.write_text(dedent(toml).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-        }
-        | {f"{n} -> {n}>=1" for n in names},
-    )
-
-    toml = """
-    requires = ["alpha>=1"]
-
-    [env_run_base]
-    deps = [
-      { replace = "if", condition = "true", then = ["bravo>=1"], else = ["charlie>=1"], extend = true },
-      { replace = "posargs", default = ["delta>=1"], extend = true },
-      { replace = "env", name = "X", default = "echo>=1" },
-      { replace = "glob", pattern = "*.txt", default = ["foxtrot>=1"], extend = true },
-      { replace = "ref", of = ["env_run_base", "deps"] },
-    ]
-
-    [env_base.matrix]
-    factors = [["py312", "py313"]]
-    deps = [
-      { replace = "if", condition = "true", then = [
-        { replace = "posargs", default = ["golf>=1"], extend = true },
-      ], extend = true },
-    ]
-
-    [env.type]
-    deps = ["hotel>=1"]
-    """
-    assert dest.read_text() == dedent(toml).lstrip()
-
-
 def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex) -> None:
     dest = tmp_path / "tox.toml"
     toml = """
@@ -175,29 +195,3 @@ def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_pa
     out, err = capsys.readouterr()
     assert (err, out) == ("", "")
     assert dest.read_text() == dedent(toml).lstrip()
-
-
-def test_tox_toml_multiline(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"pytest": ["8.1"], "coverage": ["7.1"]})
-    dest = tmp_path / "tox.toml"
-    toml = """
-    [env_run_base]
-    deps = [
-        "pytest>=7.0",
-        "coverage>=6.0",
-    ]
-    """
-    dest.write_text(dedent(toml).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "pytest>=7.0 -> pytest>=8.1",
-            "coverage>=6.0 -> coverage>=7.1",
-        },
-    )
-
-    assert dest.read_text() == dedent(toml).lstrip().replace("7.0", "8.1").replace("6.0", "7.1")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -14,55 +15,49 @@ if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
 
 
-def test_run_requirements_txt(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update(A=["1"], B=["1", "2"])
-    dest = tmp_path / "requirements.txt"
-    req_txt = """
-    A
-    B==1
-    """
-    dest.write_text(dedent(req_txt).lstrip())
-
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
-    )
-
-    req_txt = """
-    A>=1
-    B==2
-    """
-    assert dest.read_text() == dedent(req_txt).lstrip()
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Case:
+    content: str
+    pypi: dict[str, list[str]]
+    updates: set[str]
+    expected: str
 
 
-def test_run_requirements_txt_skip_options(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            _Case(
+                content="A\nB==1\n",
+                pypi={"A": ["1"], "B": ["1", "2"]},
+                updates={"B==1 -> B==2", "A -> A>=1"},
+                expected="A>=1\nB==2\n",
+            ),
+            id="pinned-and-unpinned",
+        ),
+        pytest.param(
+            _Case(
+                content="-e .[test]\n-r other.txt\n--index-url https://pypi.org/simple\nA\n",
+                pypi={"A": ["1"]},
+                updates={"A -> A>=1"},
+                expected="-e .[test]\n-r other.txt\n--index-url https://pypi.org/simple\nA>=1\n",
+            ),
+            id="skips-options",
+        ),
+    ],
+)
+def test_run_requirements_txt_updates_dependencies(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, case: _Case
 ) -> None:
-    index.pypi["A"] = ["1"]
+    index.pypi.update(case.pypi)
     dest = tmp_path / "requirements.txt"
-    req_txt = """
-    -e .[test]
-    -r other.txt
-    --index-url https://pypi.org/simple
-    A
-    """
-    dest.write_text(dedent(req_txt).lstrip())
+    dest.write_text(case.content)
 
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", "A -> A>=1"})
-
-    req_txt = """
-    -e .[test]
-    -r other.txt
-    --index-url https://pypi.org/simple
-    A>=1
-    """
-    assert dest.read_text() == dedent(req_txt).lstrip()
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", *case.updates})
+    assert dest.read_text() == case.expected
 
 
 @pytest.mark.parametrize(
@@ -103,9 +98,9 @@ def test_run_requirements_txt_distinguishes_markers_from_comments(index: FakeInd
 @pytest.mark.parametrize(
     "filename",
     [
-        "requirements",
-        "requirements.test",
-        "requirements-test",
+        pytest.param("requirements", id="plain-name"),
+        pytest.param("requirements.test", id="dotted-suffix"),
+        pytest.param("requirements-test", id="dashed-suffix"),
     ],
 )
 def test_run_requirements_txt_in(
@@ -209,7 +204,7 @@ def test_run_requirements_txt_keeps_unset_and_empty_variables(
     monkeypatch.setenv("EMPTY", "")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(
-        "-i https://a.example/${UNSET}\n--extra-index-url=https://b.example/${EMPTY}\nfoo\n", "utf-8"
+        "-i https://a.example/${UNSET}\n--extra-index-url=https://b.example/${EMPTY}\nfoo\n", encoding="utf-8"
     )
 
     index.run(requirements)

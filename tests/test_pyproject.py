@@ -48,7 +48,7 @@ def test_run_args_without_pyproject_keeps_index_selection(
 def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
     index.pypi.update(A=["1"], B=["2", "3"], C=["1"], E=["3"], F=["4"])
     dest = tmp_path / "pyproject.toml"
-    toml = """
+    content = """
     [build-system]
     requires = ["A"]
     [project]
@@ -59,7 +59,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex
     first = ["E"]
     second = ["F", {include-group = "first"}]
     """
-    dest.write_text(dedent(toml).lstrip())
+    dest.write_text(dedent(content).lstrip())
 
     assert not index.run(dest)
 
@@ -74,7 +74,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex
         "B==2 -> B==3",
     }
 
-    toml = """
+    expected = """
     [build-system]
     requires = ["A>=1"]
     [project]
@@ -85,7 +85,7 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], index: FakeIndex
     first = ["E>=3"]
     second = ["F>=4", {include-group = "first"}]
     """
-    assert dest.read_text() == dedent(toml).lstrip()
+    assert dest.read_text() == dedent(expected).lstrip()
 
 
 @pytest.mark.parametrize(
@@ -185,7 +185,25 @@ def test_run_pyproject_toml_accepts_prereleases_everywhere(tmp_path: Path, index
 
     assert index.run(pyproject, pre_release=True)
 
-    assert pyproject.read_text(encoding="utf-8").count(">=2.0.0rc1") == 4
+    assert (
+        pyproject.read_text(encoding="utf-8")
+        == dedent(
+            """
+        [build-system]
+        requires = ["build-dep>=2.0.0rc1"]
+
+        [project]
+        name = "example"
+        dependencies = ["runtime-dep>=2.0.0rc1"]
+
+        [project.optional-dependencies]
+        test = ["optional-dep>=2.0.0rc1"]
+
+        [dependency-groups]
+        dev = ["group-dep>=2.0.0rc1"]
+        """
+        ).lstrip()
+    )
 
 
 def test_run_reports_unparsable_pyproject_and_continues(

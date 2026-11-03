@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import configparser
 import os
 import time
+from configparser import RawConfigParser
 from textwrap import dedent
 from threading import Event
 from typing import TYPE_CHECKING, Final
@@ -15,118 +15,6 @@ if TYPE_CHECKING:
     import httpx
     from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
-
-
-def test_requirements_preserves_comments_and_similar_names(tmp_path: Path, index: FakeIndex) -> None:
-    requirements = tmp_path / "requirements.txt"
-    requirements.write_text("foo  # keep this reason\nfoobar\n", encoding="utf-8")
-    index.pypi["foo"] = ["2"]
-    index.pypi["foobar"] = ["3"]
-
-    assert index.run(requirements)
-
-    assert requirements.read_text(encoding="utf-8") == "foo>=2  # keep this reason\nfoobar>=3\n"
-
-
-def test_pyproject_updates_only_dependency_tables(tmp_path: Path, index: FakeIndex) -> None:
-    pyproject = tmp_path / "pyproject.toml"
-    content = """
-    [project]
-    name = "example"
-
-    [project.optional-dependencies]
-    test = ["foo"]
-
-    [tool.example]
-    dependencies = ["foo"]
-    """
-    pyproject.write_text(dedent(content).lstrip(), encoding="utf-8")
-    index.pypi["foo"] = ["2"]
-
-    assert index.run(pyproject)
-
-    expected = dedent(content).lstrip().replace('test = ["foo"]', 'test = ["foo>=2"]')
-    assert pyproject.read_text(encoding="utf-8") == expected
-
-
-def test_setup_cfg_updates_only_requirement_values(tmp_path: Path, index: FakeIndex) -> None:
-    setup_cfg = tmp_path / "setup.cfg"
-    setup_cfg.write_text(
-        dedent(
-            """
-            [options]
-            packages = foo
-            python_requires = >=3.11
-            install_requires =
-                foo
-            """
-        ).lstrip(),
-        encoding="utf-8",
-    )
-    index.pypi["foo"] = ["2"]
-
-    assert index.run(setup_cfg)
-
-    assert (
-        setup_cfg.read_text(encoding="utf-8")
-        == dedent(
-            """
-        [options]
-        packages = foo
-        python_requires = >=3.11
-        install_requires =
-            foo>=2
-        """
-        ).lstrip()
-    )
-
-
-def test_tox_ini_preserves_commands_and_factors(tmp_path: Path, index: FakeIndex) -> None:
-    tox_ini = tmp_path / "tox.ini"
-    tox_ini.write_text(
-        dedent(
-            """
-            [testenv]
-            deps =
-                py311: foo
-            commands = foo
-            """
-        ).lstrip(),
-        encoding="utf-8",
-    )
-    index.pypi["foo"] = ["2"]
-
-    assert index.run(tox_ini)
-
-    assert (
-        tox_ini.read_text(encoding="utf-8")
-        == dedent(
-            """
-        [testenv]
-        deps =
-            py311: foo>=2
-        commands = foo
-        """
-        ).lstrip()
-    )
-
-
-def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) -> None:
-    config = tmp_path / ".pre-commit-config.yaml"
-    content = """
-    repos:
-      - repo: https://example.com/foo
-        hooks:
-          - id: foo
-            additional_dependencies:
-              - foo
-    """
-    config.write_text(dedent(content).lstrip(), encoding="utf-8")
-    index.pypi["foo"] = ["2"]
-
-    assert index.run(config)
-
-    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("- foo\n", "- foo>=2\n")
 
 
 @pytest.mark.parametrize(
@@ -992,9 +880,93 @@ def test_pre_commit_preserves_repository_urls(tmp_path: Path, index: FakeIndex) 
             '{"dependencies": {"foo": "^1.5.0", "bar": ""}}',
             id="package-json-padded-and-empty-range",
         ),
+        pytest.param(
+            "requirements.txt",
+            "foo  # keep this reason\nfoobar\n",
+            "foo>=2  # keep this reason\nfoobar>=3\n",
+            id="requirements-keeps-comments-and-similar-names",
+        ),
+        pytest.param(
+            "pyproject.toml",
+            """
+            [project]
+            name = "example"
+
+            [project.optional-dependencies]
+            test = ["foo"]
+
+            [tool.example]
+            dependencies = ["foo"]
+            """,
+            """
+            [project]
+            name = "example"
+
+            [project.optional-dependencies]
+            test = ["foo>=2"]
+
+            [tool.example]
+            dependencies = ["foo"]
+            """,
+            id="pyproject-updates-only-dependency-tables",
+        ),
+        pytest.param(
+            "setup.cfg",
+            """
+            [options]
+            packages = foo
+            python_requires = >=3.11
+            install_requires =
+                foo
+            """,
+            """
+            [options]
+            packages = foo
+            python_requires = >=3.11
+            install_requires =
+                foo>=2
+            """,
+            id="setup-cfg-updates-only-requirement-values",
+        ),
+        pytest.param(
+            "tox.ini",
+            """
+            [testenv]
+            deps =
+                py311: foo
+            commands = foo
+            """,
+            """
+            [testenv]
+            deps =
+                py311: foo>=2
+            commands = foo
+            """,
+            id="tox-ini-preserves-commands-and-factors",
+        ),
+        pytest.param(
+            ".pre-commit-config.yaml",
+            """
+            repos:
+              - repo: https://example.com/foo
+                hooks:
+                  - id: foo
+                    additional_dependencies:
+                      - foo
+            """,
+            """
+            repos:
+              - repo: https://example.com/foo
+                hooks:
+                  - id: foo
+                    additional_dependencies:
+                      - foo>=2
+            """,
+            id="pre-commit-preserves-repository-urls",
+        ),
     ],
 )
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str, expected: str) -> None:
     dest = tmp_path / name
     dest.write_text(dedent(content).lstrip(), encoding="utf-8")
@@ -1005,8 +977,9 @@ def test_file_updates(tmp_path: Path, index: FakeIndex, name: str, content: str,
 
 
 @pytest.fixture
-def foo_index(index: FakeIndex) -> None:
+def packages_index(index: FakeIndex) -> None:
     index.pypi["foo"] = ["2"]
+    index.pypi["foobar"] = ["3"]
     index.npm["bar"] = ["2.0.0"]
     index.npm["foo"] = ["1.0.0", "1.0.5", "1.5.0", "2.0.0"]
 
@@ -1024,7 +997,7 @@ def foo_index(index: FakeIndex) -> None:
         ),
     ],
 )
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_file_keeps_each_line_ending(
     tmp_path: Path, index: FakeIndex, name: str, content: bytes, expected: bytes
 ) -> None:
@@ -1037,7 +1010,7 @@ def test_file_keeps_each_line_ending(
     assert dest.read_bytes() == expected
 
 
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_unchanged_file_is_not_rewritten(tmp_path: Path, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo>=2\n", encoding="utf-8")
@@ -1048,7 +1021,7 @@ def test_unchanged_file_is_not_rewritten(tmp_path: Path, index: FakeIndex) -> No
     assert requirements.stat().st_mtime_ns == 0
 
 
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_package_shared_across_files_is_fetched_once(tmp_path: Path, httpx_mock: HTTPXMock, index: FakeIndex) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("foo>=1\n", encoding="utf-8")
@@ -1131,6 +1104,7 @@ def test_output_redacts_direct_reference_credentials(
 
 
 _NESTED_DEPENDENCIES: Final[str] = ", ".join(['{"dependencies": {"foo": "^1.0.0"}}'] * 8000)
+_COMMENT_LINES: Final[str] = "#\n" * 20_000
 
 
 @pytest.mark.parametrize(
@@ -1156,13 +1130,13 @@ _NESTED_DEPENDENCIES: Final[str] = ", ".join(['{"dependencies": {"foo": "^1.0.0"
         ),
         pytest.param(
             "pyproject.toml",
-            '[project]\nname = "demo"\ndependencies = ["""foo\\\n>=1"""]\n' + "#\n" * 20_000,
-            '[project]\nname = "demo"\ndependencies = ["""foo>=2"""]\n' + "#\n" * 20_000,
+            f'[project]\nname = "demo"\ndependencies = ["""foo\\\n>=1"""]\n{_COMMENT_LINES}',
+            f'[project]\nname = "demo"\ndependencies = ["""foo>=2"""]\n{_COMMENT_LINES}',
             id="joined-line-before-many-equal-lines",
         ),
     ],
 )
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_pathological_line_parses_in_linear_time(
     tmp_path: Path, index: FakeIndex, name: str, content: str, expected: str
 ) -> None:
@@ -1176,7 +1150,15 @@ def test_pathological_line_parses_in_linear_time(
 
 
 @pytest.mark.parametrize(
-    "name", ["pyproject.toml", "tox.toml", "tox.ini", "setup.cfg", ".pre-commit-config.yaml", "requirements.txt"]
+    "name",
+    [
+        pytest.param("pyproject.toml", id="pyproject"),
+        pytest.param("tox.toml", id="tox-toml"),
+        pytest.param("tox.ini", id="tox-ini"),
+        pytest.param("setup.cfg", id="setup-cfg"),
+        pytest.param(".pre-commit-config.yaml", id="pre-commit"),
+        pytest.param("requirements.txt", id="requirements"),
+    ],
 )
 def test_empty_file_stays_empty(
     capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, name: str
@@ -1197,7 +1179,7 @@ def test_empty_file_stays_empty(
         pytest.param('[project]\nname = "demo"\nrequires-python = 3', id="requires-python-not-a-string"),
     ],
 )
-@pytest.mark.usefixtures("foo_index")
+@pytest.mark.usefixtures("packages_index")
 def test_requirements_next_to_mistyped_pyproject(tmp_path: Path, index: FakeIndex, pyproject: str) -> None:
     (tmp_path / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     requirements = tmp_path / "requirements.txt"
@@ -1210,9 +1192,9 @@ def test_requirements_next_to_mistyped_pyproject(tmp_path: Path, index: FakeInde
 
 def test_ini_files_read_as_utf8(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, index: FakeIndex) -> None:
     # stand in for a locale that cannot decode UTF-8, such as the `C` locale or cp1252 on Windows
-    read = configparser.RawConfigParser.read
+    read = RawConfigParser.read
     monkeypatch.setattr(
-        configparser.RawConfigParser,
+        RawConfigParser,
         "read",
         lambda self, filenames, encoding=None: read(self, filenames, encoding=encoding or "ascii"),
     )

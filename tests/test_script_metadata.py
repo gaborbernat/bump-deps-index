@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
@@ -13,81 +14,152 @@ if TYPE_CHECKING:
     from conftest import FakeIndex
 
 
-def test_run_script_metadata(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"rich": ["13.9.5"], "orjson": ["3.10.14"]})
-    dest = tmp_path / "script.py"
-    script = """
-    #!/usr/bin/env python3
-    # /// script
-    # dependencies = [
-    #   "rich>=13.9.4",
-    #   "orjson>=3.10.13",
-    # ]
-    # ///
-
-    import rich
-    from orjson import dumps
-
-    print("Hello")
-    """
-    dest.write_text(dedent(script).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "rich>=13.9.4 -> rich>=13.9.5",
-            "orjson>=3.10.13 -> orjson>=3.10.14",
-        },
-    )
-
-    script = """
-    #!/usr/bin/env python3
-    # /// script
-    # dependencies = [
-    #   "rich>=13.9.5",
-    #   "orjson>=3.10.14",
-    # ]
-    # ///
-
-    import rich
-    from orjson import dumps
-
-    print("Hello")
-    """
-    assert dest.read_text() == dedent(script).lstrip()
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Case:
+    script: str
+    pypi: dict[str, list[str]]
+    updates: set[str]
+    expected: str
 
 
-def test_script_metadata_keeps_requires_python_line(
-    capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            _Case(
+                script="""
+            #!/usr/bin/env python3
+            # /// script
+            # dependencies = [
+            #   "rich>=13.9.4",
+            #   "orjson>=3.10.13",
+            # ]
+            # ///
+
+            import rich
+            from orjson import dumps
+
+            print("Hello")
+            """,
+                pypi={"rich": ["13.9.5"], "orjson": ["3.10.14"]},
+                updates={"rich>=13.9.4 -> rich>=13.9.5", "orjson>=3.10.13 -> orjson>=3.10.14"},
+                expected="""
+            #!/usr/bin/env python3
+            # /// script
+            # dependencies = [
+            #   "rich>=13.9.5",
+            #   "orjson>=3.10.14",
+            # ]
+            # ///
+
+            import rich
+            from orjson import dumps
+
+            print("Hello")
+            """,
+            ),
+            id="multiline-array",
+        ),
+        pytest.param(
+            _Case(
+                script="""
+            # /// script
+            # requires-python = ">=3.11"
+            # dependencies = [
+            #   "requests>=2.28",
+            # ]
+            # ///
+            """,
+                pypi={"requests": ["2.30"]},
+                updates={"requests>=2.28 -> requests>=2.30"},
+                expected="""
+            # /// script
+            # requires-python = ">=3.11"
+            # dependencies = [
+            #   "requests>=2.30",
+            # ]
+            # ///
+            """,
+            ),
+            id="keeps-requires-python-line",
+        ),
+        pytest.param(
+            _Case(
+                script="""
+            # /// script
+            # dependencies = [
+            #   "requests[security]>=2.28.0",
+            # ]
+            # ///
+            """,
+                pypi={"requests": ["2.30.1"]},
+                updates={"requests[security]>=2.28.0 -> requests[security]>=2.30.1"},
+                expected="""
+            # /// script
+            # dependencies = [
+            #   "requests[security]>=2.30.1",
+            # ]
+            # ///
+            """,
+            ),
+            id="with-extras",
+        ),
+        pytest.param(
+            _Case(
+                script="""
+            # /// script
+            # dependencies = ["rich>=13.9.4", "orjson"]
+            # ///
+            """,
+                pypi={"rich": ["13.9.5"], "orjson": ["3.10.14"]},
+                updates={"rich>=13.9.4 -> rich>=13.9.5", "orjson -> orjson>=3.10.14"},
+                expected="""
+            # /// script
+            # dependencies = ["rich>=13.9.5", "orjson>=3.10.14"]
+            # ///
+            """,
+            ),
+            id="inline-array",
+        ),
+        pytest.param(
+            _Case(
+                script="""
+            # /// script
+            # requires-python = ">=3.11"
+            #
+            # dependencies = [
+            #   "requests>=2.28",
+            # ]
+            # ///
+            """,
+                pypi={"requests": ["2.30"]},
+                updates={"requests>=2.28 -> requests>=2.30"},
+                expected="""
+            # /// script
+            # requires-python = ">=3.11"
+            #
+            # dependencies = [
+            #   "requests>=2.30",
+            # ]
+            # ///
+            """,
+            ),
+            id="blank-line-in-toml",
+        ),
+    ],
+)
+def test_script_metadata_updates_dependencies(
+    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, case: _Case
 ) -> None:
-    index.pypi.update({"requests": ["2.30"]})
+    index.pypi.update(case.pypi)
     dest = tmp_path / "script.py"
-    script = """
-    # /// script
-    # requires-python = ">=3.11"
-    # dependencies = [
-    #   "requests>=2.28",
-    # ]
-    # ///
-    """
-    dest.write_text(dedent(script).lstrip())
+    dest.write_text(dedent(case.script).lstrip())
+
     assert index.run(dest)
 
     out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "requests>=2.28 -> requests>=2.30",
-        },
-    )
-
-    assert dest.read_text() == dedent(script).lstrip().replace("2.28", "2.30")
+    assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", *case.updates})
+    assert dest.read_text() == dedent(case.expected).lstrip()
 
 
 @pytest.mark.parametrize(
@@ -112,88 +184,6 @@ def test_script_metadata_without_dependencies_does_nothing(
     assert index.run(dest)
 
     assert (capsys.readouterr(), dest.read_text()) == (("", ""), script)
-
-
-def test_script_metadata_with_extras(
-    capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
-    tmp_path: Path,
-) -> None:
-    index.pypi.update({"requests": ["2.30.1"]})
-    dest = tmp_path / "script.py"
-    script = """
-    # /// script
-    # dependencies = [
-    #   "requests[security]>=2.28.0",
-    # ]
-    # ///
-    """
-    dest.write_text(dedent(script).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "requests[security]>=2.28.0 -> requests[security]>=2.30.1",
-        },
-    )
-
-
-def test_script_metadata_inline_array(
-    capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
-    tmp_path: Path,
-) -> None:
-    index.pypi.update({"rich": ["13.9.5"], "orjson": ["3.10.14"]})
-    dest = tmp_path / "script.py"
-    script = """
-    # /// script
-    # dependencies = ["rich>=13.9.4", "orjson"]
-    # ///
-    """
-    dest.write_text(dedent(script).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "rich>=13.9.4 -> rich>=13.9.5",
-            "orjson -> orjson>=3.10.14",
-        },
-    )
-
-
-def test_script_metadata_with_blank_line_in_toml(
-    capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
-    tmp_path: Path,
-) -> None:
-    index.pypi.update({"requests": ["2.30"]})
-    dest = tmp_path / "script.py"
-    script = """
-    # /// script
-    # requires-python = ">=3.11"
-    #
-    # dependencies = [
-    #   "requests>=2.28",
-    # ]
-    # ///
-    """
-    dest.write_text(dedent(script).lstrip())
-    assert index.run(dest)
-
-    out, err = capsys.readouterr()
-    assert (err, set(out.splitlines())) == (
-        "",
-        {
-            "Using Python index: https://pypi.example/simple",
-            "requests>=2.28 -> requests>=2.30",
-        },
-    )
 
 
 def test_script_metadata_only_replaces_in_block(
@@ -236,8 +226,27 @@ def test_script_metadata_only_replaces_in_block(
         },
     )
 
-    updated = dedent(script).lstrip().replace('#     "httpx>=0.27.0"', '#     "httpx>=0.28.1"')
-    assert dest.read_text() == updated.replace('#     "rich>=13.0.0"', '#     "rich>=14.2"')
+    expected = """
+    #!/usr/bin/env python3
+    # /// script
+    # requires-python = ">=3.11"
+    # dependencies = [
+    #     "httpx>=0.28.1",
+    #     "rich>=14.2",
+    # ]
+    # ///
+    from __future__ import annotations
+
+    import httpx
+    from rich import print
+
+    # This should NOT be changed: httpx>=0.27.0
+    x = "httpx>=0.27.0"
+    y = "rich>=13.0.0"
+
+    print("Hello")
+    """
+    assert dest.read_text() == dedent(expected).lstrip()
 
 
 def test_script_metadata_uses_own_requires_python(index: FakeIndex, tmp_path: Path) -> None:

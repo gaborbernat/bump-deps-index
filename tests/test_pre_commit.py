@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import httpx
+import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import pytest
     from conftest import FakeIndex
 
 
@@ -16,7 +17,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
     index.pypi.update({"black": ["22.6.0", "22.8.0"], "flake8-bugbear": ["22.7.1", "22.7.2"]})
     index.npm["prettier"] = ["2.7.0", "2.8.0"]
     dest = tmp_path / ".pre-commit-config.yaml"
-    setup_cfg = """
+    content = """
     repos:
       - repo: https://github.com/asottile/blacken-docs
         hooks:
@@ -30,7 +31,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
             additional_dependencies:
             - flake8-bugbear==22.7.1
     """
-    dest.write_text(dedent(setup_cfg).lstrip())
+    dest.write_text(dedent(content).lstrip())
 
     assert index.run(dest)
 
@@ -46,7 +47,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
         },
     )
 
-    setup_cfg = """
+    expected = """
     repos:
       - repo: https://github.com/asottile/blacken-docs
         hooks:
@@ -60,15 +61,25 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
             additional_dependencies:
             - flake8-bugbear==22.7.2
     """
-    assert dest.read_text() == dedent(setup_cfg).lstrip()
+    assert dest.read_text() == dedent(expected).lstrip()
 
 
-def test_run_pre_commit_preserves_yaml_layout(index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update(bar=["2"], baz=["3"], foo=["1"])
-    config = tmp_path / ".pre-commit-config.yaml"
-    config.write_text(
-        dedent(
-            """
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _Case:
+    pypi: dict[str, list[str]]
+    npm: dict[str, list[str]]
+    content: str
+    expected: str
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            _Case(
+                pypi={"bar": ["2"], "baz": ["3"], "foo": ["1"]},
+                npm={},
+                content="""
             repos:
               - repo: local
                 hooks:
@@ -77,28 +88,89 @@ def test_run_pre_commit_preserves_yaml_layout(index: FakeIndex, tmp_path: Path) 
                   - id: comments
                     additional_dependencies:
                       - baz  # keep this reason
-            """
-        ).lstrip(),
-        encoding="utf-8",
-    )
+            """,
+                expected="""
+            repos:
+              - repo: local
+                hooks:
+                  - id: example
+                    additional_dependencies: [foo>=1, "bar>=2"]
+                  - id: comments
+                    additional_dependencies:
+                      - baz>=3  # keep this reason
+            """,
+            ),
+            id="preserves-yaml-layout",
+        ),
+        pytest.param(
+            _Case(
+                pypi={"black": ["24.1"]},
+                npm={},
+                content="""
+            repos:
+              - repo: local
+                hooks:
+                  - id: go
+                    language: golang
+                    additional_dependencies: [github.com/a/b@v1.0.0]
+                  - id: rust
+                    language: rust
+                    additional_dependencies: ["cli:ripgrep:14.0.0"]
+                  - id: py
+                    language: python
+                    additional_dependencies: [black]
+            """,
+                expected="""
+            repos:
+              - repo: local
+                hooks:
+                  - id: go
+                    language: golang
+                    additional_dependencies: [github.com/a/b@v1.0.0]
+                  - id: rust
+                    language: rust
+                    additional_dependencies: ["cli:ripgrep:14.0.0"]
+                  - id: py
+                    language: python
+                    additional_dependencies: [black>=24.1]
+            """,
+            ),
+            id="follows-hook-language",
+        ),
+        pytest.param(
+            _Case(
+                pypi={},
+                npm={"eslint": ["9.0.0"]},
+                content="""
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    language: node
+                    additional_dependencies: [eslint]
+            """,
+                expected="""
+            repos:
+              - repo: local
+                hooks:
+                  - id: lint
+                    language: node
+                    additional_dependencies: [eslint@9.0.0]
+            """,
+            ),
+            id="node-hook-dependencies-are-javascript",
+        ),
+    ],
+)
+def test_run_pre_commit_updates_dependencies(index: FakeIndex, tmp_path: Path, case: _Case) -> None:
+    index.pypi.update(case.pypi)
+    index.npm.update(case.npm)
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(dedent(case.content).lstrip(), encoding="utf-8")
 
     assert index.run(config)
 
-    assert (
-        config.read_text(encoding="utf-8")
-        == dedent(
-            """
-        repos:
-          - repo: local
-            hooks:
-              - id: example
-                additional_dependencies: [foo>=1, "bar>=2"]
-              - id: comments
-                additional_dependencies:
-                  - baz>=3  # keep this reason
-        """
-        ).lstrip()
-    )
+    assert config.read_text(encoding="utf-8") == dedent(case.expected).lstrip()
 
 
 def test_run_pre_commit_keeps_filtered_inline_dependencies(
@@ -124,24 +196,6 @@ def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) ->
     )
 
 
-def test_run_pre_commit_node_hook_dependencies_are_javascript(index: FakeIndex, tmp_path: Path) -> None:
-    index.npm["eslint"] = ["9.0.0"]
-    config = tmp_path / ".pre-commit-config.yaml"
-    content = """
-    repos:
-      - repo: local
-        hooks:
-          - id: lint
-            language: node
-            additional_dependencies: [eslint]
-    """
-    config.write_text(dedent(content).lstrip(), encoding="utf-8")
-
-    assert index.run(config)
-
-    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[eslint]", "[eslint@9.0.0]")
-
-
 def test_run_pre_commit_reports_missing_npm_package(
     capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
 ) -> None:
@@ -160,30 +214,6 @@ def test_run_pre_commit_reports_missing_npm_package(
 
     assert capsys.readouterr().err.startswith("failed to look up nope, so it was not updated: HTTPStatusError(")
     assert config.read_text() == dedent(content).lstrip()
-
-
-def test_run_pre_commit_follows_hook_language(index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi["black"] = ["24.1"]
-    config = tmp_path / ".pre-commit-config.yaml"
-    content = """
-    repos:
-      - repo: local
-        hooks:
-          - id: go
-            language: golang
-            additional_dependencies: [github.com/a/b@v1.0.0]
-          - id: rust
-            language: rust
-            additional_dependencies: ["cli:ripgrep:14.0.0"]
-          - id: py
-            language: python
-            additional_dependencies: [black]
-    """
-    config.write_text(dedent(content).lstrip(), encoding="utf-8")
-
-    assert index.run(config)
-
-    assert config.read_text(encoding="utf-8") == dedent(content).lstrip().replace("[black]", "[black>=24.1]")
 
 
 def test_run_pre_commit_reads_remote_hook_language(index: FakeIndex, tmp_path: Path) -> None:

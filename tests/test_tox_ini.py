@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
     index.pypi.update({"A": ["1"], "B": ["2", "3"], "C": ["3"]})
     dest = tmp_path / "tox.ini"
-    tox_ini = """
+    content = """
     [tox]
     requires =
         C
@@ -28,7 +28,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_p
     [magic]
     deps = NO
     """
-    dest.write_text(dedent(tox_ini).lstrip())
+    dest.write_text(dedent(content).lstrip())
     assert index.run(dest)
 
     out, err = capsys.readouterr()
@@ -42,7 +42,7 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_p
         },
     )
 
-    tox_ini = """
+    expected = """
     [tox]
     requires =
         C>=3
@@ -57,4 +57,4 @@ def test_run_tox_ini(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_p
     [magic]
     deps = NO
     """
-    assert dest.read_text() == dedent(tox_ini).lstrip()
+    assert dest.read_text() == dedent(expected).lstrip()

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
     index.pypi.update({"A": ["1"], "B": ["1"], "C": ["3"]})
     dest = tmp_path / "setup.cfg"
-    setup_cfg = """
+    content = """
     [options]
     install_requires =
         A
@@ -23,7 +23,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
     type =
         C
     """
-    dest.write_text(dedent(setup_cfg).lstrip())
+    dest.write_text(dedent(content).lstrip())
     assert index.run(dest)
 
     out, err = capsys.readouterr()
@@ -37,7 +37,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
         },
     )
 
-    setup_cfg = """
+    expected = """
     [options]
     install_requires =
         A>=1
@@ -47,4 +47,4 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
     type =
         C>=3
     """
-    assert dest.read_text() == dedent(setup_cfg).lstrip()
+    assert dest.read_text() == dedent(expected).lstrip()
