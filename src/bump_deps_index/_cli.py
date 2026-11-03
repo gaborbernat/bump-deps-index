@@ -6,11 +6,11 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from bump_deps_index._config import npm_registry, python_exclude_newer, python_index_url
-from bump_deps_index._cutoff import parse_exclude_newer
-from bump_deps_index._loaders import get_loaders
-from bump_deps_index._redact import redact_url
-from bump_deps_index.version import version
+from ._config import npm_registry, python_exclude_newer, python_index_url
+from ._cutoff import parse_exclude_newer
+from ._loaders import get_loaders
+from ._redact import redact_url
+from .version import version
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

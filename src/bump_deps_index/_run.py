@@ -12,7 +12,7 @@ from httpx import Client, HTTPError, Limits
 from truststore import SSLContext
 from yaml import YAMLError
 
-from bump_deps_index._config import (
+from ._config import (
     IndexSettings,
     entry_indexes,
     get_project,
@@ -20,20 +20,20 @@ from bump_deps_index._config import (
     npm_settings,
     pip_extra_indexes,
 )
-from bump_deps_index._loaders import get_loaders
-from bump_deps_index._lookup import Lookup, PkgType, package_type
-from bump_deps_index._npm_registry import NpmRegistry
-from bump_deps_index._pep440 import python_floor
-from bump_deps_index._pypi import SimpleIndex
-from bump_deps_index._redact import redact_text, redact_url
-from bump_deps_index._update import update
+from ._loaders import get_loaders
+from ._lookup import Lookup, PkgType, package_type
+from ._npm_registry import NpmRegistry
+from ._pep440 import python_floor
+from ._pypi import SimpleIndex
+from ._redact import redact_text, redact_url
+from ._update import update
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from bump_deps_index._cli import Options
-    from bump_deps_index._config import Project
-    from bump_deps_index._loaders import Loader
+    from ._cli import Options
+    from ._config import Project
+    from ._loaders import Loader
 
 
 def run(options: Options) -> bool:

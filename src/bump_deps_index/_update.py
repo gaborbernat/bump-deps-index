@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
 
-from bump_deps_index._lookup import PkgType
-from bump_deps_index._pep440 import bump_python
-from bump_deps_index._semver import bump_js
+from ._lookup import PkgType
+from ._pep440 import bump_python
+from ._semver import bump_js
 
 if TYPE_CHECKING:
-    from bump_deps_index._lookup import Lookup
-    from bump_deps_index._npm_registry import NpmRegistry
-    from bump_deps_index._pypi import SimpleIndex
+    from ._lookup import Lookup
+    from ._npm_registry import NpmRegistry
+    from ._pypi import SimpleIndex
 
 
 def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:

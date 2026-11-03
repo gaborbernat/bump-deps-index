@@ -16,16 +16,16 @@ from packaging.utils import (
 )
 from packaging.version import Version
 
-from bump_deps_index._cache import FetchCache
-from bump_deps_index._cutoff import accepts_upload
-from bump_deps_index._parsed import json_field, mappings, parse_timestamp
+from ._cache import FetchCache
+from ._cutoff import accepts_upload
+from ._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from httpx import Client
 
-    from bump_deps_index._lookup import IndexLookup
+    from ._lookup import IndexLookup
 
 
 class SimpleIndex:

@@ -4,17 +4,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from bump_deps_index._cache import FetchCache
-from bump_deps_index._cutoff import accepts_upload
-from bump_deps_index._parsed import json_field, parse_timestamp, table
-from bump_deps_index._semver import split_npm_spec
+from ._cache import FetchCache
+from ._cutoff import accepts_upload
+from ._parsed import json_field, parse_timestamp, table
+from ._semver import split_npm_spec
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from httpx import Client
 
-    from bump_deps_index._config import NpmSettings
+    from ._config import NpmSettings
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
