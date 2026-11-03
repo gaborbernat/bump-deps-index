@@ -6,12 +6,12 @@ from typing_extensions import override
 
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 from ._ini import ini_values, read_ini, update_ini
 from ._lines import strip_factor
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -19,8 +19,9 @@ class ToxIni(SingleFileLoader):
     filename: ClassVar[str] = "tox.ini"
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         cfg = read_ini(filename)
+        entries: list[Entry] = []
         for section in cfg.sections():
             if section.startswith("testenv"):
                 values = [strip_factor(value) for value in ini_values(cfg[section].get("deps", ""))]
@@ -29,10 +30,13 @@ class ToxIni(SingleFileLoader):
             else:
                 continue
             # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311}:`
-            yield from (Entry(spec=value, pkg_type=PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"})
+            entries.extend(
+                Entry(spec=value, pkg_type=PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"}
+            )
+        return Loaded(entries=entries)
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         return update_ini(
             text,
             changes,

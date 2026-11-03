@@ -8,11 +8,11 @@ from typing_extensions import override
 from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import strings, table
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
     from bump_deps_index._parsed import Parsed
@@ -22,21 +22,23 @@ class PyProjectToml(SingleFileLoader):
     filename: ClassVar[str] = "pyproject.toml"
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         with filename.open("rb") as file_handler:
             cfg: Parsed = load_toml(file_handler)
         project = table(cfg, "project")
-        for value in (
+        values = (
             table(cfg, "build-system").get("requires"),
             project.get("dependencies"),
             *table(project, "optional-dependencies").values(),
             table(cfg, "tool", "uv").get("dev-dependencies"),
             *table(cfg, "dependency-groups").values(),
-        ):
-            yield from (Entry(spec=spec, pkg_type=PkgType.PYTHON) for spec in strings(value))
+        )
+        return Loaded(
+            entries=[Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in strings(value)]
+        )
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         return replace_strings(text, changes, self._is_dependency)
 
     @staticmethod

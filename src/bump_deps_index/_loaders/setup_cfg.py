@@ -7,11 +7,11 @@ from typing_extensions import override
 
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 from ._ini import ini_values, read_ini, update_ini
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -19,17 +19,18 @@ class SetupCfg(SingleFileLoader):
     filename: ClassVar[str] = "setup.cfg"
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         cfg = read_ini(filename)
         groups = [
             *([cfg["options"].get("install_requires", "")] if cfg.has_section("options") else []),
             *(cfg["options.extras_require"].values() if cfg.has_section("options.extras_require") else []),
         ]
-        for group in groups:
-            yield from (Entry(spec=value, pkg_type=PkgType.PYTHON) for value in ini_values(group))
+        return Loaded(
+            entries=[Entry(spec=value, pkg_type=PkgType.PYTHON) for group in groups for value in ini_values(group)]
+        )
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         # configparser copies the `[DEFAULT]` keys into `[options.extras_require]`, which reads each key as an extra
         extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
         return update_ini(

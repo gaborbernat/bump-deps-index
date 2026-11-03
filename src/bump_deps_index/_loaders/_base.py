@@ -26,14 +26,14 @@ class Loader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         raise NotImplementedError
 
-    def update_file(self, filename: Path, changes: Mapping[str, str]) -> None:
+    def update_file(self, filename: Path, changes: Mapping[str, str], loaded: Loaded) -> None:
         with filename.open(encoding="utf-8", newline="") as file_handler:
             raw = file_handler.read()
         text = re.sub(r"\r\n?", "\n", raw)
-        if (updated := self._update_text(filename, text, changes)) == text:
+        if (updated := self._update_text(text, changes, loaded.kept)) == text:
             return
         lines = updated.split("\n")
         endings = self._restore_endings(raw, text.split("\n"), lines)
@@ -41,7 +41,7 @@ class Loader(ABC):
             file_handler.write("".join(f"{line}{end}" for line, end in zip(lines, endings, strict=True)))
 
     @abstractmethod
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         raise NotImplementedError
 
     @staticmethod
@@ -83,6 +83,14 @@ class SingleFileLoader(Loader, ABC):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Loaded:
+    entries: list[Entry]
+    # one verdict per pre-commit hook with `additional_dependencies`, in file order; the writer reuses them since a
+    # hook's language may come from a remote manifest
+    kept: tuple[bool, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Entry:
     spec: str
     pkg_type: PkgType
@@ -97,6 +105,7 @@ class Entry:
 
 __all__ = [
     "Entry",
+    "Loaded",
     "Loader",
     "SingleFileLoader",
 ]

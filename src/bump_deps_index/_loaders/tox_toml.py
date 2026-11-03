@@ -7,7 +7,7 @@ from typing_extensions import override
 
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
@@ -24,11 +24,15 @@ class ToxToml(SingleFileLoader):
     filename: ClassVar[str] = "tox.toml"
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         with filename.open("rb") as file_handler:
             cfg: dict[str, Parsed] = load_toml(file_handler)
-        for value in (cfg.get("requires"), *(section.get("deps") for section in self._sections(cfg))):
-            yield from (Entry(spec=spec, pkg_type=PkgType.PYTHON) for spec in self._requirements(value))
+        values = (cfg.get("requires"), *(section.get("deps") for section in self._sections(cfg)))
+        return Loaded(
+            entries=[
+                Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in self._requirements(value)
+            ]
+        )
 
     @staticmethod
     def _sections(cfg: dict[str, Parsed]) -> Iterator[dict[str, Parsed]]:
@@ -54,7 +58,7 @@ class ToxToml(SingleFileLoader):
                 yield from ToxToml._requirements(value.get("default"))
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         return replace_strings(text, changes, self._is_dependency)
 
     @staticmethod

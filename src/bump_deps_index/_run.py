@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
     from ._cli import Options
     from ._config import Project
-    from ._loaders._base import Loader
+    from ._loaders._base import Loaded, Loader
 
 
 def run(options: Options) -> bool:
@@ -119,7 +119,7 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
     successful = bool(filenames)
     if not successful:
         sys.stderr.write("no supported dependency files found in the working directory; pass --file or packages\n")
-    plans: list[tuple[Path, Loader, list[Lookup]]] = []
+    plans: list[tuple[Path, Loader, Loaded, list[Lookup]]] = []
     for filename in filenames:
         if not filename.is_file():
             sys.stderr.write(f"{filename} does not exist; pass a file that exists to --file\n")
@@ -127,29 +127,29 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
         elif (loader := next((i for i in get_loaders() if i.supports(filename)), None)) is None:
             sys.stderr.write(f"{filename} is not a supported dependency file, so it was skipped\n")
             successful = False
-        elif (lookups := _load_lookups(loader, filename, settings, pre_release=pre_release)) is None:
+        elif (plan := _load_lookups(loader, filename, settings, pre_release=pre_release)) is None:
             successful = False
         else:
-            plans.append((filename, loader, lookups))
+            plans.append((filename, loader, *plan))
     # resolve the files in one batch to send one lookup per package across files
     results, resolved = _resolve(settings, list(dict.fromkeys(chain.from_iterable(lookups for *_, lookups in plans))))
-    for filename, loader, lookups in plans:
+    for filename, loader, loaded, lookups in plans:
         changes = {
             lookup.requirement: new
             for lookup in lookups
             if (new := results.get(lookup, lookup.requirement)) != lookup.requirement
         }
-        loader.update_file(filename, changes)
+        loader.update_file(filename, changes, loaded)
     return successful and resolved
 
 
 def _load_lookups(
     loader: Loader, filename: Path, settings: IndexSettings, *, pre_release: bool | None
-) -> list[Lookup] | None:
+) -> tuple[Loaded, list[Lookup]] | None:
     try:
-        entries = list(loader.load(filename))
+        loaded = loader.load(filename)
         # prefer a PEP 723 script's own `requires-python` over the project's, since you run the script outside it
-        floors = {entry.requires_python: python_floor(entry.requires_python) for entry in entries}
+        floors = {entry.requires_python: python_floor(entry.requires_python) for entry in loaded.entries}
     except (OSError, ValueError, YAMLError, ConfigParserError) as exc:
         sys.stderr.write(f"failed to read {filename}, so it was skipped: {exc!r}\n")
         return None
@@ -158,7 +158,7 @@ def _load_lookups(
     own_uv = project.uv if filename.resolve() == project.pyproject else None
     pre_release = loader.default_pre_release if pre_release is None else pre_release
     lookups: dict[Lookup, None] = {}
-    for entry in entries:
+    for entry in loaded.entries:
         if (name := entry.spec.strip()) and (indexes := entry_indexes(name, entry, project, own_uv, settings)):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
             lookups[
@@ -170,7 +170,7 @@ def _load_lookups(
                     indexes=indexes,
                 )
             ] = None
-    return list(lookups)
+    return loaded, list(lookups)
 
 
 __all__ = [

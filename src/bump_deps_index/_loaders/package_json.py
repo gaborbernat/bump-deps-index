@@ -8,10 +8,10 @@ from typing_extensions import override
 from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import table
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
     from typing import TypeAlias
 
@@ -27,20 +27,22 @@ class PackageJson(SingleFileLoader):
     filename: ClassVar[str] = "package.json"
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         with filename.open(encoding="utf-8") as file_handler:
             cfg: Parsed = json.load(file_handler)
-        for section in _SECTIONS:
-            yield from (
+        return Loaded(
+            entries=[
                 Entry(spec=f"{name}@{spec.strip()}", pkg_type=PkgType.JS)
+                for section in _SECTIONS
                 for name, spec in table(cfg, section).items()
                 # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
                 # empty range, which npm reads as `*`
                 if isinstance(spec, str) and spec.strip() and ":" not in spec and "/" not in spec
-            )
+            ]
+        )
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         tree, _ = self._json_node(text, 0)
         edits: list[tuple[int, int, str]] = []
         for section in _SECTIONS:

@@ -12,7 +12,7 @@ from bump_deps_index._hook_manifest import hook_languages
 from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
 
-from ._base import Entry, SingleFileLoader
+from ._base import Entry, Loaded, SingleFileLoader
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -27,20 +27,17 @@ class PreCommitConfig(SingleFileLoader):
     filename: ClassVar[str] = ".pre-commit-config.yaml"
     default_pre_release: ClassVar[bool] = True
 
-    def __init__(self) -> None:
-        # the writer reuses the loader's verdict per hook, since the language may come from a remote manifest
-        self._kept_by_file: dict[Path, list[bool]] = {}
-
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg: Parsed = load_yaml(file_handler)
-        kept = self._kept_by_file[filename] = []
         language_types: Final[dict[str, PkgType]] = {
             "python": PkgType.PYTHON,
             "python_venv": PkgType.PYTHON,
             "node": PkgType.JS,
         }
+        entries: list[Entry] = []
+        kept: list[bool] = []
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
             languages = (
@@ -58,18 +55,20 @@ class PreCommitConfig(SingleFileLoader):
                     kept.append(not skip)
                 if skip:
                     continue
-                for pkg in strings(hook.get("additional_dependencies")):
-                    yield Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
+                entries.extend(
+                    Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
+                    for pkg in strings(hook.get("additional_dependencies"))
+                )
+        return Loaded(entries=entries, kept=tuple(kept))
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         edits: dict[int, tuple[int, str]] = {}
-        # the verdicts serve this one rewrite, so take them off the cached loader rather than keep them
-        kept = iter(self._kept_by_file.pop(filename))
+        verdicts = iter(kept)
         for hook in self._hooks(self._value(compose_yaml(text, Loader=SafeLoader), "repos")):
             if (dependencies := self._value(hook, "additional_dependencies")) is None:
                 continue
-            if not next(kept) or not isinstance(dependencies, SequenceNode):
+            if not next(verdicts) or not isinstance(dependencies, SequenceNode):
                 continue
             for item in dependencies.value:
                 if (

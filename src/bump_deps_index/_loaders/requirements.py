@@ -11,7 +11,7 @@ from typing_extensions import override
 
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, Loader
+from ._base import Entry, Loaded, Loader
 from ._lines import replace_requirement_line, split_comment
 
 if TYPE_CHECKING:
@@ -47,20 +47,23 @@ class Requirements(Loader):
         )
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         lines = filename.read_text(encoding="utf-8").split("\n")
         options = list(self._index_options(filename, set()))
         # pip applies the last `--index-url` and every `--extra-index-url`
         index_url = next((value for name, value in reversed(options) if name == "index"), None)
         extra_index_urls = tuple(value for name, value in options if name == "extra")
-        for group in self._requirement_lines(lines):
-            requirement = " ".join(segment for _, segment in group)
-            yield Entry(
-                spec=requirement,
-                pkg_type=PkgType.PYTHON,
-                index_url=index_url,
-                extra_index_urls=extra_index_urls,
-            )
+        return Loaded(
+            entries=[
+                Entry(
+                    spec=" ".join(segment for _, segment in group),
+                    pkg_type=PkgType.PYTHON,
+                    index_url=index_url,
+                    extra_index_urls=extra_index_urls,
+                )
+                for group in self._requirement_lines(lines)
+            ]
+        )
 
     @staticmethod
     def _index_options(filename: Path, seen: set[Path]) -> Iterator[tuple[str, str]]:
@@ -138,7 +141,7 @@ class Requirements(Loader):
             group = []
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         lines = text.split("\n")
         for group in self._requirement_lines(lines):
             logical = " ".join(segment for _, segment in group)

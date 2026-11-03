@@ -11,7 +11,7 @@ from bump_deps_index._config import script_uv_indexes
 from bump_deps_index._lookup import PkgType
 from bump_deps_index._parsed import strings
 
-from ._base import Entry, Loader
+from ._base import Entry, Loaded, Loader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
@@ -36,18 +36,22 @@ class ScriptMetadata(Loader):
             return False
 
     @override
-    def load(self, filename: Path) -> Iterator[Entry]:
+    def load(self, filename: Path) -> Loaded:
         metadata = self._metadata(filename.read_text(encoding="utf-8"))
         uv, index_url = script_uv_indexes(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
-        for dependency in strings(metadata.get("dependencies")):
-            yield Entry(
-                spec=dependency,
-                pkg_type=PkgType.PYTHON,
-                requires_python=requires_python,
-                uv=uv,
-                index_url=index_url,
-            )
+        return Loaded(
+            entries=[
+                Entry(
+                    spec=dependency,
+                    pkg_type=PkgType.PYTHON,
+                    requires_python=requires_python,
+                    uv=uv,
+                    index_url=index_url,
+                )
+                for dependency in strings(metadata.get("dependencies"))
+            ]
+        )
 
     @staticmethod
     def _metadata(content: str) -> dict[str, Parsed]:
@@ -78,7 +82,7 @@ class ScriptMetadata(Loader):
         return None
 
     @override
-    def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         lines = text.split("\n")
         if (span := self._block(lines)) is None:
             return text
