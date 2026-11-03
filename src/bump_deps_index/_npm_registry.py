@@ -29,12 +29,13 @@ class NpmRegistry:
     def __init__(self, client: Client, exclude_newer: datetime | None, settings: NpmSettings) -> None:
         self.client = client
         self.exclude_newer = exclude_newer
-        self.settings = settings
+        self._settings = settings
         self._documents: FetchCache[NpmRelease] = FetchCache()
 
-    def release(self, registry: str, spec: str, authorization: str | None) -> NpmRelease:
+    def release(self, registry: str, spec: str) -> NpmRelease:
         package, _ = split_npm_spec(spec)
         url = f"{registry.rstrip('/')}/{quote(package, safe='@')}"
+        authorization = self._settings.authorization(registry)
         return self._documents.get(url, lambda url: self._fetch(url, authorization))
 
     def _fetch(self, url: str, authorization: str | None) -> NpmRelease:

@@ -29,9 +29,9 @@ class Lookup(NamedTuple):
     indexes: IndexLookup
 
 
-def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup, authorization: str | None) -> str:
+def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
     if lookup.pkg_type is PkgType.JS:
-        release = npm.release(lookup.indexes.url, lookup.requirement, authorization)
+        release = npm.release(lookup.indexes.url, lookup.requirement)
         return bump_js(lookup.requirement, release.versions, release.latest, pre_release=lookup.pre_release)
     if (requirement := Requirement(lookup.requirement)).url is not None:
         return lookup.requirement

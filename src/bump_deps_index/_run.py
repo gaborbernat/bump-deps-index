@@ -131,7 +131,6 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
                 index,
                 npm,
                 lookup,
-                settings.npm.authorization(lookup.indexes.url) if lookup.pkg_type is PkgType.JS else None,
             ): lookup
             for lookup in lookups
         }
