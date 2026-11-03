@@ -113,13 +113,13 @@ def test_run_requirements_txt_in(
     index.pypi.update(A=["1"], B=["1", "2"])
     (tmp_path / f"{filename}.txt").write_text("C")
     dest = tmp_path / f"{filename}.in"
-    req_txt = """
+    content = """
     A
     B==1
 
     # bad
     """
-    dest.write_text(dedent(req_txt).lstrip())
+    dest.write_text(dedent(content).lstrip())
     monkeypatch.chdir(tmp_path)
 
     main(["--index-url", index.index_url, "--pre-release", "no"])
@@ -130,13 +130,13 @@ def test_run_requirements_txt_in(
         {"Using Python index: https://pypi.example/simple", "B==1 -> B==2", "A -> A>=1"},
     )
 
-    req_txt = """
+    expected = """
     A>=1
     B==2
 
     # bad
     """
-    assert dest.read_text() == dedent(req_txt).lstrip()
+    assert dest.read_text() == dedent(expected).lstrip()
 
 
 @pytest.mark.parametrize(
