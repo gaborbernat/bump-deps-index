@@ -24,8 +24,8 @@ def python_index_url() -> str:
 def _python_setting(
     names: tuple[str, ...], uv_value: Callable[[dict[str, Parsed]], str | Literal[False] | None], pip_name: str
 ) -> str | None:
-    if env := next((value for name in names if (value := os.environ.get(name))), None):
-        return env
+    if from_env := next((value for name in names if (value := os.environ.get(name))), None):
+        return from_env
     # rank the project's uv settings above the user's pip and uv settings, as the more specific choice
     cwd = Path.cwd()
     project = next(

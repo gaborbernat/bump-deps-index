@@ -17,20 +17,20 @@ def npm_registry() -> str:
 
 
 def npm_settings() -> NpmSettings:
-    values = _npmrc()
+    npmrc = _npmrc()
     return NpmSettings(
         registry_by_scope={
             key.removesuffix(":registry"): value
-            for key, value in values.items()
+            for key, value in npmrc.items()
             if key.startswith("@") and key.endswith(":registry")
         },
-        authorization_by_key=_npm_authorizations(values),
+        authorization_by_key=_npm_authorizations(npmrc),
     )
 
 
 def _npmrc() -> dict[str, str]:
-    user = Path(_npm_env("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
-    return {**_read_npmrc(user), **_read_npmrc(Path.cwd() / ".npmrc")}
+    user_npmrc = Path(_npm_env("NPM_CONFIG_USERCONFIG") or Path.home() / ".npmrc")
+    return {**_read_npmrc(user_npmrc), **_read_npmrc(Path.cwd() / ".npmrc")}
 
 
 def _npm_env(name: str) -> str | None:
@@ -66,21 +66,21 @@ def _npmrc_value(raw: str) -> str:
     )
 
 
-def _npm_authorizations(values: dict[str, str]) -> dict[str, str]:
+def _npm_authorizations(npmrc: dict[str, str]) -> dict[str, str]:
     # npm sends a token over a `_auth` value, and that over a `username` with a base64 `_password`
-    found: dict[str, str] = {}
-    for key, username in values.items():
+    authorizations: dict[str, str] = {}
+    for key, username in npmrc.items():
         prefix = key.removesuffix(":username")
-        if key.startswith("//") and key != prefix and (basic := _basic(username, values.get(f"{prefix}:_password"))):
-            found[prefix] = f"Basic {basic}"
+        if key.startswith("//") and key != prefix and (basic := _basic(username, npmrc.get(f"{prefix}:_password"))):
+            authorizations[prefix] = f"Basic {basic}"
     # the token comes last to override a basic credential for the same registry
     for suffix, scheme in {":_auth": "Basic", ":_authToken": "Bearer"}.items():
-        found |= {
+        authorizations |= {
             key.removesuffix(suffix): f"{scheme} {value}"
-            for key, value in values.items()
+            for key, value in npmrc.items()
             if key.startswith("//") and key.endswith(suffix)
         }
-    return found
+    return authorizations
 
 
 def _basic(username: str, encoded_password: str | None) -> str | None:

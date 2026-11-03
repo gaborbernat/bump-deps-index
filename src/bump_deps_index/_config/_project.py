@@ -32,14 +32,14 @@ def get_project(directory: Path) -> Project:
         return Project()
     try:
         with pyproject.open("rb") as file_handler:
-            cfg = load_toml(file_handler)
-        project = table(cfg, "project")
+            config = load_toml(file_handler)
+        project = table(config, "project")
         name, requires_python = project.get("name"), project.get("requires-python")
         return Project(
             pyproject,
             canonicalize_name(name) if isinstance(name, str) else None,
             python_floor(requires_python if isinstance(requires_python, str) else None),
-            uv_project_indexes(pyproject.parent, cfg),
+            uv_project_indexes(pyproject.parent, config),
         )
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"ignoring project metadata from {pyproject}, so its uv settings are not read: {exc!r}\n")
@@ -50,8 +50,8 @@ def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: I
     if pkg_type is PkgType.JS:
         return IndexLookup(settings.npm.registry(package, settings.npm_registry))
     # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
-    python = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
-    return python or IndexLookup(settings.index_url)
+    python_lookup = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
+    return python_lookup or IndexLookup(settings.index_url)
 
 
 def _python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: tuple[str, ...]) -> IndexLookup | None:

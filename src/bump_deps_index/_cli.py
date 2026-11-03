@@ -43,32 +43,36 @@ class Options(Namespace):
 
 
 def parse_cli(args: Sequence[str] | None) -> Options:
-    res = Options()
-    _build_parser().parse_args(args, namespace=res)
-    if res.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
-        found = () if res.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
-        res.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
-    return res
+    options = Options()
+    _build_parser().parse_args(args, namespace=options)
+    if options.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
+        found = () if options.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
+        options.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
+    return options
 
 
 def _build_parser() -> ArgumentParser:
     epilog = f"running {version} at {Path(__file__).parent}"
     parser = ArgumentParser(prog="bump-deps-index", formatter_class=_HelpFormatter, epilog=epilog)
     index_url = python_index_url()
-    msg = f"PyPI index URL to target (default: {redact_url(index_url)})"
-    parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=msg)
-    msg = f"NPM registry (default: {redact_url(registry := npm_registry())})"
-    parser.add_argument("--npm-registry", "-n", dest="npm_registry", metavar="url", default=registry, help=msg)
-    msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
+    index_help = f"PyPI index URL to target (default: {redact_url(index_url)})"
+    parser.add_argument("--index-url", "-i", dest="index_url", metavar="url", default=index_url, help=index_help)
+    registry_help = f"NPM registry (default: {redact_url(registry := npm_registry())})"
+    parser.add_argument(
+        "--npm-registry", "-n", dest="npm_registry", metavar="url", default=registry, help=registry_help
+    )
+    pre_release_help = (
+        "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
+    )
     parser.add_argument(
         "-p",
         "--pre-release",
         type=_pre_release_argument,
         metavar="{yes,no,file-default}",
         default="file-default",
-        help=msg,
+        help=pre_release_help,
     )
-    msg = (
+    cutoff_help = (
         "only use releases uploaded before this cutoff, a timestamp or a duration such as P7D "
         "(default: from pip and uv settings)"
     )
@@ -79,7 +83,7 @@ def _build_parser() -> ArgumentParser:
         metavar="cutoff",
         default=python_exclude_newer(),
         type=_cutoff_argument,
-        help=msg,
+        help=cutoff_help,
     )
     # SUPPRESS keeps the flag out of the defaults, so the mutual exclusion check sees it when it is given
     cutoff_flags.add_argument(

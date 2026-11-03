@@ -36,11 +36,15 @@ if TYPE_CHECKING:
     from bump_deps_index._loaders import Loader
 
 
-def run(opt: Options) -> bool:
-    settings = IndexSettings(opt.index_url, pip_extra_indexes(), opt.npm_registry, npm_settings(), opt.exclude_newer)
-    if opt.pkgs:
-        return _run_packages(opt.pkgs, settings, pre_release=False if opt.pre_release is None else opt.pre_release)
-    return _run_files(opt.filenames, settings, pre_release=opt.pre_release)
+def run(options: Options) -> bool:
+    settings = IndexSettings(
+        options.index_url, pip_extra_indexes(), options.npm_registry, npm_settings(), options.exclude_newer
+    )
+    if options.pkgs:
+        return _run_packages(
+            options.pkgs, settings, pre_release=False if options.pre_release is None else options.pre_release
+        )
+    return _run_files(options.filenames, settings, pre_release=options.pre_release)
 
 
 def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_release: bool) -> bool:

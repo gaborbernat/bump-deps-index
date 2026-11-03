@@ -130,9 +130,9 @@ def test_update_python_accepts_release_without_requires_python(bump: Callable[..
 def test_update_python(
     spec: str, pre_release: bool, versions: list[str], result: str, bump: Callable[..., str]
 ) -> None:
-    index = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
+    page = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
 
-    assert bump(spec, {"https://I.com/a/": httpx.Response(200, text=index)}, pre_release=pre_release) == result
+    assert bump(spec, {"https://I.com/a/": httpx.Response(200, text=page)}, pre_release=pre_release) == result
 
 
 def test_update_python_skips_files_of_other_projects(bump: Callable[..., str]) -> None:
