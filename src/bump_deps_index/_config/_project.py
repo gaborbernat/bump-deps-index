@@ -51,11 +51,11 @@ def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: I
     if pkg_type is PkgType.JS:
         return IndexLookup(settings.npm.registry(package, settings.npm_registry))
     # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
-    python = python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
+    python = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
     return python or IndexLookup(settings.index_url)
 
 
-def python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: tuple[str, ...]) -> IndexLookup | None:
+def _python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: tuple[str, ...]) -> IndexLookup | None:
     package = canonicalize_name(name)
     if uv is None:  # pip installs the file, and merges its extra indexes with the default one
         return IndexLookup(default, extra=pip_extras)
@@ -77,7 +77,7 @@ def entry_indexes(
     # skip the project itself, though a script may depend on it
     if entry.uv is None and canonicalize_name(requirement.name) == project.name:
         return None
-    return python_indexes(
+    return _python_indexes(
         requirement.name,
         own_uv if entry.uv is None else entry.uv,
         entry.index_url or settings.index_url,
