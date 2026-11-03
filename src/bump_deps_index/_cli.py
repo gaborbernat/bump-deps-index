@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
 from datetime import UTC, datetime
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ._config._npm import npm_registry
 from ._config._python import python_exclude_newer, python_index_url
 from ._cutoff import parse_exclude_newer
-from ._loaders._registry import get_loaders
 from ._redact import redact_url
 from .version import version
 
@@ -20,9 +18,6 @@ if TYPE_CHECKING:
 def parse_cli(args: Sequence[str] | None) -> Options:
     options = Options()
     _build_parser().parse_args(args, namespace=options)
-    if options.filenames is None:  # discover after parsing to avoid reading local scripts when you pass packages
-        found = () if options.pkgs else set(chain.from_iterable(loader.files for loader in get_loaders()))
-        options.filenames = sorted(file.relative_to(Path.cwd()) for file in found)
     return options
 
 
@@ -33,9 +28,9 @@ class Options(Namespace):
     """The NPM registry to query for JS versions."""
     pkgs: list[str]
     """Package names to get latest version for."""
-    filenames: list[Path]
+    filenames: list[Path] | None
     """
-    Files to update, each one of:
+    Files to update, None to discover them in the working directory during the run; each one of:
 
     - ``pyproject.toml``
     - ``tox.toml``

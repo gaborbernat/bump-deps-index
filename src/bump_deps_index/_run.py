@@ -42,7 +42,10 @@ def run(options: Options) -> bool:
         return _run_packages(
             options.pkgs, settings, pre_release=False if options.pre_release is None else options.pre_release
         )
-    return _run_files(options.filenames, settings, pre_release=options.pre_release)
+    if (filenames := options.filenames) is None:  # discover only now, so passing packages never reads local scripts
+        found = set(chain.from_iterable(loader.files for loader in get_loaders()))
+        filenames = sorted(file.relative_to(Path.cwd()) for file in found)
+    return _run_files(filenames, settings, pre_release=options.pre_release)
 
 
 def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_release: bool) -> bool:
