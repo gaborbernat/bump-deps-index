@@ -15,18 +15,20 @@ if TYPE_CHECKING:
 
 
 def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
-    if lookup.pkg_type is PkgType.JS:
-        release = npm.release(lookup.indexes.url, lookup.requirement)
-        return bump_js(lookup.requirement, release.versions, release.latest, pre_release=lookup.pre_release)
-    if (requirement := Requirement(lookup.requirement)).url is not None:
-        return lookup.requirement
-    versions = index.versions(
-        lookup.indexes,
-        requirement.name,
-        python_version=lookup.python_floor,
-        pre_release=lookup.pre_release,
-    )
-    return bump_python(lookup.requirement, requirement, versions, pre_release=lookup.pre_release)
+    match lookup.pkg_type:
+        case PkgType.JS:
+            release = npm.release(lookup.indexes.url, lookup.requirement)
+            return bump_js(lookup.requirement, release.versions, release.latest, pre_release=lookup.pre_release)
+        case _:  # PkgType has two members, the other being Python
+            if (requirement := Requirement(lookup.requirement)).url is not None:
+                return lookup.requirement
+            versions = index.versions(
+                lookup.indexes,
+                requirement.name,
+                python_version=lookup.python_floor,
+                pre_release=lookup.pre_release,
+            )
+            return bump_python(lookup.requirement, requirement, versions, pre_release=lookup.pre_release)
 
 
 __all__ = [

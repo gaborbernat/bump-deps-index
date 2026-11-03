@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from bump_deps_index._cache import FetchCache
@@ -16,7 +17,8 @@ if TYPE_CHECKING:
     from bump_deps_index._config import NpmSettings
 
 
-class NpmRelease(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NpmRelease:
     versions: tuple[str, ...]
     """Versions the index accepts: not deprecated, and uploaded before the cutoff when there is one."""
     latest: str | None
@@ -54,13 +56,13 @@ class NpmRegistry:
         times = {} if self.exclude_newer is None else table(response.json(), "time")
         latest = table(response.json(), "dist-tags").get("latest")
         return NpmRelease(
-            tuple(
+            versions=tuple(
                 version
                 for version, meta in json_field(response, "versions", dict).items()
                 if not (isinstance(meta, dict) and meta.get("deprecated"))
                 and accepts_upload(self.exclude_newer, parse_timestamp(times.get(version)))
             ),
-            latest if isinstance(latest, str) else None,
+            latest=latest if isinstance(latest, str) else None,
         )
 
 

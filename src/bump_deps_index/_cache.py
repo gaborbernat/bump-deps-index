@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 _Value = TypeVar("_Value")
 
 
-@dataclass
+@dataclass(slots=True)
 class _Page(Generic[_Value]):
     lock: Lock = field(default_factory=Lock)
     value: _Value | None = None
