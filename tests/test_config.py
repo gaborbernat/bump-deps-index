@@ -297,16 +297,6 @@ def test_parse_cli_reads_exclude_newer_settings(expected: datetime | None) -> No
     assert parse_cli(["a"]).exclude_newer == expected
 
 
-_SOURCES: Final[list[tuple[dict[str, str], dict[str, str]]]] = [
-    ({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}),
-    ({"UV_EXCLUDE_NEWER": _ENV_UV}, {}),
-    ({}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}),
-    ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
-    ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z"}),
-    ({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}),
-]
-
-
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
@@ -318,7 +308,19 @@ _SOURCES: Final[list[tuple[dict[str, str], dict[str, str]]]] = [
 )
 @pytest.mark.parametrize(
     "workspace",
-    [pytest.param(source, id=f"source-{index}") for index, source in enumerate(_SOURCES)],
+    [
+        pytest.param(({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}), id="pip-environment"),
+        pytest.param(({"UV_EXCLUDE_NEWER": _ENV_UV}, {}), id="uv-environment"),
+        pytest.param(({}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}), id="project-uv"),
+        pytest.param(
+            ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
+            id="pyproject-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z"}), id="pip-config"
+        ),
+        pytest.param(({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}), id="user-uv"),
+    ],
     indirect=True,
 )
 @pytest.mark.usefixtures("workspace")

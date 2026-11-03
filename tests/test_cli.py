@@ -126,9 +126,7 @@ def test_cli_exclude_newer_flag_overrides_uv_environment(monkeypatch: pytest.Mon
     )
 
 
-def test_cli_exclude_newer_is_unset_without_flag_or_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("UV_EXCLUDE_NEWER", raising=False)
-
+def test_cli_exclude_newer_is_unset_without_flag_or_environment() -> None:
     assert parse_cli(["foo"]).exclude_newer is None
 
 
@@ -142,21 +140,26 @@ def test_cli_exclude_newer_duration_counts_back_from_now() -> None:
 
 
 @pytest.mark.parametrize(
-    ("args", "env"),
+    "args",
     [
-        pytest.param(["--exclude-newer", "soon", "foo"], None, id="flag"),
-        pytest.param(["--exclude-newer", "P99999999999D", "foo"], None, id="overflow"),
-        pytest.param(["foo"], "soon", id="environment"),
+        pytest.param(["--exclude-newer", "soon", "foo"], id="words"),
+        pytest.param(["--exclude-newer", "P99999999999D", "foo"], id="overflow"),
     ],
 )
-def test_cli_exclude_newer_rejects_invalid_cutoff(
-    args: list[str], env: str | None, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    if env is not None:
-        monkeypatch.setenv("UV_EXCLUDE_NEWER", env)
-
+def test_cli_exclude_newer_flag_rejects_invalid_cutoff(args: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as error:
         parse_cli(args)
+
+    assert (error.value.code, "argument --exclude-newer" in capsys.readouterr().err) == (2, True)
+
+
+def test_cli_exclude_newer_environment_rejects_invalid_cutoff(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("UV_EXCLUDE_NEWER", "soon")
+
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["foo"])
 
     assert (error.value.code, "argument --exclude-newer" in capsys.readouterr().err) == (2, True)
 

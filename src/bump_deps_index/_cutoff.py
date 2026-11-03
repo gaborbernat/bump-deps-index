@@ -2,40 +2,41 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from bump_deps_index._parsed import Parsed
 
-# no calendar units, which have no fixed length; uv rejects them as well
-_ISO_DURATION: Final[re.Pattern[str]] = re.compile(
-    r"""
-    P                             # the duration designator
-    (?:(?P<weeks>\d+)W)?          # weeks
-    (?:(?P<days>\d+)D)?           # days
-    (?:T                          # the time separator, which precedes any hour, minute or second
-        (?:(?P<hours>\d+)H)?      # hours
-        (?:(?P<minutes>\d+)M)?    # minutes
-        (?:(?P<seconds>\d+)S)?    # seconds
-    )?
-    """,
-    re.VERBOSE,
-)
-_FRIENDLY_DURATION: Final[re.Pattern[str]] = re.compile(
-    r"""
-    (?P<count>\d+)                                   # the amount
-    \s*                                              # an optional space before the unit
-    (?P<unit>seconds?|minutes?|hours?|days?|weeks?)  # the unit, singular or plural
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-
 
 def parse_exclude_newer(value: str, now: datetime) -> datetime:
     text = value.strip()
-    if (iso := _ISO_DURATION.fullmatch(text)) and any(iso.groupdict().values()):
+    # no calendar units, which have no fixed length; uv rejects them as well
+    iso = re.fullmatch(
+        r"""
+        P                             # the duration designator
+        (?:(?P<weeks>\d+)W)?          # weeks
+        (?:(?P<days>\d+)D)?           # days
+        (?:T                          # the time separator, which precedes any hour, minute or second
+            (?:(?P<hours>\d+)H)?      # hours
+            (?:(?P<minutes>\d+)M)?    # minutes
+            (?:(?P<seconds>\d+)S)?    # seconds
+        )?
+        """,
+        text,
+        re.VERBOSE,
+    )
+    if iso and any(iso.groupdict().values()):
         return now - timedelta(**{name: int(count) for name, count in iso.groupdict().items() if count})
-    if friendly := _FRIENDLY_DURATION.fullmatch(text):
+    friendly = re.fullmatch(
+        r"""
+        (?P<count>\d+)                                   # the amount
+        \s*                                              # an optional space before the unit
+        (?P<unit>seconds?|minutes?|hours?|days?|weeks?)  # the unit, singular or plural
+        """,
+        text,
+        re.VERBOSE | re.IGNORECASE,
+    )
+    if friendly:
         return now - timedelta(**{f"{friendly['unit'].lower().rstrip('s')}s": int(friendly["count"])})
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         return datetime.fromisoformat(text).astimezone()

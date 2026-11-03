@@ -14,8 +14,6 @@ if TYPE_CHECKING:
     from bump_deps_index._spec import Lookup
 
 _ACCEPT: Final[str] = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
-# the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
-_FULL_DOCUMENT: Final[str] = "application/json"
 _SEMVER: Final[re.Pattern[str]] = re.compile(
     r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
@@ -58,7 +56,8 @@ def _versions(
     response = client.get(
         f"{lookup.indexes.url.rstrip('/')}/{quote(package, safe='@')}",
         headers={
-            "Accept": _ACCEPT if exclude_newer is None else _FULL_DOCUMENT,
+            # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
+            "Accept": _ACCEPT if exclude_newer is None else "application/json",
             **({} if authorization is None else {"Authorization": authorization}),
         },
         follow_redirects=True,

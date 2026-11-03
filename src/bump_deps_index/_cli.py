@@ -73,18 +73,18 @@ def _build_parser() -> ArgumentParser:
         "that serves only the HTML simple API, offers no candidates; a requirement already above the newest candidate "
         "is kept; pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to them too"
     )
-    cutoff = parser.add_mutually_exclusive_group()
-    cutoff.add_argument(
+    cutoff_flags = parser.add_mutually_exclusive_group()
+    cutoff_flags.add_argument(
         "--exclude-newer",
         dest="exclude_newer",
         metavar="cutoff",
         default=python_exclude_newer(),
-        type=_cutoff,
+        type=_cutoff_argument,
         help=msg,
     )
     # SUPPRESS keeps the flag out of the defaults, so the mutual exclusion check sees it when it is given
     msg = "ignore every cutoff, including the one from the environment and config files; overrides --exclude-newer"
-    cutoff.add_argument(
+    cutoff_flags.add_argument(
         "--no-exclude-newer",
         dest="exclude_newer",
         action="store_const",
@@ -109,7 +109,7 @@ def _build_parser() -> ArgumentParser:
     return parser
 
 
-def _cutoff(value: str) -> datetime:
+def _cutoff_argument(value: str) -> datetime:
     try:
         return parse_exclude_newer(value, datetime.now(UTC))
     except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
