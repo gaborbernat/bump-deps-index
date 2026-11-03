@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import urlsplit
 
-from packaging.requirements import Requirement
+from packaging.requirements import InvalidRequirement, Requirement
 
 if TYPE_CHECKING:
     from packaging.version import Version
@@ -34,7 +34,7 @@ class Lookup(NamedTuple):
 def package_type(spec: str) -> PkgType:
     try:
         requirement = Requirement(spec)
-    except ValueError:
+    except InvalidRequirement:
         return PkgType.JS
     return PkgType.PYTHON if requirement.url is None or urlsplit(requirement.url).scheme else PkgType.JS
 
