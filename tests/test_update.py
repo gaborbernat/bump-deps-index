@@ -359,10 +359,7 @@ _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
 def test_update_python_respects_upload_cutoff(
     spec: str, files: list[tuple[str, str | None]], exclude_newer: str | None, result: str, bump: Bump
 ) -> None:
-    entries = [
-        {"filename": name} if uploaded is None else {"filename": name, "upload-time": uploaded}
-        for name, uploaded in files
-    ]
+    entries = [{"filename": name, "upload-time": uploaded} for name, uploaded in files]
     response = httpx.Response(
         200, json={"files": entries}, headers={"content-type": "application/vnd.pypi.simple.v1+json"}
     )

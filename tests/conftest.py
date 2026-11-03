@@ -43,6 +43,12 @@ def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 
 @pytest.fixture
+def work_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+@pytest.fixture
 def index(httpx_mock: HTTPXMock) -> FakeIndex:
     fake = FakeIndex(
         pypi={},

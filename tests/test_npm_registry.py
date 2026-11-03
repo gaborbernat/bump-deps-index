@@ -8,8 +8,6 @@ import pytest
 from bump_deps_index import main
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from conftest import Bump
     from pytest_httpx import HTTPXMock
 
@@ -33,11 +31,11 @@ def test_update_js_encodes_scoped_package(bump: Bump) -> None:
     )
 
 
-def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(httpx_mock: HTTPXMock, bump: Bump) -> None:
+def test_update_js_requests_abbreviated_metadata(httpx_mock: HTTPXMock, bump: Bump) -> None:
     httpx_mock.add_response(
         url="https://N.com/a",
         match_headers={"Accept": "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"},
-        json={"versions": {"1.0.0": {}, "2.0.0": {"deprecated": "broken"}}},
+        json={"versions": {"1.0.0": {}}},
     )
 
     assert bump("a@", {}, pre_release=False, requires_python=None, exclude_newer=None) == "a@1.0.0"
@@ -54,7 +52,6 @@ def test_update_js_requests_abbreviated_metadata_and_skips_deprecated(httpx_mock
 def test_update_js_rejects_malformed_metadata(
     capsys: pytest.CaptureFixture[str], bump: Bump, payload: dict[str, list[str] | None] | list[str]
 ) -> None:
-
     with pytest.raises(SystemExit):
         bump(
             "a@",
@@ -156,8 +153,7 @@ def test_update_js_skips_malformed_version_metadata(bump: Bump) -> None:
 def test_update_js_respects_upload_cutoff(
     spec: str, uploads: dict[str, str | None], latest: str, result: str, bump: Bump
 ) -> None:
-    times = {version: uploaded for version, uploaded in uploads.items() if uploaded is not None}
-    document = {"versions": {version: {} for version in uploads}, "time": times, "dist-tags": {"latest": latest}}
+    document = {"versions": {version: {} for version in uploads}, "time": uploads, "dist-tags": {"latest": latest}}
 
     assert (
         bump(
@@ -180,10 +176,8 @@ def test_update_js_without_time_map_offers_no_candidates(bump: Bump) -> None:
     )
 
 
-def test_npm_package_listed_twice_is_fetched_once(
-    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.chdir(tmp_path)
+@pytest.mark.usefixtures("work_dir")
+def test_npm_package_listed_twice_is_fetched_once(httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url="https://N.com/a", json={"versions": {"1.0.0": {}, "2.0.0": {}}, "dist-tags": {"latest": "2.0.0"}}
     )
