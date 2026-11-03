@@ -21,6 +21,7 @@ from bump_deps_index._config import (
     pip_extra_indexes,
 )
 from bump_deps_index._loaders import get_loaders
+from bump_deps_index._npm_registry import NpmRegistry
 from bump_deps_index._pep440 import python_floor
 from bump_deps_index._pypi import SimpleIndex
 from bump_deps_index._redact import redact_text, redact_url
@@ -123,10 +124,12 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
         ThreadPoolExecutor(max_workers=parallel) as executor,
     ):
         index = SimpleIndex(client, settings.exclude_newer)
+        npm = NpmRegistry(client, settings.exclude_newer, settings.npm)
         futures = {
             executor.submit(
                 update,
                 index,
+                npm,
                 lookup,
                 settings.npm.authorization(lookup.indexes.url) if lookup.pkg_type is PkgType.JS else None,
             ): lookup

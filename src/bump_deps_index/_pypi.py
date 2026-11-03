@@ -16,14 +16,13 @@ from packaging.utils import (
 from packaging.version import Version
 
 from bump_deps_index._cache import FetchCache
+from bump_deps_index._cutoff import accepts_upload
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from httpx import Client
-
-    from bump_deps_index._npm_registry import NpmRelease
 
 _SIMPLE_JSON: Final[str] = "application/vnd.pypi.simple.v1+json"
 _SIMPLE_ACCEPT: Final[str] = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
@@ -43,7 +42,6 @@ class SimpleIndex:
     def __init__(self, client: Client, exclude_newer: datetime | None) -> None:
         self.client = client
         self.exclude_newer = exclude_newer
-        self.npm_releases: FetchCache[NpmRelease] = FetchCache()
         self._pages: FetchCache[list[_IndexFile]] = FetchCache()
 
     def versions(
@@ -52,7 +50,7 @@ class SimpleIndex:
         name = canonicalize_name(package)
         versions: set[Version] = set()
         for file in self._project_files(lookup, name):
-            if not self.accepts_upload(file.uploaded):
+            if not accepts_upload(self.exclude_newer, file.uploaded):
                 continue
             if (
                 python_version is not None
@@ -68,10 +66,6 @@ class SimpleIndex:
             if project == name:  # an index page may list files of other projects, as pip and uv skip them
                 versions.add(version)
         return sorted((version for version in versions if pre_release or not version.is_prerelease), reverse=True)
-
-    def accepts_upload(self, uploaded: datetime | None) -> bool:
-        # uv skips a file without an upload time under a cutoff, so only a dated file before the cutoff counts
-        return self.exclude_newer is None or (uploaded is not None and uploaded < self.exclude_newer)
 
     def _project_files(self, lookup: IndexLookup, name: str) -> list[_IndexFile]:
         # uv takes a package from the first of its indexes that has it; pip merges its index with the extra indexes

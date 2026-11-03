@@ -45,6 +45,12 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
     return parsed if parsed.tzinfo is not None else parsed.astimezone()
 
 
+def accepts_upload(exclude_newer: datetime | None, uploaded: datetime | None) -> bool:
+    # uv skips a file without an upload time under a cutoff, so only a dated upload before the cutoff counts
+    return exclude_newer is None or (uploaded is not None and uploaded < exclude_newer)
+
+
 __all__ = [
+    "accepts_upload",
     "parse_exclude_newer",
 ]

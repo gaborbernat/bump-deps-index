@@ -6,13 +6,13 @@ from urllib.parse import urlsplit
 
 from packaging.requirements import Requirement
 
-from bump_deps_index._npm_registry import npm_release
 from bump_deps_index._pep440 import bump_python
 from bump_deps_index._semver import bump_js
 
 if TYPE_CHECKING:
     from packaging.version import Version
 
+    from bump_deps_index._npm_registry import NpmRegistry
     from bump_deps_index._pypi import IndexLookup, SimpleIndex
 
 
@@ -29,9 +29,9 @@ class Lookup(NamedTuple):
     indexes: IndexLookup
 
 
-def update(index: SimpleIndex, lookup: Lookup, authorization: str | None) -> str:
+def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup, authorization: str | None) -> str:
     if lookup.pkg_type is PkgType.JS:
-        release = npm_release(index, lookup.indexes.url, lookup.requirement, authorization)
+        release = npm.release(lookup.indexes.url, lookup.requirement, authorization)
         return bump_js(lookup.requirement, release.versions, release.latest, pre_release=lookup.pre_release)
     if (requirement := Requirement(lookup.requirement)).url is not None:
         return lookup.requirement
