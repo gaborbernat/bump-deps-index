@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, NamedTuple
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
@@ -81,7 +82,8 @@ class SingleFileLoader(Loader, ABC):
         return filename.name == self.filename
 
 
-class Entry(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Entry:
     spec: str
     pkg_type: PkgType
     requires_python: str | None = None

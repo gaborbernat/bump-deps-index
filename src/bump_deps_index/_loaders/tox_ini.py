@@ -29,7 +29,7 @@ class ToxIni(SingleFileLoader):
             else:
                 continue
             # tox expands `{...}` substitutions and `-r` lines itself; check after removing a factor such as `{py311}:`
-            yield from (Entry(value, PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"})
+            yield from (Entry(spec=value, pkg_type=PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"})
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:

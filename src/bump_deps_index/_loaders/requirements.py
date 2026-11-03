@@ -55,7 +55,12 @@ class Requirements(Loader):
         extra_index_urls = tuple(value for name, value in options if name == "extra")
         for group in self._requirement_lines(lines):
             requirement = " ".join(segment for _, segment in group)
-            yield Entry(requirement, PkgType.PYTHON, index_url=index_url, extra_index_urls=extra_index_urls)
+            yield Entry(
+                spec=requirement,
+                pkg_type=PkgType.PYTHON,
+                index_url=index_url,
+                extra_index_urls=extra_index_urls,
+            )
 
     @staticmethod
     def _index_options(filename: Path, seen: set[Path]) -> Iterator[tuple[str, str]]:

@@ -33,7 +33,7 @@ class PyProjectToml(SingleFileLoader):
             table(cfg, "tool", "uv").get("dev-dependencies"),
             *table(cfg, "dependency-groups").values(),
         ):
-            yield from (Entry(spec, PkgType.PYTHON) for spec in strings(value))
+            yield from (Entry(spec=spec, pkg_type=PkgType.PYTHON) for spec in strings(value))
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:

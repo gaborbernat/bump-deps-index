@@ -26,7 +26,7 @@ class SetupCfg(SingleFileLoader):
             *(cfg["options.extras_require"].values() if cfg.has_section("options.extras_require") else []),
         ]
         for group in groups:
-            yield from (Entry(value, PkgType.PYTHON) for value in ini_values(group))
+            yield from (Entry(spec=value, pkg_type=PkgType.PYTHON) for value in ini_values(group))
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:

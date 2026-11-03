@@ -59,7 +59,7 @@ class PreCommitConfig(SingleFileLoader):
                 if skip:
                     continue
                 for pkg in strings(hook.get("additional_dependencies")):
-                    yield Entry(pkg, package_type(pkg) if language is None else language_types[language])
+                    yield Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:

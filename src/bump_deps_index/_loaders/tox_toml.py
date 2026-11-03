@@ -28,7 +28,7 @@ class ToxToml(SingleFileLoader):
         with filename.open("rb") as file_handler:
             cfg: dict[str, Parsed] = load_toml(file_handler)
         for value in (cfg.get("requires"), *(section.get("deps") for section in self._sections(cfg))):
-            yield from (Entry(spec, PkgType.PYTHON) for spec in self._requirements(value))
+            yield from (Entry(spec=spec, pkg_type=PkgType.PYTHON) for spec in self._requirements(value))
 
     @staticmethod
     def _sections(cfg: dict[str, Parsed]) -> Iterator[dict[str, Parsed]]:

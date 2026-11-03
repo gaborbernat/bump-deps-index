@@ -32,7 +32,7 @@ class PackageJson(SingleFileLoader):
             cfg: Parsed = json.load(file_handler)
         for section in _SECTIONS:
             yield from (
-                Entry(f"{name}@{spec.strip()}", PkgType.JS)
+                Entry(spec=f"{name}@{spec.strip()}", pkg_type=PkgType.JS)
                 for name, spec in table(cfg, section).items()
                 # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
                 # empty range, which npm reads as `*`

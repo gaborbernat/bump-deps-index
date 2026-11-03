@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, replace
 from tomllib import loads as load_toml
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -70,7 +71,7 @@ class _TomlScanner:
         # tox reads a substitution by its `replace` kind, so carry the kind in the path of its values
         kind = next((_decode(self._text, item) for item in members if item.path == (*path, "replace")), None)
         for item in members:
-            yield item if kind is None else item._replace(path=(*path, f"{{{kind}}}", *item.path[len(path) :]))
+            yield item if kind is None else replace(item, path=(*path, f"{{{kind}}}", *item.path[len(path) :]))
 
     def _key(self) -> tuple[str, ...]:
         parts: list[str] = []
@@ -98,7 +99,7 @@ class _TomlScanner:
         if len(quote) > 1:  # a multi-line string may end with up to two quotes before its closing delimiter
             at += next((extra for extra in (2, 1) if self._text.startswith(character * extra, at + 3)), 0)
         self._at = at + len(quote)
-        return _String(start, at, path, quote)
+        return _String(start=start, end=at, path=path, quote=quote)
 
     def _value(self, path: tuple[str, ...]) -> Iterator[_String]:
         self._skip(newlines=False)
@@ -133,7 +134,8 @@ class _TomlScanner:
         yield from self._with_kind(path, members)
 
 
-class _String(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _String:
     start: int
     end: int
     path: tuple[str, ...]

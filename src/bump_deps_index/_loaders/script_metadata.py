@@ -41,7 +41,13 @@ class ScriptMetadata(Loader):
         uv, index_url = script_uv_indexes(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
         for dependency in strings(metadata.get("dependencies")):
-            yield Entry(dependency, PkgType.PYTHON, requires_python=requires_python, uv=uv, index_url=index_url)
+            yield Entry(
+                spec=dependency,
+                pkg_type=PkgType.PYTHON,
+                requires_python=requires_python,
+                uv=uv,
+                index_url=index_url,
+            )
 
     @staticmethod
     def _metadata(content: str) -> dict[str, Parsed]:
