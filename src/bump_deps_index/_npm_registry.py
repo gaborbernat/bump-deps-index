@@ -65,5 +65,4 @@ class NpmRegistry:
 
 __all__ = [
     "NpmRegistry",
-    "NpmRelease",
 ]
