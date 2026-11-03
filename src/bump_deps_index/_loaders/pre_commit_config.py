@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import json
-import ssl
 from typing import TYPE_CHECKING, ClassVar, Final
-from urllib.parse import quote, urlsplit
 
-from httpx import Client, HTTPError
-from truststore import SSLContext
 from typing_extensions import override
-from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode, YAMLError
+from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
+from bump_deps_index._hook_manifest import hook_languages
 from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
 
@@ -47,7 +44,7 @@ class PreCommitConfig(SingleFileLoader):
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
             languages = (
-                _hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
+                hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
                 if any("language" not in hook and hook.get("additional_dependencies") for hook in hooks)
                 else {}
             )
@@ -123,31 +120,6 @@ def _scalar_start(text: str, at: int) -> int:
         else:
             at += 1 if text[at].isspace() else len(text[at:].split(maxsplit=1)[0])
     return at
-
-
-def _hook_languages(repo: str, rev: str | None) -> dict[str, str]:
-    if rev is None or (url := _manifest_url(repo, rev)) is None:
-        return {}
-    try:
-        with Client(verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=10) as client:
-            manifest = load_yaml(client.get(url, follow_redirects=True).raise_for_status().text)
-    except (HTTPError, YAMLError):  # guess from the dependency shape when the manifest is out of reach
-        return {}
-    return {
-        hook["id"]: hook["language"]
-        for hook in (manifest if isinstance(manifest, list) else [])
-        if isinstance(hook, dict) and isinstance(hook.get("id"), str) and isinstance(hook.get("language"), str)
-    }
-
-
-def _manifest_url(repo: str, rev: str) -> str | None:
-    parsed = urlsplit(repo)
-    path = parsed.path.strip("/").removesuffix(".git")
-    if parsed.netloc == "github.com":
-        return f"https://raw.githubusercontent.com/{path}/{quote(rev)}/.pre-commit-hooks.yaml"
-    if parsed.netloc == "gitlab.com":
-        return f"https://gitlab.com/{path}/-/raw/{quote(rev)}/.pre-commit-hooks.yaml"
-    return None
 
 
 __all__ = [
