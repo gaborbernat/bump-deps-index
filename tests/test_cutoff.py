@@ -17,9 +17,7 @@ _NOW: Final[datetime] = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
     ("value", "result"),
     [
         pytest.param("2026-10-27T15:46:26Z", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="zulu"),
-        pytest.param(
-            "2026-10-27T17:46:26+02:00", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="offset"
-        ),
+        pytest.param("2026-10-27T17:46:26+02:00", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="offset"),
         pytest.param(" 2026-10-27T15:46:26Z ", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="surrounding-space"),
         pytest.param("2026-10-27", datetime(2026, 10, 27).astimezone(), id="local-date"),
         pytest.param("P7D", _NOW - timedelta(days=7), id="iso-days"),
