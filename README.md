@@ -5,6 +5,8 @@
 [![check](https://github.com/gaborbernat/bump-deps-index/actions/workflows/check.yaml/badge.svg)](https://github.com/gaborbernat/bump-deps-index/actions/workflows/check.yaml)
 [![Documentation Status](https://readthedocs.org/projects/bump-deps-index/badge/?version=latest)](https://bump-deps-index.readthedocs.io/en/latest/?badge=latest)
 [![Downloads](https://static.pepy.tech/badge/bump-deps-index/month)](https://pepy.tech/project/bump-deps-index)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/gaborbernat/bump-deps-index/badge)](https://scorecard.dev/viewer/?uri=github.com/gaborbernat/bump-deps-index)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16276/badge)](https://www.bestpractices.dev/projects/16276)
 
 Update pinned Python and JavaScript dependencies against their package indexes while preserving each file's layout.
 
