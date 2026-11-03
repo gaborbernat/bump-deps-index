@@ -64,14 +64,8 @@ def _build_parser() -> ArgumentParser:
     msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     msg = (
-        "only use releases uploaded before this cutoff: an RFC 3339 timestamp such as 2026-10-27T15:46:26Z, a local "
-        "date, a datetime without an offset (read as local time), or a duration before now such as P7D, PT24H, "
-        "7 days or 1 week; the default is the first set of PIP_UPLOADED_PRIOR_TO, UV_EXCLUDE_NEWER, exclude-newer in "
-        "the nearest uv.toml or [tool.uv] table, uploaded-prior-to in your pip configuration, and exclude-newer in "
-        "your user uv.toml, and exclude-newer = false in a uv file disables the cutoff without consulting the later "
-        "sources; like uv, a file without an upload time is excluded, so an index without upload times, such as one "
-        "that serves only the HTML simple API, offers no candidates; a requirement already above the newest candidate "
-        "is kept; pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to them too"
+        "only use releases uploaded before this cutoff, a timestamp or a duration such as P7D "
+        "(default: from pip and uv settings)"
     )
     cutoff_flags = parser.add_mutually_exclusive_group()
     cutoff_flags.add_argument(

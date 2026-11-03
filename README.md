@@ -86,7 +86,7 @@ The cutoff is an RFC 3339 timestamp, a local date, a datetime without an offset 
 counted back from now, such as `P7D` or `7 days`. As uv does, you skip a file without an upload time. You read upload
 times from the PEP 700 fields of the JSON simple API and from the `time` map of the npm registry, so an index that
 serves only HTML offers no candidates under a cutoff. A requirement already above the newest eligible release keeps its
-floor.
+floor. Pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to their dependencies too.
 
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates
 for hooks in other languages. For a remote hook without a `language`, you get the language from the
