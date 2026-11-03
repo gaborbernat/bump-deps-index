@@ -28,8 +28,6 @@ if TYPE_CHECKING:
 
 
 class SimpleIndex:
-    """Reads PyPI simple index pages, fetching each page once across threads."""
-
     def __init__(self, client: Client, exclude_newer: datetime | None) -> None:
         self.client = client
         self.exclude_newer = exclude_newer
@@ -98,8 +96,8 @@ class SimpleIndex:
 class _IndexFile(NamedTuple):
     filename: str
     requires_python: str | None
+    # PEP 700 upload time; the HTML simple API has none
     uploaded: datetime | None = None
-    """PEP 700 upload time; the HTML simple API has none."""
 
 
 class _IndexParser(HTMLParser):

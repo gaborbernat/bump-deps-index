@@ -49,8 +49,8 @@ class _Semver(NamedTuple):
     major: int
     minor: int
     patch: int
+    # a release sorts above its pre-releases
     release: bool
-    """A release sorts above its pre-releases."""
     pre: tuple[tuple[int, int, str], ...]
 
 

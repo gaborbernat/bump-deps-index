@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
 
 class Options(Namespace):
-    """Run options."""
-
     index_url: str
     """The PyPI Index URL to query for Python versions."""
     npm_registry: str

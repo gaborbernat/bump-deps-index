@@ -77,10 +77,10 @@ def _extra_indexes(uv: dict[str, Parsed]) -> list[str]:
 
 
 class UvIndexes(NamedTuple):
+    # the index each source pins a package to, or None for a package from git, a path or a URL
     sources: dict[str, str | None]
-    """The index each source pins a package to, or None for a package from git, a path or a URL."""
+    # the indexes uv checks before its default one; it takes a package from the first that has it
     first: tuple[str, ...]
-    """The indexes uv checks before its default one; it takes a package from the first that has it."""
 
 
 def script_uv_indexes(metadata: dict[str, Parsed]) -> tuple[UvIndexes, str | None]:

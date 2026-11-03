@@ -17,10 +17,10 @@ class PkgType(StrEnum):
 
 class IndexLookup(NamedTuple):
     url: str
+    # uv indexes checked before `url`; uv takes a package from the first one that has it
     first: tuple[str, ...] = ()
-    """uv indexes checked before `url`; uv takes a package from the first one that has it."""
+    # pip extra indexes, whose releases pip merges with those of `url`
     extra: tuple[str, ...] = ()
-    """pip extra indexes, whose releases pip merges with those of `url`."""
 
 
 class Lookup(NamedTuple):

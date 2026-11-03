@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
-# userinfo may hold quotes, so stop at the characters that end it
-
 
 def redact_url(url: str) -> str:
     parsed = urlsplit(url)
@@ -12,6 +10,7 @@ def redact_url(url: str) -> str:
 
 
 def redact_text(text: str) -> str:
+    # userinfo may hold quotes, so stop at the characters that end it
     return re.sub(r"(?<=://)[^/\s@]+@", "", text)
 
 

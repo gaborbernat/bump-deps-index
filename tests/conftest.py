@@ -101,7 +101,6 @@ class FakeIndex:
 def bump(
     capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> Callable[..., str]:
-    # look a spec up on the command line, from a folder whose project sets only `requires-python`
     monkeypatch.chdir(tmp_path)
 
     def run_main(

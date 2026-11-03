@@ -20,9 +20,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NpmRelease:
     versions: tuple[str, ...]
-    """Versions the index accepts: not deprecated, and uploaded before the cutoff when there is one."""
     latest: str | None
-    """The `latest` dist-tag."""
 
 
 class NpmRegistry:

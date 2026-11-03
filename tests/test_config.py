@@ -533,7 +533,6 @@ def test_main_applies_uv_sources_where_uv_reads_them(
 
 
 def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
-    # serve one HTML page of file names per project URL, and not found for the rest
     def serve(request: httpx.Request) -> httpx.Response:
         url = request.url.copy_with(username=None, password=None)
         return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)

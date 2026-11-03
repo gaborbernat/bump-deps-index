@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 
 
 def run(opt: Options) -> bool:
-    """Update dependencies selected by the CLI options."""
     settings = IndexSettings(opt.index_url, pip_extra_indexes(), opt.npm_registry, npm_settings(), opt.exclude_newer)
     if opt.pkgs:
         return _run_packages(opt.pkgs, settings, pre_release=False if opt.pre_release is None else opt.pre_release)

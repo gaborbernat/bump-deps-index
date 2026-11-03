@@ -38,7 +38,7 @@ def pip_setting(name: str) -> str:
 class _PipConfigParser(ConfigParser):
     @override
     def optionxform(self, optionstr: str) -> str:
-        """Read `index_url` as `index-url`, as pip does, so the later of the two spellings wins."""
+        # pip reads `index_url` as `index-url`, so the later of the two spellings wins
         return optionstr.lower().replace("_", "-")
 
 
