@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import httpx
 import pytest
@@ -31,12 +31,16 @@ def bump(
         *,
         pre_release: bool = False,
         requires_python: str | None = None,
+        exclude_newer: str | None = None,
     ) -> str:
         for url, response in pages.items():
             httpx_mock.add_callback(lambda _, served=response: served, url=url, is_optional=True)
         if requires_python is not None:
             (tmp_path / "pyproject.toml").write_text(f'[project]\nrequires-python = "{requires_python}"\n', "utf-8")
-        main(["-i", "https://I.com", "-n", "https://N.com", "-p", "yes" if pre_release else "no", spec])
+        args = ["-i", "https://I.com", "-n", "https://N.com", "-p", "yes" if pre_release else "no"]
+        if exclude_newer is not None:
+            args += ["--exclude-newer", exclude_newer]
+        main([*args, spec])
         return capsys.readouterr().out.splitlines()[-1].rpartition(" -> ")[2]
 
     return run_main
@@ -374,3 +378,115 @@ def test_update_python_reports_index_errors(
         bump("A", {"https://I.com/a/": httpx.Response(404), "https://E.com/a/": httpx.Response(extra_status)})
 
     assert capsys.readouterr().err.startswith(f'failed A with HTTPStatusError("{raised}')
+
+
+_CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
+_OLD: Final[str] = "2026-10-20T10:00:00.000000Z"
+_OLDER: Final[str] = "2026-10-30T10:00:00Z"
+_NEW: Final[str] = "2026-11-02T09:00:00Z"
+
+
+def _simple_json(*files: tuple[str, str | None]) -> httpx.Response:
+    entries = [
+        {"filename": name} if uploaded is None else {"filename": name, "upload-time": uploaded}
+        for name, uploaded in files
+    ]
+    return httpx.Response(200, json={"files": entries}, headers={"content-type": "application/vnd.pypi.simple.v1+json"})
+
+
+@pytest.mark.parametrize(
+    ("spec", "files", "exclude_newer", "result"),
+    [
+        pytest.param("A", [("A-1.0.tar.gz", _OLD), ("A-2.0.tar.gz", _NEW)], None, "A>=2", id="no-cutoff-takes-newest"),
+        pytest.param(
+            "A", [("A-1.0.tar.gz", _OLD), ("A-2.0.tar.gz", _NEW)], _CUTOFF, "A>=1", id="too-new-release-skipped"
+        ),
+        pytest.param(
+            "A",
+            [("A-1.0.tar.gz", _OLD), ("A-2.0-py3-none-any.whl", _NEW), ("A-2.0.tar.gz", _OLDER)],
+            _CUTOFF,
+            "A>=2",
+            id="earliest-file-dates-the-version",
+        ),
+        pytest.param("A", [("A-2.0.tar.gz", _NEW)], _CUTOFF, "A", id="only-too-new-release"),
+        pytest.param(
+            "A", [("A-1.0.tar.gz", _OLD), ("A-2.0.tar.gz", None)], _CUTOFF, "A>=1", id="missing-upload-time-skipped"
+        ),
+        pytest.param(
+            "A",
+            [("A-1.0.tar.gz", _OLD), ("A-2.0.tar.gz", "2026-11-02")],
+            _CUTOFF,
+            "A>=1",
+            id="offset-less-upload-time-skipped",
+        ),
+        pytest.param("A", [("A-2.0.tar.gz", None)], _CUTOFF, "A", id="no-upload-times"),
+        pytest.param("A>=2.0", [("A-2.5.tar.gz", _OLD), ("A-3.0.tar.gz", _NEW)], _CUTOFF, "A>=2.5", id="floor-moves"),
+        pytest.param(
+            "A>=2.5",
+            [("A-2.4.tar.gz", _OLD), ("A-3.0.tar.gz", _NEW)],
+            _CUTOFF,
+            "A>=2.5",
+            id="floor-above-eligible-kept",
+        ),
+        pytest.param(
+            "A>=2.5", [("A-2.5.tar.gz", _OLD), ("A-3.0.tar.gz", _NEW)], _CUTOFF, "A>=2.5", id="floor-at-eligible-kept"
+        ),
+        pytest.param(
+            "A==2.5", [("A-2.4.tar.gz", _OLD), ("A-2.6.tar.gz", _NEW)], _CUTOFF, "A==2.5", id="pin-above-eligible-kept"
+        ),
+    ],
+)
+def test_update_python_respects_upload_cutoff(
+    spec: str, files: list[tuple[str, str | None]], exclude_newer: str | None, result: str, bump: Callable[..., str]
+) -> None:
+    assert bump(spec, {"https://I.com/a/": _simple_json(*files)}, exclude_newer=exclude_newer) == result
+
+
+@pytest.mark.parametrize(
+    ("exclude_newer", "result"),
+    [
+        pytest.param(None, "A>=2", id="no-cutoff"),
+        pytest.param(_CUTOFF, "A>=1", id="cutoff-has-no-upload-times"),
+    ],
+)
+def test_update_python_html_index_has_no_upload_times(
+    exclude_newer: str | None, result: str, bump: Callable[..., str]
+) -> None:
+    html = "<a>A-1.tar.gz</a><a>A-2.tar.gz</a>"
+
+    assert bump("A>=1", {"https://I.com/a/": httpx.Response(200, text=html)}, exclude_newer=exclude_newer) == result
+
+
+def _npm_document(uploads: dict[str, str | None], latest: str) -> httpx.Response:
+    times = {version: uploaded for version, uploaded in uploads.items() if uploaded is not None}
+    return httpx.Response(
+        200,
+        json={"versions": {version: {} for version in uploads}, "time": times, "dist-tags": {"latest": latest}},
+    )
+
+
+@pytest.mark.parametrize(
+    ("spec", "uploads", "latest", "result"),
+    [
+        pytest.param("a@", {"1.0.0": _OLD, "2.0.0": _NEW}, "2.0.0", "a@1.0.0", id="latest-too-new"),
+        pytest.param(
+            "a@^2.0.0", {"2.0.0": _OLD, "2.5.0": _OLD, "2.9.0": _NEW}, "2.9.0", "a@^2.5.0", id="range-skips-too-new"
+        ),
+        pytest.param("a@^1.0.0", {"1.0.0": _OLD, "1.2.0": _OLD, "2.0.0": _NEW}, "2.0.0", "a@^1.2.0", id="caret"),
+        pytest.param("a@1.0.0", {"1.0.0": _OLD, "1.1.0": None}, "1.1.0", "a@1.0.0", id="missing-upload-time-skipped"),
+        pytest.param("a@", {"1.0.0": _OLD, "2.0.0": None}, "2.0.0", "a@1.0.0", id="version-without-upload-time"),
+        pytest.param("a@>=2.5.0", {"2.4.0": _OLD, "3.0.0": _NEW}, "3.0.0", "a@>=2.5.0", id="floor-above-eligible-kept"),
+        pytest.param("a@^2.5.0", {"2.4.0": _OLD, "3.0.0": _NEW}, "3.0.0", "a@^2.5.0", id="caret-above-eligible-kept"),
+        pytest.param("a@2.5.0", {"2.4.0": _OLD, "2.6.0": _NEW}, "2.6.0", "a@2.5.0", id="pin-above-eligible-kept"),
+    ],
+)
+def test_update_js_respects_upload_cutoff(
+    spec: str, uploads: dict[str, str | None], latest: str, result: str, bump: Callable[..., str]
+) -> None:
+    assert bump(spec, {"https://N.com/a": _npm_document(uploads, latest)}, exclude_newer=_CUTOFF) == result
+
+
+def test_update_js_without_time_map_offers_no_candidates(bump: Callable[..., str]) -> None:
+    response = httpx.Response(200, json={"versions": {"1.0.0": {}}, "dist-tags": {"latest": "1.0.0"}})
+
+    assert bump("a@", {"https://N.com/a": response}, exclude_newer=_CUTOFF) == "a@"

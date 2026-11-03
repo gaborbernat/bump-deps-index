@@ -17,9 +17,12 @@ from packaging.utils import (
 )
 from packaging.version import Version
 
+from bump_deps_index._cutoff import parse_timestamp
 from bump_deps_index._parsed import json_field, mappings
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from httpx import Client
 
 _SIMPLE_JSON: Final[str] = "application/vnd.pypi.simple.v1+json"
@@ -43,11 +46,20 @@ class SimpleIndex:
         self._lock = Lock()
 
     def versions(
-        self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
+        self,
+        lookup: IndexLookup,
+        package: str,
+        *,
+        python_version: Version | None,
+        pre_release: bool,
+        exclude_newer: datetime | None,
     ) -> list[Version]:
         name = canonicalize_name(package)
         versions: set[Version] = set()
         for file in self._project_files(lookup, name):
+            # a file without an upload time is not a candidate under a cutoff, as uv treats it
+            if exclude_newer is not None and (file.uploaded is None or file.uploaded >= exclude_newer):
+                continue
             if (
                 python_version is not None
                 and file.requires_python is not None
@@ -93,7 +105,11 @@ class SimpleIndex:
         if response.headers.get("content-type", "").startswith(_SIMPLE_JSON):
             # skip malformed entries the way the HTML parser skips malformed links
             return [
-                _IndexFile(filename, requires if isinstance(requires := file.get("requires-python"), str) else None)
+                _IndexFile(
+                    filename,
+                    requires if isinstance(requires := file.get("requires-python"), str) else None,
+                    parse_timestamp(file.get("upload-time")),
+                )
                 for file in mappings(json_field(response, "files", list))
                 if isinstance(filename := file.get("filename"), str) and not file.get("yanked")
             ]
@@ -111,6 +127,8 @@ class _Page:
 class _IndexFile(NamedTuple):
     filename: str
     requires_python: str | None
+    uploaded: datetime | None = None
+    """PEP 700 upload time; the HTML simple API has none."""
 
 
 class _IndexParser(HTMLParser):

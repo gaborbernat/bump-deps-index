@@ -25,6 +25,7 @@ from bump_deps_index._spec import Lookup, PkgType, package_type, update
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
     from packaging.version import Version
 
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 def run(opt: Options) -> bool:
     """Update dependencies selected by the CLI options."""
     pre_release = {"yes": True, "no": False, "file-default": None}[opt.pre_release]
-    settings = _IndexSettings(opt.index_url, pip_extra_indexes(), opt.npm_registry, npm_settings())
+    settings = _IndexSettings(opt.index_url, pip_extra_indexes(), opt.npm_registry, npm_settings(), opt.exclude_newer)
     if opt.pkgs:
         return _run_packages(opt.pkgs, settings, pre_release=False if pre_release is None else pre_release)
     return _run_files(opt.filenames, settings, pre_release=pre_release)
@@ -47,6 +48,7 @@ class _IndexSettings(NamedTuple):
     pip_extras: tuple[str, ...]
     npm_registry: str
     npm: NpmSettings
+    exclude_newer: datetime | None
 
 
 def _run_packages(packages: Sequence[str], settings: _IndexSettings, *, pre_release: bool) -> bool:
@@ -63,7 +65,7 @@ def _named_lookup(raw: str, project: _Project, settings: _IndexSettings, *, pre_
     else:  # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
         python = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
         indexes = python or IndexLookup(settings.index_url)
-    return Lookup(package, pkg_type, pre_release, project.python_floor, indexes)
+    return Lookup(package, pkg_type, pre_release, project.python_floor, indexes, settings.exclude_newer)
 
 
 def _run_files(filenames: Sequence[Path], settings: _IndexSettings, *, pre_release: bool | None) -> bool:
@@ -112,7 +114,7 @@ def _load_lookups(
     for entry in entries:
         if (name := entry.spec.strip()) and (indexes := _entry_indexes(name, entry, project, own_uv, settings)):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
-            lookups[Lookup(name, entry.pkg_type, pre_release, floor, indexes)] = None
+            lookups[Lookup(name, entry.pkg_type, pre_release, floor, indexes, settings.exclude_newer)] = None
     return list(lookups)
 
 

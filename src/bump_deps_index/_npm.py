@@ -4,14 +4,20 @@ import re
 from typing import TYPE_CHECKING, Final, NamedTuple
 from urllib.parse import quote
 
+from bump_deps_index._cutoff import parse_timestamp
 from bump_deps_index._parsed import json_field, table
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from httpx import Client
 
     from bump_deps_index._parsed import Parsed
+    from bump_deps_index._spec import Lookup
 
 _ACCEPT: Final[str] = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
+# the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
+_FULL_DOCUMENT: Final[str] = "application/json"
 _SEMVER: Final[re.Pattern[str]] = re.compile(
     r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
@@ -20,10 +26,11 @@ _SEMVER: Final[re.Pattern[str]] = re.compile(
 _PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
 
 
-def update_js(client: Client, spec: str, registry: str, authorization: str | None, *, pre_release: bool) -> str:
+def update_js(client: Client, lookup: Lookup, authorization: str | None) -> str:
+    spec = lookup.requirement
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     package, wanted = (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
-    versions, latest = _versions(client, package, registry, authorization, pre_release=pre_release)
+    versions, latest = _versions(client, package, lookup, authorization)
     if not wanted or _PIN.fullmatch(wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
         candidates = [version for key, version in versions if pinned is None or key >= pinned]
@@ -47,24 +54,36 @@ def update_js(client: Client, spec: str, registry: str, authorization: str | Non
 
 
 def _versions(
-    client: Client, package: str, registry: str, authorization: str | None, *, pre_release: bool
+    client: Client, package: str, lookup: Lookup, authorization: str | None
 ) -> tuple[list[tuple[_Semver, str]], Parsed]:
+    exclude_newer = lookup.exclude_newer
     response = client.get(
-        f"{registry.rstrip('/')}/{quote(package, safe='@')}",
-        headers={"Accept": _ACCEPT, **({} if authorization is None else {"Authorization": authorization})},
+        f"{lookup.indexes.url.rstrip('/')}/{quote(package, safe='@')}",
+        headers={
+            "Accept": _ACCEPT if exclude_newer is None else _FULL_DOCUMENT,
+            **({} if authorization is None else {"Authorization": authorization}),
+        },
         follow_redirects=True,
     )
     response.raise_for_status()
+    times = {} if exclude_newer is None else table(response.json(), "time")
     return sorted(
         (
             (key, version)
             for version, meta in json_field(response, "versions", dict).items()
             if (key := _semver(version)) is not None
-            and (pre_release or key.release)
+            and (lookup.pre_release or key.release)
             and not (isinstance(meta, dict) and meta.get("deprecated"))
+            and (exclude_newer is None or _uploaded_before(times, version, exclude_newer))
         ),
         reverse=True,
     ), table(response.json(), "dist-tags").get("latest")
+
+
+def _uploaded_before(times: dict[str, Parsed], version: str, cutoff: datetime) -> bool:
+    # a version without an upload time is not a candidate under a cutoff, as uv treats it
+    uploaded = parse_timestamp(times.get(version))
+    return uploaded is not None and uploaded < cutoff
 
 
 class _Semver(NamedTuple):

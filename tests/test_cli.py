@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from itertools import chain, combinations
 from typing import TYPE_CHECKING, Final
 
 import pytest
 
 from bump_deps_index import main
+from bump_deps_index._cli import parse_cli
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -108,3 +110,52 @@ def test_cli_redacts_credentials_in_help(capsys: pytest.CaptureFixture[str], mon
 
     output = capsys.readouterr().out
     assert (error.value.code, "secret" in output, "https://index.example/simple" in output) == (0, False, True)
+
+
+def test_cli_exclude_newer_defaults_to_uv_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("UV_EXCLUDE_NEWER", "2026-10-27T15:46:26Z")
+
+    assert parse_cli(["foo"]).exclude_newer == datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC)
+
+
+def test_cli_exclude_newer_flag_overrides_uv_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("UV_EXCLUDE_NEWER", "2026-10-27T15:46:26Z")
+
+    assert parse_cli(["--exclude-newer", "2026-10-01T00:00:00Z", "foo"]).exclude_newer == datetime(
+        2026, 10, 1, tzinfo=UTC
+    )
+
+
+def test_cli_exclude_newer_is_unset_without_flag_or_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("UV_EXCLUDE_NEWER", raising=False)
+
+    assert parse_cli(["foo"]).exclude_newer is None
+
+
+def test_cli_exclude_newer_duration_counts_back_from_now() -> None:
+    before = datetime.now(UTC)
+    cutoff = parse_cli(["--exclude-newer", "P7D", "foo"]).exclude_newer
+    after = datetime.now(UTC)
+
+    assert cutoff is not None
+    assert before - timedelta(days=7) <= cutoff <= after - timedelta(days=7)
+
+
+@pytest.mark.parametrize(
+    ("args", "env"),
+    [
+        pytest.param(["--exclude-newer", "soon", "foo"], None, id="flag"),
+        pytest.param(["--exclude-newer", "P99999999999D", "foo"], None, id="overflow"),
+        pytest.param(["foo"], "soon", id="environment"),
+    ],
+)
+def test_cli_exclude_newer_rejects_invalid_cutoff(
+    args: list[str], env: str | None, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if env is not None:
+        monkeypatch.setenv("UV_EXCLUDE_NEWER", env)
+
+    with pytest.raises(SystemExit) as error:
+        parse_cli(args)
+
+    assert (error.value.code, "argument --exclude-newer" in capsys.readouterr().err) == (2, True)

@@ -31,6 +31,7 @@ def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
         "PIP_EXTRA_INDEX_URL",
         "PIP_INDEX_URL",
         "UV_DEFAULT_INDEX",
+        "UV_EXCLUDE_NEWER",
         "UV_EXTRA_INDEX_URL",
         "UV_INDEX",
         "UV_INDEX_URL",
@@ -70,6 +71,7 @@ class FakeIndex:
                 pkgs=list(pkgs),
                 filenames=list(filenames),
                 pre_release=pre_release,
+                exclude_newer=None,
             )
         )
 
