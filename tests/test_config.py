@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
 
@@ -388,7 +387,6 @@ def test_main_sends_npm_credentials_and_routes_scopes(
 def test_main_looks_up_uv_sources_on_their_index(
     capsys: pytest.CaptureFixture[str],
     httpx_mock: HTTPXMock,
-    index: FakeIndex,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -419,7 +417,9 @@ def test_main_looks_up_uv_sources_on_their_index(
         ).lstrip(),
         encoding="utf-8",
     )
-    index.pypi.update(internal=["1"], pinned=["1"], public=["1"])
+    httpx_mock.add_response(url="https://user:p%40ss@corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://plain.example/simple/pinned/", text="<a>pinned-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://user:p%40ss@corp.example/simple/public/", text="<a>public-1.tar.gz</a>")
 
     main(["-f", "pyproject.toml"])
 
@@ -442,7 +442,7 @@ def test_main_looks_up_uv_sources_on_their_index(
 
 
 def test_main_reads_uv_sources_from_the_workspace_root(
-    index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(
         dedent(
@@ -472,7 +472,8 @@ def test_main_reads_uv_sources_from_the_workspace_root(
         encoding="utf-8",
     )
     monkeypatch.chdir(member)
-    index.pypi.update(internal=["1"], public=["1"])
+    httpx_mock.add_response(url="https://corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://corp.example/simple/public/", text="<a>public-1.tar.gz</a>")
 
     main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml"])
 
@@ -488,7 +489,7 @@ def test_main_reads_uv_sources_from_the_workspace_root(
 
 
 def test_main_applies_uv_sources_where_uv_reads_them(
-    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
@@ -519,7 +520,10 @@ def test_main_applies_uv_sources_where_uv_reads_them(
         ).lstrip(),
         encoding="utf-8",
     )
-    index.pypi.update(torch=["2"], myproj=["2"])
+    httpx_mock.add_response(url="https://script.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://script.example/simple/myproj/", text="<a>myproj-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://corp.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
 
     main(["-i", "https://pypi.example/simple", "-f", "requirements.txt", "script.py"])
     main(["-i", "https://pypi.example/simple", "torch"])

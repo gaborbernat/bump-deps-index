@@ -5,19 +5,20 @@ from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
+from conftest import index_args
 
 from bump_deps_index import main
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _Case:
     script: str
-    pypi: dict[str, list[str]]
+    pages: dict[str, str]
     updates: set[str]
     expected: str
 
@@ -41,7 +42,10 @@ class _Case:
 
             print("Hello")
             """,
-                pypi={"rich": ["13.9.5"], "orjson": ["3.10.14"]},
+                pages={
+                    "https://pypi.example/simple/rich/": "<a>rich-13.9.5.tar.gz</a>",
+                    "https://pypi.example/simple/orjson/": "<a>orjson-3.10.14.tar.gz</a>",
+                },
                 updates={"rich>=13.9.4 -> rich>=13.9.5", "orjson>=3.10.13 -> orjson>=3.10.14"},
                 expected="""
             #!/usr/bin/env python3
@@ -70,7 +74,7 @@ class _Case:
             # ]
             # ///
             """,
-                pypi={"requests": ["2.30"]},
+                pages={"https://pypi.example/simple/requests/": "<a>requests-2.30.tar.gz</a>"},
                 updates={"requests>=2.28 -> requests>=2.30"},
                 expected="""
             # /// script
@@ -92,7 +96,7 @@ class _Case:
             # ]
             # ///
             """,
-                pypi={"requests": ["2.30.1"]},
+                pages={"https://pypi.example/simple/requests/": "<a>requests-2.30.1.tar.gz</a>"},
                 updates={"requests[security]>=2.28.0 -> requests[security]>=2.30.1"},
                 expected="""
             # /// script
@@ -111,7 +115,10 @@ class _Case:
             # dependencies = ["rich>=13.9.4", "orjson"]
             # ///
             """,
-                pypi={"rich": ["13.9.5"], "orjson": ["3.10.14"]},
+                pages={
+                    "https://pypi.example/simple/rich/": "<a>rich-13.9.5.tar.gz</a>",
+                    "https://pypi.example/simple/orjson/": "<a>orjson-3.10.14.tar.gz</a>",
+                },
                 updates={"rich>=13.9.4 -> rich>=13.9.5", "orjson -> orjson>=3.10.14"},
                 expected="""
             # /// script
@@ -132,7 +139,7 @@ class _Case:
             # ]
             # ///
             """,
-                pypi={"requests": ["2.30"]},
+                pages={"https://pypi.example/simple/requests/": "<a>requests-2.30.tar.gz</a>"},
                 updates={"requests>=2.28 -> requests>=2.30"},
                 expected="""
             # /// script
@@ -149,13 +156,14 @@ class _Case:
     ],
 )
 def test_script_metadata_updates_dependencies(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, case: _Case
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: _Case
 ) -> None:
-    index.pypi.update(case.pypi)
+    for url, page in case.pages.items():
+        httpx_mock.add_response(url=url, text=page)
     dest = tmp_path / "script.py"
     dest.write_text(dedent(case.script).lstrip())
 
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", *case.updates})
@@ -176,22 +184,23 @@ def test_script_metadata_updates_dependencies(
     ],
 )
 def test_script_metadata_without_dependencies_does_nothing(
-    capsys: pytest.CaptureFixture[str], tmp_path: Path, index: FakeIndex, script: str
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, script: str
 ) -> None:
     dest = tmp_path / "script.py"
     dest.write_text(script)
 
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     assert (capsys.readouterr(), dest.read_text()) == (("", ""), script)
 
 
 def test_script_metadata_only_replaces_in_block(
     capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
+    httpx_mock: HTTPXMock,
     tmp_path: Path,
 ) -> None:
-    index.pypi.update({"httpx": ["0.28.1"], "rich": ["14.2"]})
+    httpx_mock.add_response(url="https://pypi.example/simple/httpx/", text="<a>httpx-0.28.1.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/rich/", text="<a>rich-14.2.tar.gz</a>")
     dest = tmp_path / "script.py"
     script = """
     #!/usr/bin/env python3
@@ -214,7 +223,7 @@ def test_script_metadata_only_replaces_in_block(
     print("Hello")
     """
     dest.write_text(dedent(script).lstrip())
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == (
@@ -249,10 +258,12 @@ def test_script_metadata_only_replaces_in_block(
     assert dest.read_text() == dedent(expected).lstrip()
 
 
-def test_script_metadata_uses_own_requires_python(index: FakeIndex, tmp_path: Path) -> None:
+def test_script_metadata_uses_own_requires_python(httpx_mock: HTTPXMock, tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\nrequires-python = ">=3.12"\n')
-    index.pypi["foo"] = ["1", "2"]
-    index.requires_python["foo-2.tar.gz"] = ">=3.10"
+    httpx_mock.add_response(
+        url="https://pypi.example/simple/foo/",
+        text='<a>foo-1.tar.gz</a><a data-requires-python="&gt;=3.10">foo-2.tar.gz</a>',
+    )
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -262,14 +273,12 @@ def test_script_metadata_uses_own_requires_python(index: FakeIndex, tmp_path: Pa
     """
     dest.write_text(dedent(script).lstrip())
 
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     assert dest.read_text() == dedent(script).lstrip().replace('["foo"]', '["foo>=1"]')
 
 
-def test_script_metadata_reports_invalid_requires_python(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
-) -> None:
+def test_script_metadata_reports_invalid_requires_python(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     dest = tmp_path / "script.py"
     script = """
     # /// script
@@ -279,7 +288,8 @@ def test_script_metadata_reports_invalid_requires_python(
     """
     dest.write_text(dedent(script).lstrip())
 
-    assert not index.run(dest)
+    with pytest.raises(SystemExit, match=r"^1$"):
+        main(index_args("-f", str(dest)))
 
     assert (
         capsys.readouterr().err
@@ -288,17 +298,17 @@ def test_script_metadata_reports_invalid_requires_python(
 
 
 def test_script_metadata_discovery_skips_unreadable_and_plain_files(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    index.pypi["requests"] = ["2"]
+    httpx_mock.add_response(url="https://pypi.example/simple/requests/", text="<a>requests-2.tar.gz</a>")
     script = tmp_path / "valid.py"
     script.write_text('# /// script\n# dependencies = ["requests"]\n# ///\n')
     (tmp_path / "regular.py").write_text("import sys\n")
     (tmp_path / "broken.py").symlink_to(tmp_path / "nonexistent.py")
     (tmp_path / "invalid.py").write_bytes(b"# /// script\n\xff\xfe")
 
-    main(["-i", index.index_url])
+    main(["-i", "https://pypi.example/simple"])
 
     assert (capsys.readouterr(), script.read_text()) == (
         ("Using Python index: https://pypi.example/simple\nrequests -> requests>=2\n", ""),
@@ -306,12 +316,11 @@ def test_script_metadata_discovery_skips_unreadable_and_plain_files(
     )
 
 
-def test_script_metadata_rejects_undecodable_file(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
-) -> None:
+def test_script_metadata_rejects_undecodable_file(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     invalid = tmp_path / "invalid.py"
     invalid.write_bytes(b"# /// script\n\xff\xfe")
 
-    assert not index.run(invalid)
+    with pytest.raises(SystemExit, match=r"^1$"):
+        main(index_args("-f", str(invalid)))
 
     assert capsys.readouterr().err == f"{invalid} is not a supported dependency file, so it was skipped\n"

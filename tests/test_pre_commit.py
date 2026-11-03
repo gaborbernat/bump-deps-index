@@ -4,18 +4,26 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
-import httpx
 import pytest
+from conftest import index_args
+
+from bump_deps_index import main
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
-def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"black": ["22.6.0", "22.8.0"], "flake8-bugbear": ["22.7.1", "22.7.2"]})
-    index.npm["prettier"] = ["2.7.0", "2.8.0"]
+def test_run_pre_commit(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    httpx_mock.add_response(
+        url="https://pypi.example/simple/black/", text="<a>black-22.6.0.tar.gz</a><a>black-22.8.0.tar.gz</a>"
+    )
+    httpx_mock.add_response(
+        url="https://pypi.example/simple/flake8-bugbear/",
+        text="<a>flake8-bugbear-22.7.1.tar.gz</a><a>flake8-bugbear-22.7.2.tar.gz</a>",
+    )
+    httpx_mock.add_response(url="https://npm.example/prettier", json={"versions": {"2.7.0": {}, "2.8.0": {}}})
     dest = tmp_path / ".pre-commit-config.yaml"
     content = """
     repos:
@@ -33,7 +41,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
     """
     dest.write_text(dedent(content).lstrip())
 
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == (
@@ -66,8 +74,7 @@ def test_run_pre_commit(capsys: pytest.CaptureFixture[str], index: FakeIndex, tm
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _Case:
-    pypi: dict[str, list[str]]
-    npm: dict[str, list[str]]
+    pages: dict[str, str]
     content: str
     expected: str
 
@@ -77,8 +84,11 @@ class _Case:
     [
         pytest.param(
             _Case(
-                pypi={"bar": ["2"], "baz": ["3"], "foo": ["1"]},
-                npm={},
+                pages={
+                    "https://pypi.example/simple/bar/": "<a>bar-2.tar.gz</a>",
+                    "https://pypi.example/simple/baz/": "<a>baz-3.tar.gz</a>",
+                    "https://pypi.example/simple/foo/": "<a>foo-1.tar.gz</a>",
+                },
                 content="""
             repos:
               - repo: local
@@ -104,8 +114,7 @@ class _Case:
         ),
         pytest.param(
             _Case(
-                pypi={"black": ["24.1"]},
-                npm={},
+                pages={"https://pypi.example/simple/black/": "<a>black-24.1.tar.gz</a>"},
                 content="""
             repos:
               - repo: local
@@ -139,8 +148,7 @@ class _Case:
         ),
         pytest.param(
             _Case(
-                pypi={},
-                npm={"eslint": ["9.0.0"]},
+                pages={"https://npm.example/eslint": '{"versions": {"9.0.0": {}}}'},
                 content="""
             repos:
               - repo: local
@@ -162,33 +170,32 @@ class _Case:
         ),
     ],
 )
-def test_run_pre_commit_updates_dependencies(index: FakeIndex, tmp_path: Path, case: _Case) -> None:
-    index.pypi.update(case.pypi)
-    index.npm.update(case.npm)
+def test_run_pre_commit_updates_dependencies(httpx_mock: HTTPXMock, tmp_path: Path, case: _Case) -> None:
+    for url, page in case.pages.items():
+        httpx_mock.add_response(url=url, text=page)
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(dedent(case.content).lstrip(), encoding="utf-8")
 
-    assert index.run(config)
+    main(index_args("-f", str(config)))
 
     assert config.read_text(encoding="utf-8") == dedent(case.expected).lstrip()
 
 
-def test_run_pre_commit_keeps_filtered_inline_dependencies(
-    index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_run_pre_commit_keeps_filtered_inline_dependencies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\n', encoding="utf-8")
     config = tmp_path / ".pre-commit-config.yaml"
     content = "repos:\n  - repo: local\n    hooks:\n      - id: foo\n        additional_dependencies: [foo]\n"
     config.write_text(content, encoding="utf-8")
 
-    assert index.run(config)
+    main(index_args("-f", str(config)))
 
     assert config.read_text(encoding="utf-8") == content
 
 
-def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) -> None:
-    assert not index.run()
+def test_run_args_empty(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit, match=r"^1$"):
+        main(index_args("-f"))
 
     assert capsys.readouterr() == (
         "",
@@ -197,8 +204,9 @@ def test_run_args_empty(capsys: pytest.CaptureFixture[str], index: FakeIndex) ->
 
 
 def test_run_pre_commit_reports_missing_npm_package(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path
 ) -> None:
+    httpx_mock.add_response(url="https://npm.example/nope", status_code=404)
     config = tmp_path / ".pre-commit-config.yaml"
     content = """
     repos:
@@ -210,22 +218,22 @@ def test_run_pre_commit_reports_missing_npm_package(
     """
     config.write_text(dedent(content).lstrip(), encoding="utf-8")
 
-    assert not index.run(config)
+    with pytest.raises(SystemExit, match=r"^1$"):
+        main(index_args("-f", str(config)))
 
     assert capsys.readouterr().err.startswith("failed to look up nope, so it was not updated: HTTPStatusError(")
     assert config.read_text() == dedent(content).lstrip()
 
 
-def test_run_pre_commit_reads_remote_hook_language(index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi["black"] = ["24.1"]
-    index.npm["eslint"] = ["9.0.0"]
-    index.responses.update({
-        "https://raw.githubusercontent.com/a/hooks/v1.0/.pre-commit-hooks.yaml": httpx.Response(
-            200, text="- id: go\n  language: golang\n- id: lint\n  language: node\n- not a hook\n"
-        ),
-        "https://gitlab.com/b/hooks/-/raw/v2/.pre-commit-hooks.yaml": httpx.Response(404),
-        "https://raw.githubusercontent.com/c/hooks/v3/.pre-commit-hooks.yaml": httpx.Response(200, text="[invalid"),
-    })
+def test_run_pre_commit_reads_remote_hook_language(httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    httpx_mock.add_response(url="https://pypi.example/simple/black/", text="<a>black-24.1.tar.gz</a>")
+    httpx_mock.add_response(url="https://npm.example/eslint", json={"versions": {"9.0.0": {}}})
+    httpx_mock.add_response(
+        url="https://raw.githubusercontent.com/a/hooks/v1.0/.pre-commit-hooks.yaml",
+        text="- id: go\n  language: golang\n- id: lint\n  language: node\n- not a hook\n",
+    )
+    httpx_mock.add_response(url="https://gitlab.com/b/hooks/-/raw/v2/.pre-commit-hooks.yaml", status_code=404)
+    httpx_mock.add_response(url="https://raw.githubusercontent.com/c/hooks/v3/.pre-commit-hooks.yaml", text="[invalid")
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
         dedent(
@@ -255,7 +263,7 @@ def test_run_pre_commit_reads_remote_hook_language(index: FakeIndex, tmp_path: P
         encoding="utf-8",
     )
 
-    assert index.run(config)
+    main(index_args("-f", str(config)))
 
     assert (
         config.read_text(encoding="utf-8")

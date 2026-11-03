@@ -3,15 +3,21 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import TYPE_CHECKING
 
+from conftest import index_args
+
+from bump_deps_index import main
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     import pytest
-    from conftest import FakeIndex
+    from pytest_httpx import HTTPXMock
 
 
-def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi.update({"A": ["1"], "B": ["1"], "C": ["3"]})
+def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    httpx_mock.add_response(url="https://pypi.example/simple/a/", text="<a>a-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/b/", text="<a>b-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/c/", text="<a>c-3.tar.gz</a>")
     dest = tmp_path / "setup.cfg"
     content = """
     [options]
@@ -24,7 +30,7 @@ def test_run_setup_cfg(capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp
         C
     """
     dest.write_text(dedent(content).lstrip())
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == (

@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from html import escape
 from typing import TYPE_CHECKING, Protocol
-from urllib.parse import unquote
 
-import httpx
 import pytest
-from packaging.utils import canonicalize_name
 
-from bump_deps_index import Options, main, run
+from bump_deps_index import main
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Mapping
     from pathlib import Path
 
+    import httpx
     from pytest_httpx import HTTPXMock
 
 
@@ -48,63 +44,8 @@ def work_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.fixture
-def index(httpx_mock: HTTPXMock) -> FakeIndex:
-    fake = FakeIndex(
-        pypi={},
-        npm={},
-        requires_python={},
-        index_url="https://pypi.example/simple",
-        npm_registry="https://npm.example",
-        responses={},
-    )
-    httpx_mock.add_callback(fake.serve, is_optional=True, is_reusable=True)
-    return fake
-
-
-@dataclass
-class FakeIndex:
-    pypi: dict[str, list[str]]
-    npm: dict[str, list[str]]
-    requires_python: dict[str, str]
-    index_url: str
-    npm_registry: str
-    responses: dict[str, httpx.Response]
-
-    def run(
-        self,
-        *filenames: Path,
-        pkgs: Sequence[str] = (),
-        pre_release: bool | None = False,
-    ) -> bool:
-        return run(
-            Options(
-                index_url=self.index_url,
-                npm_registry=self.npm_registry,
-                pkgs=list(pkgs),
-                filenames=list(filenames),
-                pre_release=pre_release,
-                exclude_newer=None,
-            )
-        )
-
-    def serve(self, request: httpx.Request) -> httpx.Response:
-        if (response := self.responses.get(str(request.url))) is not None:
-            return response
-        if request.url.host == "npm.example":
-            if (versions := self.npm.get(unquote(request.url.path.removeprefix("/")))) is None:
-                return httpx.Response(404)
-            return httpx.Response(200, json={"versions": {key: {} for key in versions}})
-        project = request.url.path.rstrip("/").rpartition("/")[2]
-        if (versions := next((v for k, v in self.pypi.items() if canonicalize_name(k) == project), None)) is None:
-            return httpx.Response(404)
-        links = (
-            f'<a data-requires-python="{escape(self.requires_python[file])}">{file}</a>'
-            if (file := f"{project}-{version}.tar.gz") in self.requires_python
-            else f"<a>{file}</a>"
-            for version in versions
-        )
-        return httpx.Response(200, text="".join(links))
+def index_args(*args: str) -> list[str]:
+    return ["-i", "https://pypi.example/simple", "-n", "https://npm.example", "-p", "no", "--no-exclude-newer", *args]
 
 
 class Bump(Protocol):
@@ -148,5 +89,5 @@ def bump(
 
 __all__ = [
     "Bump",
-    "FakeIndex",
+    "index_args",
 ]

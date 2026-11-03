@@ -5,20 +5,20 @@ from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import pytest
+from conftest import index_args
 
 from bump_deps_index import main
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _Case:
     content: str
-    pypi: dict[str, list[str]]
+    pages: dict[str, str]
     updates: set[str]
     expected: str
 
@@ -29,7 +29,10 @@ class _Case:
         pytest.param(
             _Case(
                 content="A\nB==1\n",
-                pypi={"A": ["1"], "B": ["1", "2"]},
+                pages={
+                    "https://pypi.example/simple/a/": "<a>a-1.tar.gz</a>",
+                    "https://pypi.example/simple/b/": "<a>b-1.tar.gz</a><a>b-2.tar.gz</a>",
+                },
                 updates={"B==1 -> B==2", "A -> A>=1"},
                 expected="A>=1\nB==2\n",
             ),
@@ -38,7 +41,7 @@ class _Case:
         pytest.param(
             _Case(
                 content="-e .[test]\n-r other.txt\n--index-url https://pypi.org/simple\nA\n",
-                pypi={"A": ["1"]},
+                pages={"https://pypi.org/simple/a/": "<a>a-1.tar.gz</a>"},
                 updates={"A -> A>=1"},
                 expected="-e .[test]\n-r other.txt\n--index-url https://pypi.org/simple\nA>=1\n",
             ),
@@ -47,13 +50,14 @@ class _Case:
     ],
 )
 def test_run_requirements_txt_updates_dependencies(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path, case: _Case
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path, case: _Case
 ) -> None:
-    index.pypi.update(case.pypi)
+    for url, page in case.pages.items():
+        httpx_mock.add_response(url=url, text=page)
     dest = tmp_path / "requirements.txt"
     dest.write_text(case.content)
 
-    assert index.run(dest)
+    main(index_args("-f", str(dest)))
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == ("", {"Using Python index: https://pypi.example/simple", *case.updates})
@@ -75,22 +79,22 @@ def test_run_requirements_txt_updates_dependencies(
         ),
     ],
 )
-def test_run_requirements_txt_skips_entries(index: FakeIndex, tmp_path: Path, content: str, expected: str) -> None:
-    index.pypi["D"] = ["2"]
+def test_run_requirements_txt_skips_entries(httpx_mock: HTTPXMock, tmp_path: Path, content: str, expected: str) -> None:
+    httpx_mock.add_response(url="https://pypi.example/simple/d/", text="<a>d-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(content, encoding="utf-8")
 
-    assert index.run(requirements)
+    main(index_args("-f", str(requirements)))
 
     assert requirements.read_text(encoding="utf-8") == expected
 
 
-def test_run_requirements_txt_distinguishes_markers_from_comments(index: FakeIndex, tmp_path: Path) -> None:
-    index.pypi["A"] = ["2"]
+def test_run_requirements_txt_distinguishes_markers_from_comments(httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    httpx_mock.add_response(url="https://pypi.example/simple/a/", text="<a>a-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text('A>=1; os_name == "foo # bar"  # keep this reason\n', encoding="utf-8")
 
-    assert index.run(requirements)
+    main(index_args("-f", str(requirements)))
 
     assert requirements.read_text(encoding="utf-8") == 'A>=2; os_name == "foo # bar"  # keep this reason\n'
 
@@ -105,12 +109,13 @@ def test_run_requirements_txt_distinguishes_markers_from_comments(index: FakeInd
 )
 def test_run_requirements_txt_in(
     capsys: pytest.CaptureFixture[str],
-    index: FakeIndex,
+    httpx_mock: HTTPXMock,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     filename: str,
 ) -> None:
-    index.pypi.update(A=["1"], B=["1", "2"])
+    httpx_mock.add_response(url="https://pypi.example/simple/a/", text="<a>a-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/b/", text="<a>b-1.tar.gz</a><a>b-2.tar.gz</a>")
     (tmp_path / f"{filename}.txt").write_text("C")
     dest = tmp_path / f"{filename}.in"
     content = """
@@ -122,7 +127,7 @@ def test_run_requirements_txt_in(
     dest.write_text(dedent(content).lstrip())
     monkeypatch.chdir(tmp_path)
 
-    main(["--index-url", index.index_url, "--pre-release", "no"])
+    main(["--index-url", "https://pypi.example/simple", "--pre-release", "no"])
 
     out, err = capsys.readouterr()
     assert (err, set(out.splitlines())) == (
@@ -155,13 +160,13 @@ def test_run_requirements_txt_in(
     ],
 )
 def test_run_requirements_txt_updates_continued_entries(
-    index: FakeIndex, tmp_path: Path, content: str, expected: str
+    httpx_mock: HTTPXMock, tmp_path: Path, content: str, expected: str
 ) -> None:
-    index.pypi["C"] = ["2"]
+    httpx_mock.add_response(url="https://pypi.example/simple/c/", text="<a>c-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(content, encoding="utf-8")
 
-    assert index.run(requirements)
+    main(index_args("-f", str(requirements)))
 
     assert requirements.read_text(encoding="utf-8") == expected
 
@@ -180,16 +185,16 @@ def test_run_requirements_txt_updates_continued_entries(
     ],
 )
 def test_run_requirements_txt_looks_up_its_own_index(
-    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
 ) -> None:
     monkeypatch.setenv("HOST", "private.example")
-    index.pypi["foo"] = ["2"]
+    httpx_mock.add_response(url="https://private.example/simple/foo/", text="<a>foo-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(content, encoding="utf-8")
     base = "-ihttps://${HOST}/simple  # mirror\n-r requirements.txt\n-r missing.txt\n"
     (tmp_path / "base.txt").write_text(base, encoding="utf-8")
 
-    assert index.run(requirements)
+    main(index_args("-f", str(requirements)))
 
     assert (requirements.read_text(encoding="utf-8"), [str(request.url) for request in httpx_mock.get_requests()]) == (
         content.replace("foo>=1", "foo>=2"),
@@ -198,16 +203,19 @@ def test_run_requirements_txt_looks_up_its_own_index(
 
 
 def test_run_requirements_txt_keeps_unset_and_empty_variables(
-    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("UNSET", raising=False)
     monkeypatch.setenv("EMPTY", "")
+    httpx_mock.add_response(url="https://a.example/$%7BUNSET%7D/foo/", status_code=404)
+    httpx_mock.add_response(url="https://b.example/$%7BEMPTY%7D/foo/", status_code=404)
     requirements = tmp_path / "requirements.txt"
     requirements.write_text(
         "-i https://a.example/${UNSET}\n--extra-index-url=https://b.example/${EMPTY}\nfoo\n", encoding="utf-8"
     )
 
-    index.run(requirements)
+    with pytest.raises(SystemExit):
+        main(index_args("-f", str(requirements)))
 
     assert sorted(str(request.url) for request in httpx_mock.get_requests()) == [
         "https://a.example/$%7BUNSET%7D/foo/",

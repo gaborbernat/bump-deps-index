@@ -6,10 +6,13 @@ from typing import TYPE_CHECKING, Final
 import httpx
 import pytest
 
+from bump_deps_index import main
+
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from conftest import Bump, FakeIndex
+    from conftest import Bump
+    from pytest_httpx import HTTPXMock
 
 pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
@@ -172,14 +175,22 @@ def test_update_python_skips_files_of_other_projects(bump: Bump) -> None:
 
 
 def test_run_prints_index_once_without_credentials(
-    capsys: pytest.CaptureFixture[str], index: FakeIndex, tmp_path: Path
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path
 ) -> None:
-    index.index_url = "https://user:secret@pypi.example:8443/simple"
-    index.pypi.update(a=["1"], b=["2"])
+    httpx_mock.add_response(url="https://user:secret@pypi.example:8443/simple/a/", text="<a>a-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://user:secret@pypi.example:8443/simple/b/", text="<a>b-2.tar.gz</a>")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("a\nb\n")
 
-    assert index.run(requirements)
+    main([
+        "-i",
+        "https://user:secret@pypi.example:8443/simple",
+        "-p",
+        "no",
+        "--no-exclude-newer",
+        "-f",
+        str(requirements),
+    ])
 
     lines = capsys.readouterr().out.splitlines()
     assert (lines[0], sorted(lines[1:])) == (
