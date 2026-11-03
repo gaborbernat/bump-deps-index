@@ -23,7 +23,7 @@ from ._redact import redact_text, redact_url
 from ._update import update
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from ._cli import Options
     from ._config._project import Project
@@ -52,7 +52,7 @@ def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_relea
     # a package you name gets the floor and the index pins of the project you run in
     project = get_project(Path.cwd())
     lookups = [_named_lookup(package, project, settings, pre_release=pre_release) for package in packages]
-    return _resolve(settings, list(dict.fromkeys(lookups)))[1]
+    return _report(settings, list(dict.fromkeys(lookups)))[1]
 
 
 def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_release: bool) -> Lookup:
@@ -68,14 +68,31 @@ def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_re
     )
 
 
-def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
-    if not lookups:
-        return {}, True
+def _report(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
     for pkg_type, registry in ((PkgType.PYTHON, settings.index_url), (PkgType.JS, settings.npm_registry)):
         if any(lookup.pkg_type is pkg_type for lookup in lookups):
             sys.stdout.write(f"Using {pkg_type} index: {redact_url(registry)}\n")
     changes: dict[Lookup, str] = {}
     successful = True
+    for lookup, outcome in _resolve(settings, lookups):
+        if isinstance(outcome, str):
+            changes[lookup] = outcome
+            sys.stdout.write(
+                redact_text(f"{lookup.requirement}{f' -> {outcome}' if outcome != lookup.requirement else ''}\n")
+            )
+        else:
+            successful = False
+            sys.stderr.write(
+                f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(outcome))}\n"
+            )
+    return changes, successful
+
+
+def _resolve(
+    settings: IndexSettings, lookups: Sequence[Lookup]
+) -> Iterator[tuple[Lookup, str | HTTPError | TypeError | ValueError]]:
+    if not lookups:
+        return
     parallel = min(len(lookups), 10)
     with (
         Client(
@@ -86,30 +103,13 @@ def _resolve(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[L
     ):
         index = SimpleIndex(client, settings.exclude_newer)
         npm = NpmRegistry(client, settings.exclude_newer, settings.npm)
-        futures = {
-            executor.submit(
-                update,
-                index,
-                npm,
-                lookup,
-            ): lookup
-            for lookup in lookups
-        }
-        # report in submission order to keep the output stable between runs
-        for future, lookup in futures.items():
+        futures = [(lookup, executor.submit(update, index, npm, lookup)) for lookup in lookups]
+        # yield in submission order to keep the report stable between runs
+        for lookup, future in futures:
             try:
-                result = future.result()
+                yield lookup, future.result()
             except (HTTPError, TypeError, ValueError) as exc:
-                successful = False
-                sys.stderr.write(
-                    f"failed to look up {lookup.requirement}, so it was not updated: {redact_text(repr(exc))}\n"
-                )
-            else:
-                changes[lookup] = result
-                sys.stdout.write(
-                    redact_text(f"{lookup.requirement}{f' -> {result}' if result != lookup.requirement else ''}\n")
-                )
-    return changes, successful
+                yield lookup, exc
 
 
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
@@ -129,7 +129,7 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
         else:
             plans.append((filename, loader, *plan))
     # resolve the files in one batch to send one lookup per package across files
-    results, resolved = _resolve(settings, list(dict.fromkeys(chain.from_iterable(lookups for *_, lookups in plans))))
+    results, resolved = _report(settings, list(dict.fromkeys(chain.from_iterable(lookups for *_, lookups in plans))))
     for filename, loader, loaded, lookups in plans:
         changes = {
             lookup.requirement: new
