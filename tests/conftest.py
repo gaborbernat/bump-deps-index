@@ -30,6 +30,7 @@ def isolated_index_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
         "PIP_CONFIG_FILE",
         "PIP_EXTRA_INDEX_URL",
         "PIP_INDEX_URL",
+        "PIP_UPLOADED_PRIOR_TO",
         "UV_DEFAULT_INDEX",
         "UV_EXCLUDE_NEWER",
         "UV_EXTRA_INDEX_URL",

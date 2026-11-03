@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 from argparse import ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
 from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from bump_deps_index._config import npm_registry, python_index_url
+from bump_deps_index._config import npm_registry, python_exclude_newer, python_index_url
 from bump_deps_index._cutoff import parse_exclude_newer
 from bump_deps_index._loaders import get_loaders
 from bump_deps_index._redact import redact_url
@@ -65,18 +64,19 @@ def _build_parser() -> ArgumentParser:
     msg = "accept pre-release versions; file-default accepts them in .pre-commit-config.yaml and refuses them elsewhere"
     parser.add_argument("-p", "--pre-release", choices=["yes", "no", "file-default"], default="file-default", help=msg)
     msg = (
-        "only use releases uploaded before this cutoff: an RFC 3339 timestamp such as 2026-10-27T15:46:26Z, "
-        "a local date, or a duration before now such as P7D, PT24H, 7 days or 1 week "
-        "(default: UV_EXCLUDE_NEWER, as uv reads it); like uv, a file without an upload time is excluded, so an index "
-        "without upload times, such as one that serves only the HTML simple API, offers no candidates; a requirement "
-        "already above the newest candidate is kept; pre-commit hooks take their versions from PyPI or npm, so the "
-        "cutoff applies to them too"
+        "only use releases uploaded before this cutoff: an RFC 3339 timestamp such as 2026-10-27T15:46:26Z, a local "
+        "date, a datetime without an offset (read as local time), or a duration before now such as P7D, PT24H, "
+        "7 days or 1 week; the default is the first set of PIP_UPLOADED_PRIOR_TO, UV_EXCLUDE_NEWER, exclude-newer in "
+        "the nearest uv.toml or [tool.uv] table, uploaded-prior-to in your pip configuration, and exclude-newer in "
+        "your user uv.toml; like uv, a file without an upload time is excluded, so an index without upload times, such "
+        "as one that serves only the HTML simple API, offers no candidates; a requirement already above the newest "
+        "candidate is kept; pre-commit hooks take their versions from PyPI or npm, so the cutoff applies to them too"
     )
     parser.add_argument(
         "--exclude-newer",
         dest="exclude_newer",
         metavar="cutoff",
-        default=os.environ.get("UV_EXCLUDE_NEWER") or None,
+        default=python_exclude_newer(),
         type=_cutoff,
         help=msg,
     )

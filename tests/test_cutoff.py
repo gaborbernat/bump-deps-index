@@ -24,6 +24,7 @@ _NOW: Final[datetime] = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
         pytest.param("PT24H", _NOW - timedelta(hours=24), id="iso-hours"),
         pytest.param("P2W", _NOW - timedelta(weeks=2), id="iso-weeks"),
         pytest.param("P1DT12H30M", _NOW - timedelta(days=1, hours=12, minutes=30), id="iso-combined"),
+        pytest.param("2026-10-27T15:46:26", datetime(2026, 10, 27, 15, 46, 26).astimezone(), id="naive-is-local"),
         pytest.param("7 days", _NOW - timedelta(days=7), id="friendly-days"),
         pytest.param("1 week", _NOW - timedelta(weeks=1), id="friendly-week"),
         pytest.param("24hours", _NOW - timedelta(hours=24), id="friendly-no-space"),
@@ -39,7 +40,6 @@ def test_parse_exclude_newer_accepts(value: str, result: datetime) -> None:
     "value",
     [
         pytest.param("soon", id="words"),
-        pytest.param("2026-10-27T15:46:26", id="timestamp-without-offset"),
         pytest.param("P", id="empty-iso-duration"),
         pytest.param("PT", id="empty-iso-time"),
         pytest.param("P1M", id="iso-calendar-month"),

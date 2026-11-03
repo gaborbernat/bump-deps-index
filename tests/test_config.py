@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from textwrap import dedent
 from typing import TYPE_CHECKING, Final
 
@@ -8,6 +9,7 @@ import httpx
 import pytest
 
 from bump_deps_index import main
+from bump_deps_index._cli import parse_cli
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -186,6 +188,93 @@ def test_main_reads_index_settings(capsys: pytest.CaptureFixture[str], expected:
         "a -> a>=1",
         "b@1 -> b@1.0.0",
     ]
+
+
+_ENV_PIP: Final[str] = "2026-10-01T00:00:00Z"
+_ENV_UV: Final[str] = "2026-10-02T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("workspace", "expected"),
+    [
+        pytest.param(({}, {}), None, id="defaults"),
+        pytest.param(
+            ({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}), datetime(2026, 10, 1, tzinfo=UTC), id="pip-environment"
+        ),
+        pytest.param(({"UV_EXCLUDE_NEWER": _ENV_UV}, {}), datetime(2026, 10, 2, tzinfo=UTC), id="uv-environment"),
+        pytest.param(
+            (
+                {"PIP_UPLOADED_PRIOR_TO": _ENV_PIP, "UV_EXCLUDE_NEWER": _ENV_UV},
+                {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'},
+            ),
+            datetime(2026, 10, 1, tzinfo=UTC),
+            id="pip-environment-wins",
+        ),
+        pytest.param(
+            ({"UV_EXCLUDE_NEWER": _ENV_UV}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}),
+            datetime(2026, 10, 2, tzinfo=UTC),
+            id="uv-environment-over-project",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"',
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                },
+            ),
+            datetime(2026, 10, 3, tzinfo=UTC),
+            id="project-uv-over-pip",
+        ),
+        pytest.param(
+            ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
+            datetime(2026, 10, 4, tzinfo=UTC),
+            id="uv-in-pyproject",
+        ),
+        pytest.param(
+            ({}, {"uv.toml": 'exclude-newer = "2026-10-05T00:00:00Z"'}),
+            datetime(2026, 10, 5, tzinfo=UTC),
+            id="uv-in-parent-folder",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": "exclude-newer = false",
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                },
+            ),
+            datetime(2026, 10, 6, tzinfo=UTC),
+            id="disabled-uv-falls-through-to-pip",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"',
+                },
+            ),
+            datetime(2026, 10, 6, tzinfo=UTC),
+            id="pip-over-user-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}),
+            datetime(2026, 10, 7, tzinfo=UTC),
+            id="user-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-08T12:00:00"}),
+            datetime(2026, 10, 8, 12).astimezone(),
+            id="pip-naive-datetime-is-local",
+        ),
+    ],
+    indirect=["workspace"],
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_reads_exclude_newer_settings(expected: datetime | None) -> None:
+    assert parse_cli(["a"]).exclude_newer == expected
 
 
 @pytest.fixture

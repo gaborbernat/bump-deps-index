@@ -8,8 +8,6 @@ from bump_deps_index._cutoff import parse_timestamp
 from bump_deps_index._parsed import json_field, table
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from httpx import Client
 
     from bump_deps_index._parsed import Parsed
@@ -74,16 +72,13 @@ def _versions(
             if (key := _semver(version)) is not None
             and (lookup.pre_release or key.release)
             and not (isinstance(meta, dict) and meta.get("deprecated"))
-            and (exclude_newer is None or _uploaded_before(times, version, exclude_newer))
+            and (
+                exclude_newer is None
+                or ((uploaded := parse_timestamp(times.get(version))) is not None and uploaded < exclude_newer)
+            )
         ),
         reverse=True,
     ), table(response.json(), "dist-tags").get("latest")
-
-
-def _uploaded_before(times: dict[str, Parsed], version: str, cutoff: datetime) -> bool:
-    # a version without an upload time is not a candidate under a cutoff, as uv treats it
-    uploaded = parse_timestamp(times.get(version))
-    return uploaded is not None and uploaded < cutoff
 
 
 class _Semver(NamedTuple):
