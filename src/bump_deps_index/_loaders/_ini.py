@@ -54,7 +54,7 @@ def update_ini(text: str, changes: Mapping[str, str], wanted: Callable[[str, str
 
 def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
     # configparser splits a key line at its first `=` or `:`
-    value = re.sub(r"^(?P<key>[^=:]*)[=:]", "", line, count=1)
+    value = re.sub(r"^[^=:]*[=:]", "", line, count=1)
     return f"{line[: len(line) - len(value)]}{replace_requirement_line(value, changes)}"
 
 
