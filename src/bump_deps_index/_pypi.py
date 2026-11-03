@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import cache
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from httpx import HTTPStatusError, codes
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -25,9 +25,6 @@ if TYPE_CHECKING:
     from httpx import Client
 
     from bump_deps_index._lookup import IndexLookup
-
-_SIMPLE_JSON: Final[str] = "application/vnd.pypi.simple.v1+json"
-_SIMPLE_ACCEPT: Final[str] = f"{_SIMPLE_JSON}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
 
 
 class SimpleIndex:
@@ -78,9 +75,11 @@ class SimpleIndex:
         raise missing[0]  # no index has the package; report the not found answer of the main index
 
     def _fetch(self, url: str) -> list[_IndexFile]:
-        response = self.client.get(url, headers={"Accept": _SIMPLE_ACCEPT}, follow_redirects=True)
+        json_type = "application/vnd.pypi.simple.v1+json"
+        accept = f"{json_type}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
+        response = self.client.get(url, headers={"Accept": accept}, follow_redirects=True)
         response.raise_for_status()
-        if response.headers.get("content-type", "").startswith(_SIMPLE_JSON):
+        if response.headers.get("content-type", "").startswith(json_type):
             # skip malformed entries the way the HTML parser skips malformed links
             return [
                 _IndexFile(

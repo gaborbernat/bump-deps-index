@@ -8,10 +8,8 @@ from typing import TYPE_CHECKING, Final, NamedTuple
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
-_SCALAR_END: Final[frozenset[str]] = frozenset(",]}\n#")
 # the key path marks an array item with `[]`, and an inline table with a string `replace` key as `{<kind>}`
 _ARRAY: Final[str] = "[]"
-_CONTROL: Final[re.Pattern[str]] = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tuple[str, ...]], bool]) -> str:
@@ -26,7 +24,7 @@ def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tup
             encoded = json.dumps(encoded, ensure_ascii=False)[1:-1]
         elif string.quote == '"""':  # a multi-line basic string takes raw newlines and tabs, and escapes the rest
             escaped = encoded.replace("\\", "\\\\").replace('"', '\\"')
-            encoded = _CONTROL.sub(lambda match: f"\\u{ord(match[0]):04x}", escaped)
+            encoded = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", lambda match: f"\\u{ord(match[0]):04x}", escaped)
         # TOML drops the newline that opens a multi-line string, so keep it as written
         lead = "\n" if len(string.quote) > 1 and text.startswith("\n", string.start) else ""
         pieces += [text[last : string.start], lead, encoded]
@@ -85,7 +83,7 @@ class _TomlScanner:
         elif character == "{":
             yield from self._inline_table(path)
         else:
-            while self._at < len(self._text) and self._text[self._at] not in _SCALAR_END:
+            while self._at < len(self._text) and self._text[self._at] not in ",]}\n#":
                 self._at += 1
 
     def _string(self, path: tuple[str, ...]) -> _String:

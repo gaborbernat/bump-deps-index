@@ -19,17 +19,6 @@ if TYPE_CHECKING:
 
 # pip's comment pattern: a `#` at the start of a line or after whitespace starts a comment
 _COMMENT: Final[re.Pattern[str]] = re.compile(r"(^|\s+)#.*$")
-# pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
-_ENV_REFERENCE: Final[re.Pattern[str]] = re.compile(r"\$\{(?P<name>[A-Z0-9_]+)\}")
-_OPTIONS: Final[dict[str, str]] = {
-    "-i": "index",
-    "--index-url": "index",
-    "--extra-index-url": "extra",
-    "-r": "include",
-    "--requirement": "include",
-    "-c": "include",
-    "--constraint": "include",
-}
 
 
 class Requirements(Loader):
@@ -143,18 +132,28 @@ def _logical_lines(lines: list[str]) -> Iterator[str]:
 
 
 def _options(words: list[str]) -> Iterator[tuple[str, str]]:
+    options: dict[str, str] = {
+        "-i": "index",
+        "--index-url": "index",
+        "--extra-index-url": "extra",
+        "-r": "include",
+        "--requirement": "include",
+        "-c": "include",
+        "--constraint": "include",
+    }
     for at, word in enumerate(words):
         name, equals, value = word.partition("=")
-        if name in _OPTIONS and equals:
-            yield _OPTIONS[name], value
-        elif word in _OPTIONS and at + 1 < len(words):
-            yield _OPTIONS[word], words[at + 1]
+        if name in options and equals:
+            yield options[name], value
+        elif word in options and at + 1 < len(words):
+            yield options[word], words[at + 1]
         elif word[:2] in {"-i", "-r", "-c"} and len(word) > len("-i"):
-            yield _OPTIONS[word[:2]], word[2:]
+            yield options[word[:2]], word[2:]
 
 
 def _expand_env(text: str) -> str:
-    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"]) or match[0], text)
+    # pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
+    return re.sub(r"\$\{(?P<name>[A-Z0-9_]+)\}", lambda match: os.environ.get(match["name"]) or match[0], text)
 
 
 def _common_prefix(left: str, right: str) -> int:

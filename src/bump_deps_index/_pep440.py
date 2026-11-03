@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
 from packaging.specifiers import Specifier, SpecifierSet
@@ -9,8 +9,6 @@ from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-
-_NAME_AND_EXTRAS: Final[re.Pattern[str]] = re.compile(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?")
 
 
 def bump_python(spec: str, requirement: Requirement, versions: Iterable[Version], *, pre_release: bool) -> str:
@@ -56,7 +54,7 @@ def _is_downgrade(pinned: str, version: Version) -> bool:
 
 
 def _add_lower_bound(spec: str, version: str) -> str:
-    head = spec[: len(spec) - len(_NAME_AND_EXTRAS.sub("", spec, count=1))]
+    head = spec[: len(spec) - len(re.sub(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?", "", spec, count=1))]
     specifier = spec[len(head) :].partition(";")[0].rstrip()
     rest = spec[len(head) + len(specifier) :]
     if not specifier:

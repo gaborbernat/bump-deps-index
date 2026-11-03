@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from configparser import RawConfigParser
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
@@ -11,10 +11,6 @@ from ._lines import replace_requirement_line, split_comment
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
-
-# configparser splits a key line at its first `=` or `:`
-_KEY: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[^=:]*)[=:]")
-_SECTION: Final[re.Pattern[str]] = re.compile(r"^\[(?P<header>.+)\]")
 
 
 def read_ini(filename: Path) -> RawConfigParser:
@@ -47,7 +43,7 @@ def update_ini(text: str, changes: Mapping[str, str], wanted: Callable[[str, str
             result.append(line)
         elif key and indent > key_indent:
             result.append(replace_requirement_line(line, changes) if wanted(section, key) else line)
-        elif header := _SECTION.match(stripped):
+        elif header := re.match(r"^\[(?P<header>.+)\]", stripped):
             section, key = header["header"], ""
             result.append(line)
         else:
@@ -57,7 +53,8 @@ def update_ini(text: str, changes: Mapping[str, str], wanted: Callable[[str, str
 
 
 def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
-    value = _KEY.sub("", line, count=1)
+    # configparser splits a key line at its first `=` or `:`
+    value = re.sub(r"^(?P<key>[^=:]*)[=:]", "", line, count=1)
     return f"{line[: len(line) - len(value)]}{replace_requirement_line(value, changes)}"
 
 

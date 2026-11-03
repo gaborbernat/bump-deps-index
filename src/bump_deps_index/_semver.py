@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-
-_SEMVER: Final[re.Pattern[str]] = re.compile(
-    r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
-)
-# a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
-_PIN: Final[re.Pattern[str]] = re.compile(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?")
 
 
 def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_release: bool) -> str:
@@ -24,7 +17,8 @@ def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_relea
         ),
         reverse=True,
     )
-    if not wanted or _PIN.fullmatch(wanted):
+    # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
+    if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
         candidates = [version for key, version in ranked if pinned is None or key >= pinned]
     else:
@@ -67,7 +61,11 @@ def _pad_version(version: str) -> str:
 
 
 def _semver(version: str) -> _Semver | None:
-    if (match := _SEMVER.fullmatch(version)) is None:
+    pattern = (
+        r"^v?(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+        r"(?:-(?P<pre>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+    )
+    if (match := re.fullmatch(pattern, version)) is None:
         return None
     pre = match["pre"]
     # semver ranks numeric identifiers below alphanumeric ones

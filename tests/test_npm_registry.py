@@ -17,8 +17,6 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 
 
 _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
-_BEFORE_CUTOFF: Final[str] = "2026-10-20T10:00:00.000000Z"
-_AFTER_CUTOFF: Final[str] = "2026-11-02T09:00:00Z"
 
 
 def test_update_js_encodes_scoped_package(bump: Callable[..., str]) -> None:
@@ -75,44 +73,66 @@ def test_update_js_skips_malformed_version_metadata(bump: Callable[..., str]) ->
 @pytest.mark.parametrize(
     ("spec", "uploads", "latest", "result"),
     [
-        pytest.param("a@", {"1.0.0": _BEFORE_CUTOFF, "2.0.0": _AFTER_CUTOFF}, "2.0.0", "a@1.0.0", id="latest-too-new"),
+        pytest.param(
+            "a@",
+            {"1.0.0": "2026-10-20T10:00:00.000000Z", "2.0.0": "2026-11-02T09:00:00Z"},
+            "2.0.0",
+            "a@1.0.0",
+            id="latest-too-new",
+        ),
         pytest.param(
             "a@^2.0.0",
-            {"2.0.0": _BEFORE_CUTOFF, "2.5.0": _BEFORE_CUTOFF, "2.9.0": _AFTER_CUTOFF},
+            {
+                "2.0.0": "2026-10-20T10:00:00.000000Z",
+                "2.5.0": "2026-10-20T10:00:00.000000Z",
+                "2.9.0": "2026-11-02T09:00:00Z",
+            },
             "2.9.0",
             "a@^2.5.0",
             id="range-skips-too-new",
         ),
         pytest.param(
             "a@^1.0.0",
-            {"1.0.0": _BEFORE_CUTOFF, "1.2.0": _BEFORE_CUTOFF, "2.0.0": _AFTER_CUTOFF},
+            {
+                "1.0.0": "2026-10-20T10:00:00.000000Z",
+                "1.2.0": "2026-10-20T10:00:00.000000Z",
+                "2.0.0": "2026-11-02T09:00:00Z",
+            },
             "2.0.0",
             "a@^1.2.0",
             id="caret",
         ),
         pytest.param(
-            "a@1.0.0", {"1.0.0": _BEFORE_CUTOFF, "1.1.0": None}, "1.1.0", "a@1.0.0", id="missing-upload-time-skipped"
+            "a@1.0.0",
+            {"1.0.0": "2026-10-20T10:00:00.000000Z", "1.1.0": None},
+            "1.1.0",
+            "a@1.0.0",
+            id="missing-upload-time-skipped",
         ),
         pytest.param(
-            "a@", {"1.0.0": _BEFORE_CUTOFF, "2.0.0": None}, "2.0.0", "a@1.0.0", id="version-without-upload-time"
+            "a@",
+            {"1.0.0": "2026-10-20T10:00:00.000000Z", "2.0.0": None},
+            "2.0.0",
+            "a@1.0.0",
+            id="version-without-upload-time",
         ),
         pytest.param(
             "a@>=2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "3.0.0": _AFTER_CUTOFF},
+            {"2.4.0": "2026-10-20T10:00:00.000000Z", "3.0.0": "2026-11-02T09:00:00Z"},
             "3.0.0",
             "a@>=2.5.0",
             id="floor-above-eligible-kept",
         ),
         pytest.param(
             "a@^2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "3.0.0": _AFTER_CUTOFF},
+            {"2.4.0": "2026-10-20T10:00:00.000000Z", "3.0.0": "2026-11-02T09:00:00Z"},
             "3.0.0",
             "a@^2.5.0",
             id="caret-above-eligible-kept",
         ),
         pytest.param(
             "a@2.5.0",
-            {"2.4.0": _BEFORE_CUTOFF, "2.6.0": _AFTER_CUTOFF},
+            {"2.4.0": "2026-10-20T10:00:00.000000Z", "2.6.0": "2026-11-02T09:00:00Z"},
             "2.6.0",
             "a@2.5.0",
             id="pin-above-eligible-kept",

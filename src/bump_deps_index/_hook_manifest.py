@@ -8,6 +8,7 @@ from truststore import SSLContext
 from yaml import YAMLError
 from yaml import safe_load as load_yaml
 
+
 def hook_languages(repo: str, rev: str | None) -> dict[str, str]:
     if rev is None or (url := _manifest_url(repo, rev)) is None:
         return {}

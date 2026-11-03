@@ -21,11 +21,6 @@ if TYPE_CHECKING:
     from bump_deps_index._parsed import Parsed
 
 _MERGE: Final[str] = "tag:yaml.org,2002:merge"
-_LANGUAGE_TYPES: Final[dict[str, PkgType]] = {
-    "python": PkgType.PYTHON,
-    "python_venv": PkgType.PYTHON,
-    "node": PkgType.JS,
-}
 
 
 class PreCommitConfig(SingleFileLoader):
@@ -41,6 +36,11 @@ class PreCommitConfig(SingleFileLoader):
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg: Parsed = load_yaml(file_handler)
         kept = self._kept_by_file[filename] = []
+        language_types: Final[dict[str, PkgType]] = {
+            "python": PkgType.PYTHON,
+            "python_venv": PkgType.PYTHON,
+            "node": PkgType.JS,
+        }
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
             languages = (
@@ -53,13 +53,13 @@ class PreCommitConfig(SingleFileLoader):
                     value if isinstance(value := hook.get("language"), str) else languages.get(str(hook.get("id")))
                 )
                 # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
-                skip = language is not None and language not in _LANGUAGE_TYPES
+                skip = language is not None and language not in language_types
                 if "additional_dependencies" in hook:
                     kept.append(not skip)
                 if skip:
                     continue
                 for pkg in strings(hook.get("additional_dependencies")):
-                    yield Entry(pkg, package_type(pkg) if language is None else _LANGUAGE_TYPES[language])
+                    yield Entry(pkg, package_type(pkg) if language is None else language_types[language])
 
     @override
     def _update_text(self, filename: Path, text: str, changes: Mapping[str, str]) -> str:

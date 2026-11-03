@@ -18,8 +18,6 @@ if TYPE_CHECKING:
     from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
-_PYPI: Final[str] = "https://pypi.org/simple"
-_NPM: Final[str] = "https://registry.npmjs.org"
 
 pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 
@@ -27,7 +25,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
 @pytest.mark.parametrize(
     ("workspace", "expected"),
     [
-        pytest.param(({}, {}), (_PYPI, _NPM), id="defaults"),
+        pytest.param(({}, {}), ("https://pypi.org/simple", "https://registry.npmjs.org"), id="defaults"),
         pytest.param(
             (
                 {"PIP_INDEX_URL": "https://env.example/simple", "NPM_CONFIG_REGISTRY": "https://env.example/npm"},
@@ -38,7 +36,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
         ),
         pytest.param(
             ({"UV_DEFAULT_INDEX": "https://uv-env.example/simple"}, {}),
-            ("https://uv-env.example/simple", _NPM),
+            ("https://uv-env.example/simple", "https://registry.npmjs.org"),
             id="uv-environment",
         ),
         pytest.param(
@@ -51,12 +49,12 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://uv.example/simple", _NPM),
+            ("https://uv.example/simple", "https://registry.npmjs.org"),
             id="uv-default-index-in-parent-folder",
         ),
         pytest.param(
             ({}, {"project/pyproject.toml": '[tool.uv]\nindex-url = "https://uv.example/simple"'}),
-            ("https://uv.example/simple", _NPM),
+            ("https://uv.example/simple", "https://registry.npmjs.org"),
             id="uv-in-pyproject",
         ),
         pytest.param(
@@ -68,7 +66,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "[install]\nindex-url = https://install.example/simple",
                 },
             ),
-            ("https://install.example/simple", _NPM),
+            ("https://install.example/simple", "https://registry.npmjs.org"),
             id="pip-install-section-after-invalid-uv",
         ),
         pytest.param(
@@ -79,7 +77,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://install.example/simple", _NPM),
+            ("https://install.example/simple", "https://registry.npmjs.org"),
             id="pip-install-section-across-files",
         ),
         pytest.param(
@@ -90,7 +88,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[install]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://custom.example/simple", _NPM),
+            ("https://custom.example/simple", "https://registry.npmjs.org"),
             id="pip-config-file",
         ),
         pytest.param(
@@ -101,7 +99,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.pip/pip.conf": "[global]\nindex-url = https://legacy.example/simple",
                 },
             ),
-            ("https://legacy.example/simple", _NPM),
+            ("https://legacy.example/simple", "https://registry.npmjs.org"),
             id="pip-legacy-after-invalid-config",
         ),
         pytest.param(
@@ -113,12 +111,12 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "index_url = https://underscore.example/simple",
                 },
             ),
-            ("https://underscore.example/simple", _NPM),
+            ("https://underscore.example/simple", "https://registry.npmjs.org"),
             id="pip-underscore-key",
         ),
         pytest.param(
             ({}, {"~/.config/uv/uv.toml": 'index-url = "https://uv-user.example/simple"'}),
-            ("https://uv-user.example/simple", _NPM),
+            ("https://uv-user.example/simple", "https://registry.npmjs.org"),
             id="uv-user-config",
         ),
         pytest.param(
@@ -126,7 +124,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"APPDATA": "{tmp}/appdata"},
                 {"appdata/uv/uv.toml": 'index-url = "https://uv-windows.example/simple"'},
             ),
-            ("https://uv-windows.example/simple", _NPM),
+            ("https://uv-windows.example/simple", "https://registry.npmjs.org"),
             id="uv-windows-user-config",
         ),
         pytest.param(
@@ -140,7 +138,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "project/sub/.npmrc": b"registry=https://\xff.example",
                 },
             ),
-            (_PYPI, _NPM),
+            ("https://pypi.org/simple", "https://registry.npmjs.org"),
             id="malformed-files-ignored",
         ),
         pytest.param(
@@ -148,7 +146,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"HOST": "npm.example"},
                 {"project/sub/.npmrc": "# registry=https://comment.example\nregistry = https://${HOST}/npm/"},
             ),
-            (_PYPI, "https://npm.example/npm/"),
+            ("https://pypi.org/simple", "https://npm.example/npm/"),
             id="npmrc-in-project",
         ),
         pytest.param(
@@ -156,7 +154,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {},
                 {"project/sub/.npmrc": "save-exact=true", "~/.npmrc": 'registry=https://a\nregistry="https://b"'},
             ),
-            (_PYPI, "https://b"),
+            ("https://pypi.org/simple", "https://b"),
             id="npmrc-in-home-last-wins",
         ),
         pytest.param(
@@ -164,7 +162,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"PIP_CONFIG_FILE": "{devnull}", "npm_config_registry": "https://lower.example"},
                 {"~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple"},
             ),
-            (_PYPI, "https://lower.example"),
+            ("https://pypi.org/simple", "https://lower.example"),
             id="pip-config-disabled-and-lowercase-npm-variable",
         ),
         pytest.param(
@@ -172,7 +170,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"NPM_CONFIG_USERCONFIG": "{tmp}/npmrc"},
                 {"npmrc": "registry=https://user.example", "~/.npmrc": "registry=https://home.example"},
             ),
-            (_PYPI, "https://user.example"),
+            ("https://pypi.org/simple", "https://user.example"),
             id="npmrc-user-config-variable",
         ),
     ],
@@ -617,7 +615,10 @@ def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
     main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml", "requirements.txt", "script.py"])
 
     assert (
-        [(tmp_path / name).read_text(encoding="utf-8").splitlines()[line] for name, line in _UPDATED_LINES],
+        [
+            (tmp_path / name).read_text(encoding="utf-8").splitlines()[line]
+            for name, line in [("pyproject.toml", 2), ("requirements.txt", 0), ("script.py", 1)]
+        ],
         {
             request.headers.get("Authorization")
             for request in httpx_mock.get_requests()
@@ -631,9 +632,6 @@ def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
         ],
         {"Basic OnRvaw=="},
     )
-
-
-_UPDATED_LINES: Final[list[tuple[str, int]]] = [("pyproject.toml", 2), ("requirements.txt", 0), ("script.py", 1)]
 
 
 def test_main_expands_npmrc_variables_and_sends_basic_credentials(

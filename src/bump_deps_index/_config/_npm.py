@@ -5,16 +5,11 @@ import re
 from base64 import b64decode, b64encode
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-# npm reads `${NAME}` from the environment and keeps it as written when unset, and reads `${NAME?}` as empty then
-_ENV_REFERENCE: Final[re.Pattern[str]] = re.compile(r"\$\{(?P<name>[^${}?]+)(?P<optional>\?)?\}")
-# the token comes last to override a basic credential for the same registry
-_CREDENTIALS: Final[dict[str, str]] = {":_auth": "Basic", ":_authToken": "Bearer"}
 
 
 def npm_registry() -> str:
@@ -63,7 +58,12 @@ def _npmrc_value(raw: str) -> str:
         value = value[1:-1]
     else:
         value = re.split(r"[;#]", value, maxsplit=1)[0].rstrip()
-    return _ENV_REFERENCE.sub(lambda match: os.environ.get(match["name"], "" if match["optional"] else match[0]), value)
+    # npm reads `${NAME}` from the environment and keeps it as written when unset, and reads `${NAME?}` as empty then
+    return re.sub(
+        r"\$\{(?P<name>[^${}?]+)(?P<optional>\?)?\}",
+        lambda match: os.environ.get(match["name"], "" if match["optional"] else match[0]),
+        value,
+    )
 
 
 def _npm_authorizations(values: dict[str, str]) -> dict[str, str]:
@@ -73,7 +73,8 @@ def _npm_authorizations(values: dict[str, str]) -> dict[str, str]:
         prefix = key.removesuffix(":username")
         if key.startswith("//") and key != prefix and (basic := _basic(username, values.get(f"{prefix}:_password"))):
             found[prefix] = f"Basic {basic}"
-    for suffix, scheme in _CREDENTIALS.items():
+    # the token comes last to override a basic credential for the same registry
+    for suffix, scheme in {":_auth": "Basic", ":_authToken": "Bearer"}.items():
         found |= {
             key.removesuffix(suffix): f"{scheme} {value}"
             for key, value in values.items()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import quote
 
 from bump_deps_index._cache import FetchCache
@@ -14,8 +14,6 @@ if TYPE_CHECKING:
     from httpx import Client
 
     from bump_deps_index._config import NpmSettings
-
-_ACCEPT: Final[str] = "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
 
 
 class NpmRelease(NamedTuple):
@@ -43,7 +41,11 @@ class NpmRegistry:
             url,
             headers={
                 # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
-                "Accept": _ACCEPT if self.exclude_newer is None else "application/json",
+                "Accept": (
+                    "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
+                    if self.exclude_newer is None
+                    else "application/json"
+                ),
                 **({} if authorization is None else {"Authorization": authorization}),
             },
             follow_redirects=True,

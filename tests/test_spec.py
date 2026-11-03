@@ -239,8 +239,6 @@ def test_update_python_reports_index_errors(
 
 
 _CUTOFF: Final[str] = "2026-11-01T00:00:00Z"
-_BEFORE_CUTOFF: Final[str] = "2026-10-20T10:00:00.000000Z"
-_AFTER_CUTOFF: Final[str] = "2026-11-02T09:00:00Z"
 
 
 @pytest.mark.parametrize(
@@ -248,14 +246,14 @@ _AFTER_CUTOFF: Final[str] = "2026-11-02T09:00:00Z"
     [
         pytest.param(
             "A",
-            [("A-1.0.tar.gz", _BEFORE_CUTOFF), ("A-2.0.tar.gz", _AFTER_CUTOFF)],
+            [("A-1.0.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-2.0.tar.gz", "2026-11-02T09:00:00Z")],
             None,
             "A>=2",
             id="no-cutoff-takes-newest",
         ),
         pytest.param(
             "A",
-            [("A-1.0.tar.gz", _BEFORE_CUTOFF), ("A-2.0.tar.gz", _AFTER_CUTOFF)],
+            [("A-1.0.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-2.0.tar.gz", "2026-11-02T09:00:00Z")],
             _CUTOFF,
             "A>=1",
             id="too-new-release-skipped",
@@ -263,25 +261,25 @@ _AFTER_CUTOFF: Final[str] = "2026-11-02T09:00:00Z"
         pytest.param(
             "A",
             [
-                ("A-1.0.tar.gz", _BEFORE_CUTOFF),
-                ("A-2.0-py3-none-any.whl", _AFTER_CUTOFF),
+                ("A-1.0.tar.gz", "2026-10-20T10:00:00.000000Z"),
+                ("A-2.0-py3-none-any.whl", "2026-11-02T09:00:00Z"),
                 ("A-2.0.tar.gz", "2026-10-30T10:00:00Z"),
             ],
             _CUTOFF,
             "A>=2",
             id="earliest-file-dates-the-version",
         ),
-        pytest.param("A", [("A-2.0.tar.gz", _AFTER_CUTOFF)], _CUTOFF, "A", id="only-too-new-release"),
+        pytest.param("A", [("A-2.0.tar.gz", "2026-11-02T09:00:00Z")], _CUTOFF, "A", id="only-too-new-release"),
         pytest.param(
             "A",
-            [("A-1.0.tar.gz", _BEFORE_CUTOFF), ("A-2.0.tar.gz", None)],
+            [("A-1.0.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-2.0.tar.gz", None)],
             _CUTOFF,
             "A>=1",
             id="missing-upload-time-skipped",
         ),
         pytest.param(
             "A",
-            [("A-1.0.tar.gz", _BEFORE_CUTOFF), ("A-2.0.tar.gz", "2026-11-02")],
+            [("A-1.0.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-2.0.tar.gz", "2026-11-02")],
             _CUTOFF,
             "A>=1",
             id="offset-less-upload-time-skipped",
@@ -289,28 +287,28 @@ _AFTER_CUTOFF: Final[str] = "2026-11-02T09:00:00Z"
         pytest.param("A", [("A-2.0.tar.gz", None)], _CUTOFF, "A", id="no-upload-times"),
         pytest.param(
             "A>=2.0",
-            [("A-2.5.tar.gz", _BEFORE_CUTOFF), ("A-3.0.tar.gz", _AFTER_CUTOFF)],
+            [("A-2.5.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-3.0.tar.gz", "2026-11-02T09:00:00Z")],
             _CUTOFF,
             "A>=2.5",
             id="floor-moves",
         ),
         pytest.param(
             "A>=2.5",
-            [("A-2.4.tar.gz", _BEFORE_CUTOFF), ("A-3.0.tar.gz", _AFTER_CUTOFF)],
+            [("A-2.4.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-3.0.tar.gz", "2026-11-02T09:00:00Z")],
             _CUTOFF,
             "A>=2.5",
             id="floor-above-eligible-kept",
         ),
         pytest.param(
             "A>=2.5",
-            [("A-2.5.tar.gz", _BEFORE_CUTOFF), ("A-3.0.tar.gz", _AFTER_CUTOFF)],
+            [("A-2.5.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-3.0.tar.gz", "2026-11-02T09:00:00Z")],
             _CUTOFF,
             "A>=2.5",
             id="floor-at-eligible-kept",
         ),
         pytest.param(
             "A==2.5",
-            [("A-2.4.tar.gz", _BEFORE_CUTOFF), ("A-2.6.tar.gz", _AFTER_CUTOFF)],
+            [("A-2.4.tar.gz", "2026-10-20T10:00:00.000000Z"), ("A-2.6.tar.gz", "2026-11-02T09:00:00Z")],
             _CUTOFF,
             "A==2.5",
             id="pin-above-eligible-kept",
