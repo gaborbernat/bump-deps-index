@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from httpx import Client
 
-    from ._config import NpmSettings
+    from ._config._npm import NpmSettings
 
 
 class NpmRegistry:

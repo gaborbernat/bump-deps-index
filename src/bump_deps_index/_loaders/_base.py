@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
 
-    from bump_deps_index._config import UvIndexes
+    from bump_deps_index._config._uv import UvIndexes
     from bump_deps_index._lookup import PkgType
 
 

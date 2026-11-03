@@ -12,14 +12,9 @@ from httpx import Client, HTTPError, Limits
 from truststore import SSLContext
 from yaml import YAMLError
 
-from ._config import (
-    IndexSettings,
-    entry_indexes,
-    get_project,
-    named_indexes,
-    npm_settings,
-    pip_extra_indexes,
-)
+from ._config._npm import npm_settings
+from ._config._pip import pip_extra_indexes
+from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes
 from ._loaders._registry import get_loaders
 from ._lookup import Lookup, PkgType, package_type
 from ._npm_registry import NpmRegistry
@@ -32,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from ._cli import Options
-    from ._config import Project
+    from ._config._project import Project
     from ._loaders._base import Loaded, Loader
 
 

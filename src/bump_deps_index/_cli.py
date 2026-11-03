@@ -6,7 +6,8 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ._config import npm_registry, python_exclude_newer, python_index_url
+from ._config._npm import npm_registry
+from ._config._python import python_exclude_newer, python_index_url
 from ._cutoff import parse_exclude_newer
 from ._loaders._registry import get_loaders
 from ._redact import redact_url
