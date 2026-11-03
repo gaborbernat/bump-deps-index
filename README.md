@@ -74,10 +74,13 @@ On npm ranges you stay inside the range, so `^1.2.0` goes to the newest `1.x` re
 `1 || 2`, `latest` or an empty one untouched. As npm does, you get the `latest` dist-tag over a newer release when it
 fits the range. In `package.json` you get updates for `dependencies`, `devDependencies` and `optionalDependencies`.
 
-With `--exclude-newer`, or the `UV_EXCLUDE_NEWER` variable that uv reads for its lock step, you only move to releases
-uploaded before the cutoff. The cutoff is an RFC 3339 timestamp, a local date, or a duration counted back from now, such
-as `P7D` or `7 days`. As uv does, you skip a file without an upload time. You read upload times from the PEP 700 fields
-of the JSON simple API and from the `time` map of the npm registry, so an index that serves only HTML offers no
+With `--exclude-newer` you only move to releases uploaded before the cutoff. Without the flag you get the cutoff from
+`PIP_UPLOADED_PRIOR_TO`, then `UV_EXCLUDE_NEWER` (the variable uv reads for its lock step), then `exclude-newer` in the
+nearest `uv.toml` or `[tool.uv]` table, then `uploaded-prior-to` in your pip configuration, then `exclude-newer` in your
+user `uv.toml`. The first one set wins, and `exclude-newer = false` in uv settings counts as unset. The cutoff is an RFC
+3339 timestamp, a local date, a datetime without an offset (read as local time), or a duration counted back from now,
+such as `P7D` or `7 days`. As uv does, you skip a file without an upload time. You read upload times from the PEP 700
+fields of the JSON simple API and from the `time` map of the npm registry, so an index that serves only HTML offers no
 candidates under a cutoff. A requirement already above the newest eligible release keeps its floor.
 
 In `.pre-commit-config.yaml`, you get PyPI updates for `python` hooks and npm updates for `node` hooks, and no updates
