@@ -26,7 +26,7 @@ def _inheritance_aliases() -> dict[str, str]:
     return aliases
 
 
-project = name = "bump-deps-index"
+project = "bump-deps-index"
 now = datetime.now(tz=UTC)
 globals()["copyright"] = f"2022-{now.year}"
 version, release = __version__, __version__.split("+")[0]
