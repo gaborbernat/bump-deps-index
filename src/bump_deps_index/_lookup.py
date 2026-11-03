@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -15,7 +16,8 @@ class PkgType(StrEnum):
     JS = "JavaScript"
 
 
-class IndexLookup(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class IndexLookup:
     url: str
     # uv indexes checked before `url`; uv takes a package from the first one that has it
     first: tuple[str, ...] = ()
@@ -23,7 +25,8 @@ class IndexLookup(NamedTuple):
     extra: tuple[str, ...] = ()
 
 
-class Lookup(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Lookup:
     requirement: str
     pkg_type: PkgType
     pre_release: bool

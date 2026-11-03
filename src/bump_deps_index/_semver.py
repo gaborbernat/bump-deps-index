@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, NamedTuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -33,7 +34,9 @@ def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_relea
                 depth = 2
             case _:  # `^1.2.3` keeps the major inside its range, `^0.2.3` the minor and `^0.0.3` the patch
                 depth = 1 if current.major else 2 if current.minor else 3
-        candidates = [version for key, version in ranked if key >= current and key[:depth] == current[:depth]]
+        candidates = [
+            version for key, version in ranked if key >= current and key.prefix(depth) == current.prefix(depth)
+        ]
     if not candidates:  # the registry has no release you accept, such as only pre-releases
         return spec
     # npm installs the `latest` dist-tag when it fits the range, and the highest version otherwise
@@ -45,13 +48,17 @@ def split_npm_spec(spec: str) -> tuple[str, str]:
     return (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
 
 
-class _Semver(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True, order=True)
+class _Semver:
     major: int
     minor: int
     patch: int
     # a release sorts above its pre-releases
     release: bool
     pre: tuple[tuple[int, int, str], ...]
+
+    def prefix(self, depth: int) -> tuple[int, ...]:
+        return (self.major, self.minor, self.patch)[:depth]
 
 
 def _pad_version(version: str) -> str:
@@ -72,7 +79,13 @@ def _semver(version: str) -> _Semver | None:
     identifiers = (
         tuple((0, int(part), "") if part.isdecimal() else (1, 0, part) for part in pre.split(".")) if pre else ()
     )
-    return _Semver(int(match["major"]), int(match["minor"]), int(match["patch"]), pre is None, identifiers)
+    return _Semver(
+        major=int(match["major"]),
+        minor=int(match["minor"]),
+        patch=int(match["patch"]),
+        release=pre is None,
+        pre=identifiers,
+    )
 
 
 __all__ = [

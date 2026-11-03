@@ -91,7 +91,7 @@ def _basic(username: str, encoded_password: str | None) -> str | None:
     return b64encode(f"{username}:{password}".encode()).decode() if password else None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NpmSettings:
     registry_by_scope: Mapping[str, str]
     authorization_by_key: Mapping[str, str]

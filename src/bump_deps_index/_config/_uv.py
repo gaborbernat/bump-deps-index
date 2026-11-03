@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import re
-from typing import TYPE_CHECKING, NamedTuple
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from urllib.parse import quote, urlsplit
 
 from packaging.utils import canonicalize_name
@@ -22,7 +23,9 @@ def uv_project_indexes(folder: Path, pyproject: dict[str, Parsed]) -> UvIndexes:
     folders = [*_workspace_root(folder), (folder, table(pyproject, "tool", "uv"))]
     layers = [(uv, read_toml(path / "uv.toml")) for path, uv in folders]
     # uv reads `uv.toml` over the `[tool.uv]` table next to it
-    return UvIndexes(_sources(layers), _first_indexes([uv for layer in reversed(layers) for uv in reversed(layer)]))
+    return UvIndexes(
+        sources=_sources(layers), first=_first_indexes([uv for layer in reversed(layers) for uv in reversed(layer)])
+    )
 
 
 def _workspace_root(folder: Path) -> list[tuple[Path, dict[str, Parsed]]]:
@@ -76,7 +79,8 @@ def _extra_indexes(uv: dict[str, Parsed]) -> list[str]:
     ]
 
 
-class UvIndexes(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UvIndexes:
     # the index each source pins a package to, or None for a package from git, a path or a URL
     sources: dict[str, str | None]
     # the indexes uv checks before its default one; it takes a package from the first that has it
@@ -86,7 +90,7 @@ class UvIndexes(NamedTuple):
 def script_uv_indexes(metadata: dict[str, Parsed]) -> tuple[UvIndexes, str | None]:
     # `uv run --script` reads the `[tool.uv]` table of the script, outside any project
     uv = table(metadata, "tool", "uv")
-    return UvIndexes(_sources([(uv, {})]), _first_indexes([uv])), default_index(uv)
+    return UvIndexes(sources=_sources([(uv, {})]), first=_first_indexes([uv])), default_index(uv)
 
 
 def uv_settings(folder: Path) -> dict[str, Parsed]:

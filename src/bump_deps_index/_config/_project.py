@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from tomllib import load as load_toml
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
@@ -36,39 +37,39 @@ def get_project(directory: Path) -> Project:
         project = table(config, "project")
         name, requires_python = project.get("name"), project.get("requires-python")
         return Project(
-            pyproject,
-            canonicalize_name(name) if isinstance(name, str) else None,
-            python_floor(requires_python if isinstance(requires_python, str) else None),
-            uv_project_indexes(pyproject.parent, config),
+            pyproject=pyproject,
+            name=canonicalize_name(name) if isinstance(name, str) else None,
+            python_floor=python_floor(requires_python if isinstance(requires_python, str) else None),
+            uv=uv_project_indexes(pyproject.parent, config),
         )
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"ignoring project metadata from {pyproject}, so its uv settings are not read: {exc!r}\n")
-        return Project(pyproject)
+        return Project(pyproject=pyproject)
 
 
 def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: IndexSettings) -> IndexLookup:
     if pkg_type is PkgType.JS:
-        return IndexLookup(settings.npm.registry(package, settings.npm_registry))
+        return IndexLookup(url=settings.npm.registry(package, settings.npm_registry))
     # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
     python_lookup = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
-    return python_lookup or IndexLookup(settings.index_url)
+    return python_lookup or IndexLookup(url=settings.index_url)
 
 
 def _python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: tuple[str, ...]) -> IndexLookup | None:
     package = canonicalize_name(name)
     if uv is None:  # pip installs the file, and merges its extra indexes with the default one
-        return IndexLookup(default, extra=pip_extras)
+        return IndexLookup(url=default, extra=pip_extras)
     if package not in uv.sources:
-        return IndexLookup(default, first=uv.first)
+        return IndexLookup(url=default, first=uv.first)
     # uv looks up a package a source pins to an index on that index alone, and skips one from git, a path or a URL
-    return None if (pinned := uv.sources[package]) is None else IndexLookup(pinned)
+    return None if (pinned := uv.sources[package]) is None else IndexLookup(url=pinned)
 
 
 def entry_indexes(
     name: str, entry: Entry, project: Project, own_uv: UvIndexes | None, settings: IndexSettings
 ) -> IndexLookup | None:
     if entry.pkg_type is PkgType.JS:
-        return IndexLookup(settings.npm.registry(name, settings.npm_registry))
+        return IndexLookup(url=settings.npm.registry(name, settings.npm_registry))
     try:
         requirement = Requirement(name)
     except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
@@ -84,14 +85,16 @@ def entry_indexes(
     )
 
 
-class Project(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Project:
     pyproject: Path | None = None
     name: str | None = None
     python_floor: Version | None = None
     uv: UvIndexes | None = None
 
 
-class IndexSettings(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class IndexSettings:
     index_url: str
     pip_extras: tuple[str, ...]
     npm_registry: str

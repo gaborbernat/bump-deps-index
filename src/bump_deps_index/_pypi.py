@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import cache
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 from httpx import HTTPStatusError, codes
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -81,9 +82,9 @@ class SimpleIndex:
             # skip malformed entries the way the HTML parser skips malformed links
             return [
                 _IndexFile(
-                    filename,
-                    requires if isinstance(requires := file.get("requires-python"), str) else None,
-                    parse_timestamp(file.get("upload-time")),
+                    filename=filename,
+                    requires_python=requires if isinstance(requires := file.get("requires-python"), str) else None,
+                    uploaded=parse_timestamp(file.get("upload-time")),
                 )
                 for file in mappings(json_field(response, "files", list))
                 if isinstance(filename := file.get("filename"), str) and not file.get("yanked")
@@ -93,7 +94,8 @@ class SimpleIndex:
         return parser.files
 
 
-class _IndexFile(NamedTuple):
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _IndexFile:
     filename: str
     requires_python: str | None
     # PEP 700 upload time; the HTML simple API has none
@@ -124,7 +126,7 @@ class _IndexParser(HTMLParser):
             and all(key != "data-yanked" for key, _ in self._attrs)
         ):
             requires_python = next((value for key, value in self._attrs if key == "data-requires-python"), None)
-            self.files.append(_IndexFile(data.strip(), requires_python))
+            self.files.append(_IndexFile(filename=data.strip(), requires_python=requires_python))
 
 
 @cache

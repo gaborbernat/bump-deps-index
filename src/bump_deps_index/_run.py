@@ -38,7 +38,11 @@ if TYPE_CHECKING:
 
 def run(options: Options) -> bool:
     settings = IndexSettings(
-        options.index_url, pip_extra_indexes(), options.npm_registry, npm_settings(), options.exclude_newer
+        index_url=options.index_url,
+        pip_extras=pip_extra_indexes(),
+        npm_registry=options.npm_registry,
+        npm=npm_settings(),
+        exclude_newer=options.exclude_newer,
     )
     if options.pkgs:
         return _run_packages(
@@ -58,7 +62,13 @@ def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_re
     package = raw.strip()
     pkg_type = package_type(package)
     indexes = named_indexes(package, pkg_type, project, settings)
-    return Lookup(package, pkg_type, pre_release, project.python_floor, indexes)
+    return Lookup(
+        requirement=package,
+        pkg_type=pkg_type,
+        pre_release=pre_release,
+        python_floor=project.python_floor,
+        indexes=indexes,
+    )
 
 
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
@@ -107,7 +117,15 @@ def _load_lookups(
     for entry in entries:
         if (name := entry.spec.strip()) and (indexes := entry_indexes(name, entry, project, own_uv, settings)):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
-            lookups[Lookup(name, entry.pkg_type, pre_release, floor, indexes)] = None
+            lookups[
+                Lookup(
+                    requirement=name,
+                    pkg_type=entry.pkg_type,
+                    pre_release=pre_release,
+                    python_floor=floor,
+                    indexes=indexes,
+                )
+            ] = None
     return list(lookups)
 
 
