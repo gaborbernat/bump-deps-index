@@ -3,6 +3,23 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-19-0:
+
+1.19.0 (2026-11-04)
+-------------------
+
+.. _release-1-19-0-added:
+
+Added
+~~~~~
+
+- Added ``--exclude-newer-group GROUP=CUTOFF``, repeatable, to give a PEP 735 dependency group its own cutoff, with
+  ``project`` for the project's dependencies and extras, and ``GROUP=false`` to lift the global cutoff for that group
+  (:pr:`304`) by :user:`gaborbernat`.
+- Added ``--exclude-newer-package NAME=CUTOFF``, repeatable, to give one package its own cutoff in place of
+  ``--exclude-newer``, and ``NAME=false`` to lift the cutoff for that package. The ``exclude-newer-package`` table in
+  project and user ``uv`` settings sets the same per-package cutoffs (:pr:`304`) by :user:`gaborbernat`.
+
 .. _release-1-18-0:
 
 1.18.0 (2026-11-04)
