@@ -3,6 +3,11 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-19-1:
+
+1.19.1 (2026-11-04)
+-------------------
+
 .. _release-1-19-0:
 
 1.19.0 (2026-11-04)
