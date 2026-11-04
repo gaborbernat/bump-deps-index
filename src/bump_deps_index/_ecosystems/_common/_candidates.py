@@ -34,6 +34,8 @@ class Lookup:
     indexes: IndexLookup
     # the PEP 735 group the requirement is listed in, None when the file has no groups
     group: str | None
+    # the cutoff resolved for this lookup, None when it is uncooled
+    exclude_newer: datetime | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

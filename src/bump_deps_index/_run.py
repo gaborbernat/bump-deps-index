@@ -4,6 +4,7 @@ import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from configparser import Error as ConfigParserError
+from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,7 +16,7 @@ from yaml import YAMLError
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
 from ._config._project import Declared, IndexSettings, Scope, get_project, python_floor
-from ._ecosystems._common._candidates import Lookup
+from ._ecosystems._common._candidates import Lookup, exclude_newer_for
 from ._ecosystems._common._registry import get_loaders
 from ._ecosystems._table import ECOSYSTEMS
 from ._http._hook_manifest import hook_languages
@@ -71,6 +72,7 @@ def _named_lookup(raw: str, scope: Scope, *, pre_release: bool) -> Lookup:
         python_floor=scope.project.python_floor,
         indexes=ecosystem.route(package, name, scope),
         group=None,
+        exclude_newer=exclude_newer_for(scope.settings, name, canonical=ecosystem.canonical, group=None),
     )
 
 
@@ -138,32 +140,30 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
     # resolve the files in one batch to send one lookup per package across files
     results, resolved = _report(settings, list(dict.fromkeys(chain.from_iterable(lookups for *_, lookups in plans))))
     for filename, loader, loaded, lookups in plans:
-        changes, disagreeing = _file_changes(lookups, results)
-        for requirement in disagreeing:
-            sys.stderr.write(
-                redact_text(
-                    f"{requirement} resolves differently across its dependency groups in {filename}, "
-                    "so it was not updated; pass --exclude-newer-group to give the groups one cutoff\n"
-                )
-            )
-        resolved = resolved and not disagreeing
-        loader.update_file(filename, loaded, changes)
+        loader.update_file(filename, loaded, _file_changes(filename, lookups, results))
     return successful and resolved
 
 
-def _file_changes(lookups: Sequence[Lookup], results: Mapping[Lookup, str]) -> tuple[dict[str, str], list[str]]:
+def _file_changes(filename: Path, lookups: Sequence[Lookup], results: Mapping[Lookup, str]) -> dict[str, str]:
     # a rewrite edits every line that reads a requirement, so a requirement listed in several groups takes one value
-    outcomes: dict[str, set[str]] = defaultdict(set)
+    by_requirement: dict[str, list[Lookup]] = defaultdict(list)
     for lookup in lookups:
-        outcomes[lookup.requirement].add(results.get(lookup, lookup.requirement))
+        by_requirement[lookup.requirement].append(lookup)
     changes: dict[str, str] = {}
-    disagreeing: list[str] = []
-    for requirement, values in outcomes.items():
-        if len(values) > 1:
-            disagreeing.append(requirement)
-        elif (new := next(iter(values))) != requirement:
+    for requirement, listed in by_requirement.items():
+        # the earliest cutoff is the strictest, and an uncooled lookup is the most lenient
+        strictest = min(listed, key=lambda lookup: lookup.exclude_newer or datetime.max.replace(tzinfo=UTC))
+        if len({lookup.exclude_newer for lookup in listed}) > 1:
+            groups = ", ".join(sorted({lookup.group or "no group" for lookup in listed}))
+            sys.stderr.write(
+                redact_text(
+                    f"{requirement} is listed under {groups} in {filename} with different cutoffs, "
+                    f"so it uses the stricter one, {strictest.exclude_newer}\n"
+                )
+            )
+        if (new := results.get(strictest, requirement)) != requirement:
             changes[requirement] = new
-    return changes, disagreeing
+    return changes
 
 
 def _load_lookups(
@@ -201,6 +201,7 @@ def _load_lookups(
                     python_floor=floor,
                     indexes=indexes,
                     group=entry.group,
+                    exclude_newer=exclude_newer_for(settings, name, canonical=ecosystem.canonical, group=entry.group),
                 )
             ] = None
     return loaded, list(lookups)

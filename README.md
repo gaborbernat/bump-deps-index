@@ -101,8 +101,9 @@ script are `project`, and each `[dependency-groups]` table is its own group. Req
 build requirements, requirements files, tox, pre-commit hooks and `package.json`, keep the global cutoff. A package flag
 or table entry wins over a group cutoff, which wins over the global one. Group names match after PEP 503 normalization,
 as `Test` and `test` are one group. Nothing in the settings files sets group cutoffs, as uv has no equivalent. A
-requirement that several groups list with different outcomes is not updated, and the run reports it, since a rewrite
-edits the text of a requirement rather than one line.
+requirement that several groups list with different cutoffs takes the stricter one, the earliest cutoff among them, and
+the run prints a notice. It is uncooled only when every group leaves it uncooled, and every occurrence takes the same
+value, since a rewrite edits the text of a requirement rather than one line.
 
 The cutoff is an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp, a local date, a datetime without an
 offset (read as local time), or a duration counted back from now, such as `P7D` or `7 days`. As `uv` does, you skip a

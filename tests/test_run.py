@@ -377,40 +377,54 @@ def test_run_applies_cutoff_per_dependency_group(
     assert _specs(Path("pyproject.toml").read_text(encoding="utf-8")) == expected
 
 
+_SAME_TEXT_GROUPS: str = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
+
+
 @pytest.mark.usefixtures("isolated_index_settings", "work_dir")
-def test_run_skips_requirement_listed_under_different_group_cutoffs(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+@pytest.mark.parametrize(
+    ("extra", "expected", "notice"),
+    [
+        pytest.param(
+            ["--exclude-newer-group", "test=false"],
+            _SAME_TEXT_GROUPS,
+            "lib>=1 is listed under lint, test in pyproject.toml with different cutoffs, "
+            "so it uses the stricter one, 2026-11-01 00:00:00+00:00\n",
+            id="global-is-stricter",
+        ),
+        pytest.param(
+            ["--exclude-newer-group", "test=2026-11-03T00:00:00Z", "--exclude-newer-group", "lint=false"],
+            _SAME_TEXT_GROUPS.replace("lib>=1", "lib>=2"),
+            "lib>=1 is listed under lint, test in pyproject.toml with different cutoffs, "
+            "so it uses the stricter one, 2026-11-03 00:00:00+00:00\n",
+            id="group-is-stricter",
+        ),
+        pytest.param(
+            ["--exclude-newer-group", "test=false", "--exclude-newer-group", "lint=false"],
+            _SAME_TEXT_GROUPS.replace("lib>=1", "lib>=2"),
+            "",
+            id="all-uncooled",
+        ),
+    ],
+)
+def test_run_resolves_requirement_listed_under_different_cutoffs(
+    extra: list[str], expected: str, notice: str, capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
 ) -> None:
-    content = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
-    Path("pyproject.toml").write_text(content, encoding="utf-8")
+    Path("pyproject.toml").write_text(_SAME_TEXT_GROUPS, encoding="utf-8")
     httpx_mock.add_callback(_two_releases, is_reusable=True)
 
-    with pytest.raises(SystemExit) as error:
-        main([
-            "-i",
-            "https://I.com",
-            "-p",
-            "no",
-            "--exclude-newer",
-            "2026-11-01T00:00:00Z",
-            "--exclude-newer-group",
-            "test=false",
-            "-f",
-            "pyproject.toml",
-        ])
+    main([
+        "-i",
+        "https://I.com",
+        "-p",
+        "no",
+        "--exclude-newer",
+        "2026-11-01T00:00:00Z",
+        *extra,
+        "-f",
+        "pyproject.toml",
+    ])
 
-    assert (
-        error.value.code,
-        Path("pyproject.toml").read_text(encoding="utf-8"),
-        capsys.readouterr().err,
-    ) == (
-        1,
-        content,
-        (
-            "lib>=1 resolves differently across its dependency groups in pyproject.toml, so it was not updated; "
-            "pass --exclude-newer-group to give the groups one cutoff\n"
-        ),
-    )
+    assert (Path("pyproject.toml").read_text(encoding="utf-8"), capsys.readouterr().err) == (expected, notice)
 
 
 @pytest.mark.usefixtures("isolated_index_settings", "work_dir")
