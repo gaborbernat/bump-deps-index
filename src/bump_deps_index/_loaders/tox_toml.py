@@ -57,7 +57,7 @@ class ToxToml(SingleFileLoader):
             case list():
                 for item in value:
                     yield from ToxToml._requirements(item)
-            case dict() if (kind := value.get("replace")) in _SUBSTITUTIONS:
+            case dict() if isinstance(kind := value.get("replace"), str) and kind in _SUBSTITUTIONS:
                 for key in _SUBSTITUTIONS[kind]:
                     yield from ToxToml._requirements(value.get(key))
 

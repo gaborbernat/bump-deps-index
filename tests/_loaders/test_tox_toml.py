@@ -316,6 +316,29 @@ def test_tox_toml_malformed_env_entry(capsys: pytest.CaptureFixture[str], tmp_pa
             PYPI_FOO,
             id="tox-toml-replace-in-tables",
         ),
+        pytest.param(
+            "tox.toml",
+            """
+            requires = ["foo>=1"]
+            [env.a]
+            deps = [
+              { replace = ["posargs"], default = ["foo>=1"] },
+              { replace = { kind = "if" }, then = ["foo>=1"] },
+              "foo>=1",
+            ]
+            """,
+            """
+            requires = ["foo>=2"]
+            [env.a]
+            deps = [
+              { replace = ["posargs"], default = ["foo>=1"] },
+              { replace = { kind = "if" }, then = ["foo>=1"] },
+              "foo>=2",
+            ]
+            """,
+            PYPI_FOO,
+            id="tox-toml-substitution-kind-not-a-string",
+        ),
     ],
     indirect=["pages"],
 )
