@@ -26,7 +26,11 @@ class SetupCfg(SingleFileLoader):
             *(cfg["options.extras_require"].values() if cfg.has_section("options.extras_require") else []),
         ]
         return Loaded(
-            entries=[Entry(spec=value, pkg_type=PkgType.PYTHON) for group in groups for value in ini_values(group)],
+            entries=[
+                Entry(spec=value, pkg_type=PkgType.PYTHON, group="project")
+                for group in groups
+                for value in ini_values(group)
+            ],
             rewrite=self._update_text,
         )
 

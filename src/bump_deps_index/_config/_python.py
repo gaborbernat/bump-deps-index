@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from bump_deps_index._parsed import table
+
 from ._files import user_uv_settings
 from ._pip import pip_setting
 from ._uv import default_index, uv_settings
@@ -44,7 +46,25 @@ def python_exclude_newer() -> str | None:
     )
 
 
+def python_exclude_newer_package() -> dict[str, str | Literal[False]]:
+    # uv merges the user's table under the project's, so a package named in both takes the project's cutoff
+    cwd = Path.cwd()
+    project = next(
+        (cutoffs for folder in (cwd, *cwd.parents) if (cutoffs := _package_cutoffs(uv_settings(folder)))), {}
+    )
+    return {**_package_cutoffs(user_uv_settings()), **project}
+
+
+def _package_cutoffs(uv: dict[str, Parsed]) -> dict[str, str | Literal[False]]:
+    return {
+        name: value
+        for name, value in table(uv, "exclude-newer-package").items()
+        if value is False or isinstance(value, str)
+    }
+
+
 __all__ = [
     "python_exclude_newer",
+    "python_exclude_newer_package",
     "python_index_url",
 ]

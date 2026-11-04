@@ -12,22 +12,26 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
+from bump_deps_index._ecosystems._common._candidates import (
+    Candidate,
+    Candidates,
+    Lookup,
+    Registry,
+    accepted_versions,
+)
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
-    from bump_deps_index._config._project import IndexSettings
     from bump_deps_index._http._session import Session
     from bump_deps_index._lookup import IndexLookup
 
 
 class SimpleIndex(Registry):
-    def __init__(self, session: Session, settings: IndexSettings) -> None:
+    def __init__(self, session: Session) -> None:
         self._session = session
-        self._settings = settings
 
     def candidates(self, lookup: Lookup) -> Candidates:
         # lazy, so a URL requirement, which the bump keeps as is, reads no index
@@ -57,7 +61,7 @@ class SimpleIndex(Registry):
         candidates.sort(key=itemgetter(0), reverse=True)
         yield from accepted_versions(
             (candidate for _, candidate in candidates),
-            exclude_newer=self._settings.exclude_newer,
+            exclude_newer=lookup.exclude_newer,
             pre_release=lookup.pre_release,
             is_prerelease=lambda text: Version(text).is_prerelease,
         )

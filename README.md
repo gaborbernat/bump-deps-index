@@ -75,14 +75,35 @@ On `npm` ranges you stay inside the range, so `^1.2.0` goes to the newest `1.x` 
 fits the range. In `package.json` you get updates for `dependencies`, `devDependencies` and `optionalDependencies`.
 
 With `--exclude-newer` you only move to releases uploaded before the cutoff, and the flag beats every other source.
-`--no-exclude-newer` drops the cutoff altogether, beating every other source as well, and the two flags cannot be
-combined.
+`--no-exclude-newer` drops every cutoff, the per-package and per-group ones too, beating every other source as well, and
+it cannot be combined with `--exclude-newer`, `--exclude-newer-package` or `--exclude-newer-group`.
 
 Without a flag you get the cutoff from `PIP_UPLOADED_PRIOR_TO`, then `UV_EXCLUDE_NEWER` (the variable `uv` reads for its
 lock step), then `exclude-newer` in the nearest `uv.toml` or `[tool.uv]` table, then `uploaded-prior-to` in your `pip`
 configuration, then `exclude-newer` in your user `uv.toml`. The first one set wins. An `exclude-newer = false` in a `uv`
 file disables the cutoff and stops the lookup, so the `pip` configuration and the user `uv.toml` are not read; an
 environment variable still ranks above it.
+
+With `--exclude-newer-package NAME=CUTOFF` a package takes its own cutoff in place of the global one, in any form
+`--exclude-newer` accepts, and `NAME=false` lifts the cutoff for that package, so you can expedite one release. The flag
+repeats, and it beats the same package in the settings: an `exclude-newer-package` table in the nearest `uv.toml` or
+`[tool.uv]` table that names packages, and in your user `uv.toml` for the packages the project does not name. A package
+in both takes the project's entry. Python names match after [PEP 503](https://peps.python.org/pep-0503/) normalization,
+so `Foo_Bar` and `foo-bar` are one package, and npm names match exactly.
+
+With `--exclude-newer-group GROUP=CUTOFF` a [PEP 735](https://peps.python.org/pep-0735/) dependency group takes its own
+cutoff, in any form `--exclude-newer` accepts, and `GROUP=false` lifts the global cutoff for it. The name `project`
+stands for the project's own dependencies and extras, so
+`--exclude-newer-group project=false --exclude-newer-group test=false` keeps a library's direct and test dependencies
+fresh while its build and tool requirements stay cooled. Each requirement takes the group it is listed under:
+`[project]` dependencies, extras, the install requirements and extras of `setup.cfg`, and the dependencies of a PEP 723
+script are `project`, and each `[dependency-groups]` table is its own group. Requirements outside any group, such as
+build requirements, requirements files, tox, pre-commit hooks and `package.json`, keep the global cutoff. A package flag
+or table entry wins over a group cutoff, which wins over the global one. Group names match after PEP 503 normalization,
+as `Test` and `test` are one group. Nothing in the settings files sets group cutoffs, as uv has no equivalent. A
+requirement that several groups list with different cutoffs takes the stricter one, the earliest cutoff among them, and
+the run prints a notice. It is uncooled only when every group leaves it uncooled, and every occurrence takes the same
+value, since a rewrite edits the text of a requirement rather than one line.
 
 The cutoff is an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamp, a local date, a datetime without an
 offset (read as local time), or a duration counted back from now, such as `P7D` or `7 days`. As `uv` does, you skip a

@@ -6,8 +6,11 @@ from typing import TYPE_CHECKING, Final
 import httpx
 import pytest
 
+from bump_deps_index import main
+
 if TYPE_CHECKING:
     from conftest import Bump
+    from pytest_httpx import HTTPXMock
 
 pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
@@ -270,3 +273,93 @@ def test_update_python_html_index_has_no_upload_times(exclude_newer: str | None,
         )
         == result
     )
+
+
+_PYPI_JSON: Final[dict[str, str]] = {"content-type": "application/vnd.pypi.simple.v1+json"}
+
+
+@pytest.mark.parametrize(
+    ("args", "line"),
+    [
+        pytest.param(
+            ["--exclude-newer", _CUTOFF, "--exclude-newer-package", "a=2026-11-03T00:00:00Z"],
+            "A -> A>=2",
+            id="package-later-than-global",
+        ),
+        pytest.param(
+            ["--exclude-newer-package", "a=2026-11-01T00:00:00Z"],
+            "A -> A>=1",
+            id="package-without-global",
+        ),
+        pytest.param(
+            ["--exclude-newer", "2026-11-03T00:00:00Z", "--exclude-newer-package", "a=2026-11-01T00:00:00Z"],
+            "A -> A>=1",
+            id="package-earlier-than-global",
+        ),
+        pytest.param(
+            ["--exclude-newer", _CUTOFF, "--exclude-newer-package", "a=false"],
+            "A -> A>=2",
+            id="package-false-lifts-global",
+        ),
+        pytest.param(
+            ["--exclude-newer", _CUTOFF, "--exclude-newer-package", "b=false"],
+            "A -> A>=1",
+            id="other-package-keeps-global",
+        ),
+        pytest.param(
+            ["--exclude-newer-package", "a=false", "--exclude-newer-package", "a=2026-11-01T00:00:00Z"],
+            "A -> A>=1",
+            id="last-flag-wins",
+        ),
+    ],
+)
+@pytest.mark.usefixtures("work_dir")
+def test_update_python_applies_package_cutoff(
+    args: list[str], line: str, capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    files = [
+        {"filename": "A-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
+        {"filename": "A-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
+    ]
+    httpx_mock.add_response(url="https://I.com/a/", json={"files": files}, headers=_PYPI_JSON)
+
+    main(["-i", "https://I.com", "-p", "no", *args, "A"])
+
+    assert capsys.readouterr().out.splitlines()[-1] == line
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("FOO.BAR", id="case-and-dot"),
+        pytest.param("foo_bar", id="underscore"),
+    ],
+)
+@pytest.mark.usefixtures("work_dir")
+def test_update_python_matches_package_cutoff_by_canonical_name(
+    name: str, capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    files = [
+        {"filename": "foo_bar-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
+        {"filename": "foo_bar-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
+    ]
+    httpx_mock.add_response(url="https://I.com/foo-bar/", json={"files": files}, headers=_PYPI_JSON)
+
+    main(["-i", "https://I.com", "-p", "no", "--exclude-newer-package", f"{name}=2026-11-01T00:00:00Z", "foo-bar"])
+
+    assert capsys.readouterr().out.splitlines()[-1] == "foo-bar -> foo-bar>=1"
+
+
+@pytest.mark.usefixtures("work_dir")
+def test_update_python_keeps_floor_above_package_cutoff(
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    files = [
+        {"filename": "A-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
+        {"filename": "A-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
+    ]
+    httpx_mock.add_response(url="https://I.com/a/", json={"files": files}, headers=_PYPI_JSON)
+
+    main(["-i", "https://I.com", "-p", "no", "--exclude-newer-package", "a=2026-11-01T00:00:00Z", "A>=1.5"])
+
+    assert capsys.readouterr().out.splitlines()[-1] == "A>=1.5"

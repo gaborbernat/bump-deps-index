@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
+from packaging.utils import canonicalize_name
+
 from bump_deps_index._config._project import entry_indexes, named_indexes
 from bump_deps_index._lookup import PkgType
 
@@ -27,6 +29,8 @@ class Ecosystem:
     bump: Callable[[str, Candidates], str]
     # raises InvalidRequirement for a Python spec that is not a requirement
     name: Callable[[str], str]
+    # the form two spellings of one package share, for matching the per-package and per-group settings
+    canonical: Callable[[str], str]
     # for a package named on the command line
     route: Callable[[str, str, Scope], IndexLookup]
     # for a requirement declared in a file; None skips it
@@ -37,9 +41,10 @@ class Ecosystem:
 
 ECOSYSTEMS: Final[dict[PkgType, Ecosystem]] = {
     PkgType.PYTHON: Ecosystem(
-        registry=SimpleIndex,
+        registry=lambda session, _settings: SimpleIndex(session),
         bump=bump_python,
         name=python_name,
+        canonical=canonicalize_name,
         route=named_indexes,
         entry_route=entry_indexes,
         index_url=lambda settings: settings.index_url,
@@ -48,6 +53,8 @@ ECOSYSTEMS: Final[dict[PkgType, Ecosystem]] = {
         registry=NpmRegistry,
         bump=bump_js,
         name=npm_name,
+        # npm does not normalize names, so only the exact spelling matches a settings entry
+        canonical=lambda name: name,
         route=npm_indexes,
         entry_route=npm_indexes,
         index_url=lambda settings: settings.npm_registry,

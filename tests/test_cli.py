@@ -175,6 +175,71 @@ def test_cli_exclude_newer_flags_conflict(args: list[str], capsys: pytest.Captur
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("2026-10-27T15:46:26Z", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="timestamp"),
+        pytest.param("2026-10-27", datetime(2026, 10, 27).astimezone(), id="local-date"),
+        pytest.param("false", None, id="disabled"),
+    ],
+)
+def test_cli_exclude_newer_package_parses_cutoff(value: str, expected: datetime | None) -> None:
+    assert parse_cli(["--exclude-newer-package", f"foo={value}"]).exclude_newer_package == {"foo": expected}
+
+
+def test_cli_exclude_newer_package_duration_counts_back_from_now() -> None:
+    before = datetime.now(UTC)
+    cutoff = parse_cli(["--exclude-newer-package", "foo=P7D"]).exclude_newer_package["foo"]
+    after = datetime.now(UTC)
+
+    assert cutoff is not None
+    assert before - timedelta(days=7) <= cutoff <= after - timedelta(days=7)
+
+
+def test_cli_exclude_newer_package_repeats_keep_each_name_and_last_value() -> None:
+    options = parse_cli([
+        "--exclude-newer-package",
+        "foo=2026-10-01T00:00:00Z",
+        "--exclude-newer-package",
+        "bar=false",
+        "--exclude-newer-package",
+        "foo=2026-10-02T00:00:00Z",
+    ])
+
+    assert options.exclude_newer_package == {"foo": datetime(2026, 10, 2, tzinfo=UTC), "bar": None}
+
+
+def test_cli_exclude_newer_package_combines_with_exclude_newer() -> None:
+    options = parse_cli(["--exclude-newer", "2026-10-01T00:00:00Z", "--exclude-newer-package", "foo=false"])
+
+    assert (options.exclude_newer, options.exclude_newer_package) == (datetime(2026, 10, 1, tzinfo=UTC), {"foo": None})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("foo", id="no-separator"),
+        pytest.param("=P7D", id="empty-name"),
+        pytest.param("foo=soon", id="invalid-cutoff"),
+    ],
+)
+def test_cli_exclude_newer_package_rejects_invalid_entry(value: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["--exclude-newer-package", value])
+
+    assert (error.value.code, "argument --exclude-newer-package: " in capsys.readouterr().err) == (2, True)
+
+
+def test_cli_exclude_newer_package_conflicts_with_no_exclude_newer(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["--no-exclude-newer", "--exclude-newer-package", "foo=P7D"])
+
+    assert (error.value.code, capsys.readouterr().err.splitlines()[-1]) == (
+        2,
+        "bump-deps-index: error: argument --exclude-newer-package: not allowed with argument --no-exclude-newer",
+    )
+
+
+@pytest.mark.parametrize(
     ("args", "expected"),
     [
         pytest.param([], None, id="default"),
@@ -197,4 +262,53 @@ def test_cli_rejects_unknown_pre_release_choice(capsys: pytest.CaptureFixture[st
             "bump-deps-index: error: argument -p/--pre-release: "
             "'bogus' is not a valid choice: use yes, no or file-default"
         ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("2026-10-27T15:46:26Z", datetime(2026, 10, 27, 15, 46, 26, tzinfo=UTC), id="timestamp"),
+        pytest.param("false", None, id="disabled"),
+    ],
+)
+def test_cli_exclude_newer_group_parses_cutoff(value: str, expected: datetime | None) -> None:
+    assert parse_cli(["--exclude-newer-group", f"test={value}"]).exclude_newer_group == {"test": expected}
+
+
+def test_cli_exclude_newer_group_repeats_keep_each_group_and_last_value() -> None:
+    options = parse_cli([
+        "--exclude-newer-group",
+        "test=2026-10-01T00:00:00Z",
+        "--exclude-newer-group",
+        "project=false",
+        "--exclude-newer-group",
+        "test=2026-10-02T00:00:00Z",
+    ])
+
+    assert options.exclude_newer_group == {"test": datetime(2026, 10, 2, tzinfo=UTC), "project": None}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("test", id="no-separator"),
+        pytest.param("=P7D", id="empty-name"),
+        pytest.param("test=soon", id="invalid-cutoff"),
+    ],
+)
+def test_cli_exclude_newer_group_rejects_invalid_entry(value: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["--exclude-newer-group", value])
+
+    assert (error.value.code, "argument --exclude-newer-group: " in capsys.readouterr().err) == (2, True)
+
+
+def test_cli_exclude_newer_group_conflicts_with_no_exclude_newer(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["--no-exclude-newer", "--exclude-newer-group", "test=P7D"])
+
+    assert (error.value.code, capsys.readouterr().err.splitlines()[-1]) == (
+        2,
+        "bump-deps-index: error: argument --exclude-newer-group: not allowed with argument --no-exclude-newer",
     )

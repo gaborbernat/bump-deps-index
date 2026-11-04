@@ -185,3 +185,71 @@ def test_npm_package_listed_twice_is_fetched_once(httpx_mock: HTTPXMock) -> None
     main(["-i", "https://I.com", "-n", "https://N.com", "a@^1.0.0", "a@^2.0.0"])
 
     assert len(httpx_mock.get_requests()) == 1
+
+
+@pytest.mark.usefixtures("work_dir")
+@pytest.mark.parametrize(
+    ("args", "line"),
+    [
+        pytest.param(
+            ["--exclude-newer", _CUTOFF, "--exclude-newer-package", "a=false"],
+            "a@ -> a@2.0.0",
+            id="package-false-lifts-global",
+        ),
+        pytest.param(
+            ["--exclude-newer-package", "a=2026-11-01T00:00:00Z"],
+            "a@ -> a@1.0.0",
+            id="package-without-global",
+        ),
+        pytest.param(
+            ["--exclude-newer", _CUTOFF, "--exclude-newer-package", "b=false"],
+            "a@ -> a@1.0.0",
+            id="other-package-keeps-global",
+        ),
+    ],
+)
+def test_update_js_applies_package_cutoff(
+    args: list[str], line: str, capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    httpx_mock.add_response(
+        url="https://N.com/a",
+        json={
+            "versions": {"1.0.0": {}, "2.0.0": {}},
+            "time": {"1.0.0": "2026-10-20T10:00:00.000Z", "2.0.0": "2026-11-02T09:00:00.000Z"},
+            "dist-tags": {"latest": "2.0.0"},
+        },
+    )
+
+    main(["-n", "https://N.com", "-p", "no", *args, "a@"])
+
+    assert capsys.readouterr().out.splitlines()[-1] == line
+
+
+@pytest.mark.usefixtures("work_dir")
+@pytest.mark.parametrize(
+    ("spec", "flag", "line"),
+    [
+        pytest.param(
+            "left-pad@",
+            "left_pad=false",
+            "left-pad@ -> left-pad@1.0.0",
+            id="other-spelling-ignored",
+        ),
+        pytest.param("left-pad@", "left-pad=false", "left-pad@ -> left-pad@2.0.0", id="exact-name"),
+        pytest.param("@scope/a@", "@scope/a=false", "@scope/a@ -> @scope/a@2.0.0", id="scoped-name"),
+    ],
+)
+def test_update_js_matches_package_cutoff_by_exact_name(
+    spec: str, flag: str, line: str, capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    httpx_mock.add_response(
+        json={
+            "versions": {"1.0.0": {}, "2.0.0": {}},
+            "time": {"1.0.0": "2026-10-20T10:00:00.000Z", "2.0.0": "2026-11-02T09:00:00.000Z"},
+            "dist-tags": {"latest": "2.0.0"},
+        },
+    )
+
+    main(["-n", "https://N.com", "-p", "no", "--exclude-newer", _CUTOFF, "--exclude-newer-package", flag, spec])
+
+    assert capsys.readouterr().out.splitlines()[-1] == line

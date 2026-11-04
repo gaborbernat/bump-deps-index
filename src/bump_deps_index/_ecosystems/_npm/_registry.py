@@ -20,7 +20,7 @@ class NpmRegistry(Registry):
         self._settings = settings
 
     def candidates(self, lookup: Lookup) -> Candidates:
-        exclude_newer = self._settings.exclude_newer
+        exclude_newer = lookup.exclude_newer
         registry = lookup.indexes.url
         response = self._session.get(
             f"{registry.rstrip('/')}/{quote(lookup.name, safe='@')}",

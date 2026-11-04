@@ -48,6 +48,7 @@ class ScriptMetadata(Loader):
                     requires_python=requires_python,
                     uv=uv,
                     index_url=index_url,
+                    group="project",
                 )
                 for dependency in strings(metadata.get("dependencies"))
             ],
