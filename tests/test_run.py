@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from dataclasses import replace
+from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
 from conftest import PYPI_FOO, index_args
 
@@ -13,8 +16,6 @@ from bump_deps_index._ecosystems._table import ECOSYSTEMS
 from bump_deps_index._lookup import PkgType
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from pytest_httpx import HTTPXMock
 
     from bump_deps_index._ecosystems._common._candidates import Candidates
@@ -300,3 +301,152 @@ def test_output_redacts_direct_reference_credentials(tmp_path: Path, capsys: pyt
         ["Using Python index: https://pypi.example/simple", "foo @ https://files.example/foo-1.0-py3-none-any.whl"],
         content,
     )
+
+
+_PYPROJECT_GROUPS: str = """\
+[build-system]
+requires = ["builder>=1"]
+
+[project]
+name = "demo"
+dependencies = ["lib>=1"]
+optional-dependencies.extra = ["extra>=1"]
+
+[dependency-groups]
+test = ["tester>=1"]
+lint = ["linter>=1"]
+"""
+
+
+def _two_releases(request: httpx.Request) -> httpx.Response:
+    name = request.url.path.rstrip("/").rpartition("/")[2]
+    files = [
+        {"filename": f"{name}-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
+        {"filename": f"{name}-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
+    ]
+    return httpx.Response(200, json={"files": files}, headers={"content-type": "application/vnd.pypi.simple.v1+json"})
+
+
+def _specs(text: str) -> tuple[list[str], ...]:
+    cfg = tomllib.loads(text)
+    return (
+        cfg["build-system"]["requires"],
+        cfg["project"]["dependencies"],
+        cfg["project"]["optional-dependencies"]["extra"],
+        cfg["dependency-groups"]["test"],
+        cfg["dependency-groups"]["lint"],
+    )
+
+
+@pytest.mark.usefixtures("isolated_index_settings", "work_dir")
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        pytest.param(
+            ["--exclude-newer-group", "project=false", "--exclude-newer-group", "test=false"],
+            (["builder>=1"], ["lib>=2"], ["extra>=2"], ["tester>=2"], ["linter>=1"]),
+            id="project-and-test-fresh",
+        ),
+        pytest.param(
+            [
+                "--exclude-newer-group",
+                "project=false",
+                "--exclude-newer-group",
+                "test=false",
+                "--exclude-newer-package",
+                "lib=2026-10-25T00:00:00Z",
+            ],
+            (["builder>=1"], ["lib>=1"], ["extra>=2"], ["tester>=2"], ["linter>=1"]),
+            id="package-beats-group",
+        ),
+        pytest.param(
+            ["--exclude-newer-group", "Test=false"],
+            (["builder>=1"], ["lib>=1"], ["extra>=1"], ["tester>=2"], ["linter>=1"]),
+            id="group-name-canonical",
+        ),
+    ],
+)
+def test_run_applies_cutoff_per_dependency_group(
+    extra: list[str], expected: tuple[list[str], ...], httpx_mock: HTTPXMock
+) -> None:
+    Path("pyproject.toml").write_text(_PYPROJECT_GROUPS, encoding="utf-8")
+    httpx_mock.add_callback(_two_releases, is_reusable=True)
+
+    main(["-i", "https://I.com", "-p", "no", "--exclude-newer", "2026-11-01T00:00:00Z", *extra, "-f", "pyproject.toml"])
+
+    assert _specs(Path("pyproject.toml").read_text(encoding="utf-8")) == expected
+
+
+@pytest.mark.usefixtures("isolated_index_settings", "work_dir")
+def test_run_skips_requirement_listed_under_different_group_cutoffs(
+    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock
+) -> None:
+    content = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
+    Path("pyproject.toml").write_text(content, encoding="utf-8")
+    httpx_mock.add_callback(_two_releases, is_reusable=True)
+
+    with pytest.raises(SystemExit) as error:
+        main([
+            "-i",
+            "https://I.com",
+            "-p",
+            "no",
+            "--exclude-newer",
+            "2026-11-01T00:00:00Z",
+            "--exclude-newer-group",
+            "test=false",
+            "-f",
+            "pyproject.toml",
+        ])
+
+    assert (
+        error.value.code,
+        Path("pyproject.toml").read_text(encoding="utf-8"),
+        capsys.readouterr().err,
+    ) == (
+        1,
+        content,
+        (
+            "lib>=1 resolves differently across its dependency groups in pyproject.toml, so it was not updated; "
+            "pass --exclude-newer-group to give the groups one cutoff\n"
+        ),
+    )
+
+
+@pytest.mark.usefixtures("isolated_index_settings", "work_dir")
+@pytest.mark.parametrize(
+    ("name", "content", "expected"),
+    [
+        pytest.param(
+            "setup.cfg",
+            "[options]\ninstall_requires = lib>=1\n",
+            "[options]\ninstall_requires = lib>=2\n",
+            id="setup-cfg",
+        ),
+        pytest.param(
+            "script.py",
+            '# /// script\n# dependencies = ["lib>=1"]\n# ///\n',
+            '# /// script\n# dependencies = ["lib>=2"]\n# ///\n',
+            id="pep-723-script",
+        ),
+        pytest.param("requirements.txt", "lib>=1\n", "lib>=1\n", id="requirements-have-no-group"),
+    ],
+)
+def test_run_maps_project_group_to_its_files(name: str, content: str, expected: str, httpx_mock: HTTPXMock) -> None:
+    Path(name).write_text(content, encoding="utf-8")
+    httpx_mock.add_callback(_two_releases, is_reusable=True)
+
+    main([
+        "-i",
+        "https://I.com",
+        "-p",
+        "no",
+        "--exclude-newer",
+        "2026-11-01T00:00:00Z",
+        "--exclude-newer-group",
+        "project=false",
+        "-f",
+        name,
+    ])
+
+    assert Path(name).read_text(encoding="utf-8") == expected

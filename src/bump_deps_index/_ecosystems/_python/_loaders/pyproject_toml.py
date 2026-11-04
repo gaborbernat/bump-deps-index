@@ -26,15 +26,19 @@ class PyProjectToml(SingleFileLoader):
         with filename.open("rb") as file_handler:
             cfg: Parsed = load_toml(file_handler)
         project = table(cfg, "project")
-        values = (
-            table(cfg, "build-system").get("requires"),
-            project.get("dependencies"),
-            *table(project, "optional-dependencies").values(),
-            table(cfg, "tool", "uv").get("dev-dependencies"),
-            *table(cfg, "dependency-groups").values(),
-        )
+        sections = [
+            (None, table(cfg, "build-system").get("requires")),
+            ("project", project.get("dependencies")),
+            *(("project", value) for value in table(project, "optional-dependencies").values()),
+            (None, table(cfg, "tool", "uv").get("dev-dependencies")),
+            *table(cfg, "dependency-groups").items(),
+        ]
         return Loaded(
-            entries=[Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in strings(value)],
+            entries=[
+                Entry(spec=spec, pkg_type=PkgType.PYTHON, group=group)
+                for group, value in sections
+                for spec in strings(value)
+            ],
             rewrite=self._update_text,
         )
 

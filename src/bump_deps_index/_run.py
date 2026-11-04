@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from configparser import Error as ConfigParserError
 from itertools import chain
@@ -38,6 +39,7 @@ def run(options: Options) -> bool:
         npm=npm_settings(),
         exclude_newer=options.exclude_newer,
         exclude_newer_package=options.exclude_newer_package,
+        exclude_newer_group=options.exclude_newer_group,
     )
     if options.pkgs:
         return _run_packages(
@@ -68,6 +70,7 @@ def _named_lookup(raw: str, scope: Scope, *, pre_release: bool) -> Lookup:
         pre_release=pre_release,
         python_floor=scope.project.python_floor,
         indexes=ecosystem.route(package, name, scope),
+        group=None,
     )
 
 
@@ -135,13 +138,32 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
     # resolve the files in one batch to send one lookup per package across files
     results, resolved = _report(settings, list(dict.fromkeys(chain.from_iterable(lookups for *_, lookups in plans))))
     for filename, loader, loaded, lookups in plans:
-        changes = {
-            lookup.requirement: new
-            for lookup in lookups
-            if (new := results.get(lookup, lookup.requirement)) != lookup.requirement
-        }
+        changes, disagreeing = _file_changes(lookups, results)
+        for requirement in disagreeing:
+            sys.stderr.write(
+                redact_text(
+                    f"{requirement} resolves differently across its dependency groups in {filename}, "
+                    "so it was not updated; pass --exclude-newer-group to give the groups one cutoff\n"
+                )
+            )
+        resolved = resolved and not disagreeing
         loader.update_file(filename, loaded, changes)
     return successful and resolved
+
+
+def _file_changes(lookups: Sequence[Lookup], results: Mapping[Lookup, str]) -> tuple[dict[str, str], list[str]]:
+    # a rewrite edits every line that reads a requirement, so a requirement listed in several groups takes one value
+    outcomes: dict[str, set[str]] = defaultdict(set)
+    for lookup in lookups:
+        outcomes[lookup.requirement].add(results.get(lookup, lookup.requirement))
+    changes: dict[str, str] = {}
+    disagreeing: list[str] = []
+    for requirement, values in outcomes.items():
+        if len(values) > 1:
+            disagreeing.append(requirement)
+        elif (new := next(iter(values))) != requirement:
+            changes[requirement] = new
+    return changes, disagreeing
 
 
 def _load_lookups(
@@ -178,6 +200,7 @@ def _load_lookups(
                     pre_release=pre_release,
                     python_floor=floor,
                     indexes=indexes,
+                    group=entry.group,
                 )
             ] = None
     return loaded, list(lookups)

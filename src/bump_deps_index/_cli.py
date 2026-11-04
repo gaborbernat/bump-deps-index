@@ -20,15 +20,21 @@ def parse_cli(args: Sequence[str] | None) -> Options:
     parser = _build_parser()
     parser.parse_args(args, namespace=options)
     if options.no_exclude_newer:
-        if options.exclude_newer_package_flags:
-            parser.error("argument --exclude-newer-package: not allowed with argument --no-exclude-newer")
+        for option, flags in (
+            ("--exclude-newer-package", options.exclude_newer_package_flags),
+            ("--exclude-newer-group", options.exclude_newer_group_flags),
+        ):
+            if flags:
+                parser.error(f"argument {option}: not allowed with argument --no-exclude-newer")
         options.exclude_newer = None
         options.exclude_newer_package = {}
+        options.exclude_newer_group = {}
     else:
         options.exclude_newer_package = {
             **_configured_cutoffs(parser),
             **dict(options.exclude_newer_package_flags),
         }
+        options.exclude_newer_group = dict(options.exclude_newer_group_flags)
     return options
 
 
@@ -72,6 +78,10 @@ class Options(Namespace):
     """Per-package cutoffs from the command line, in order; a repeated name takes its last value"""
     exclude_newer_package: dict[str, datetime | None]
     """Per-package cutoffs by the name as written, the command line over the config; None exempts the package"""
+    exclude_newer_group_flags: list[tuple[str, datetime | None]]
+    """Per-group cutoffs from the command line, in order; a repeated group takes its last value"""
+    exclude_newer_group: dict[str, datetime | None]
+    """Per-group cutoffs by the group name as written; None exempts the group from the global cutoff"""
 
 
 def _build_parser() -> ArgumentParser:
@@ -123,8 +133,21 @@ def _build_parser() -> ArgumentParser:
         metavar="name=cutoff",
         action="append",
         default=[],
-        type=_package_cutoff_argument,
+        type=_named_cutoff_argument,
         help=package_cutoff_help,
+    )
+    group_cutoff_help = (
+        "cutoff for one PEP 735 dependency group, GROUP=CUTOFF in any form --exclude-newer takes or GROUP=false for "
+        "none; project means the project's dependencies and extras; repeatable"
+    )
+    parser.add_argument(
+        "--exclude-newer-group",
+        dest="exclude_newer_group_flags",
+        metavar="group=cutoff",
+        action="append",
+        default=[],
+        type=_named_cutoff_argument,
+        help=group_cutoff_help,
     )
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
@@ -162,10 +185,10 @@ def _cutoff_argument(value: str) -> datetime:
         raise ArgumentTypeError(str(exc)) from exc
 
 
-def _package_cutoff_argument(value: str) -> tuple[str, datetime | None]:
+def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
     name, separator, cutoff = value.partition("=")
     if not (separator and name):
-        msg = f"{value!r} is not NAME=CUTOFF: use a package name, then a cutoff such as P7D or false"
+        msg = f"{value!r} is not NAME=CUTOFF: use a name, then a cutoff such as P7D or false"
         raise ArgumentTypeError(msg)
     return name, None if cutoff == "false" else _cutoff_argument(cutoff)
 

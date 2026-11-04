@@ -149,8 +149,10 @@ class IndexSettings:
     npm_registry: str
     npm: NpmSettings
     exclude_newer: datetime | None
-    # per package, keyed by the name as written; None exempts the package from the global cutoff
+    # per package, keyed by the name as written; None exempts the package from the group and global cutoffs
     exclude_newer_package: dict[str, datetime | None]
+    # per PEP 735 group, keyed by the name as written; `project` names the project's dependencies and extras
+    exclude_newer_group: dict[str, datetime | None]
 
 
 __all__ = [

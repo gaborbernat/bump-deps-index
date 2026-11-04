@@ -97,6 +97,8 @@ class Entry:
     index_url: str | None = None
     # the extra indexes a requirements file sets with `--extra-index-url`
     extra_index_urls: tuple[str, ...] = ()
+    # the PEP 735 group of the entry, `project` for the project's dependencies and extras; None where a format has none
+    group: str | None = None
 
 
 def splice(text: str, edits: Iterable[tuple[int, int, str]]) -> str:

@@ -18,7 +18,7 @@ from bump_deps_index._ecosystems._common._candidates import (
     Lookup,
     Registry,
     accepted_versions,
-    package_exclude_newer,
+    exclude_newer_for,
 )
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
@@ -64,7 +64,7 @@ class SimpleIndex(Registry):
         candidates.sort(key=itemgetter(0), reverse=True)
         yield from accepted_versions(
             (candidate for _, candidate in candidates),
-            exclude_newer=package_exclude_newer(self._settings, name, canonical=canonicalize_name),
+            exclude_newer=exclude_newer_for(self._settings, name, canonical=canonicalize_name, group=lookup.group),
             pre_release=lookup.pre_release,
             is_prerelease=lambda text: Version(text).is_prerelease,
         )
