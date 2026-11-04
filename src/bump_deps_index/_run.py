@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from httpx import HTTPError, Limits
+from packaging.requirements import InvalidRequirement, Requirement
 from yaml import YAMLError
 
 from ._config._npm import npm_settings
@@ -20,6 +21,7 @@ from ._lookup import Lookup, PkgType, package_type
 from ._npm_registry import NpmRegistry
 from ._pypi import SimpleIndex
 from ._redact import redact_text, redact_url
+from ._semver import split_npm_spec
 from ._update import update
 
 if TYPE_CHECKING:
@@ -58,14 +60,19 @@ def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_relea
 def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_release: bool) -> Lookup:
     package = raw.strip()
     pkg_type = package_type(package)
-    indexes = named_indexes(package, pkg_type, project, settings)
+    name = _package_name(package, pkg_type)
     return Lookup(
         requirement=package,
+        name=name,
         pkg_type=pkg_type,
         pre_release=pre_release,
         python_floor=project.python_floor,
-        indexes=indexes,
+        indexes=named_indexes(package, name, pkg_type, project, settings),
     )
+
+
+def _package_name(spec: str, pkg_type: PkgType) -> str:
+    return Requirement(spec).name if pkg_type is PkgType.PYTHON else split_npm_spec(spec)[0]
 
 
 def _report(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
@@ -154,11 +161,18 @@ def _load_lookups(
     pre_release = loader.default_pre_release if pre_release is None else pre_release
     lookups: dict[Lookup, None] = {}
     for entry in loaded.entries:
-        if (name := entry.spec.strip()) and (indexes := entry_indexes(name, entry, project, own_uv, settings)):
+        if not (requirement := entry.spec.strip()):
+            continue
+        try:
+            name = _package_name(requirement, entry.pkg_type)
+        except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
+            continue
+        if indexes := entry_indexes(name, entry, project, own_uv, settings):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
             lookups[
                 Lookup(
-                    requirement=name,
+                    requirement=requirement,
+                    name=name,
                     pkg_type=entry.pkg_type,
                     pre_release=pre_release,
                     python_floor=floor,

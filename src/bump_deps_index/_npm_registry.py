@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 from ._ecosystems._base import Candidate, accepted_versions
 from ._parsed import json_field, parse_timestamp, table
-from ._semver import is_prerelease, rank_versions, split_npm_spec
+from ._semver import is_prerelease, rank_versions
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -21,8 +21,7 @@ class NpmRegistry:
         self.exclude_newer = exclude_newer
         self._settings = settings
 
-    def release(self, registry: str, spec: str, *, pre_release: bool) -> NpmRelease:
-        package, _ = split_npm_spec(spec)
+    def release(self, registry: str, package: str, *, pre_release: bool) -> NpmRelease:
         response = self._session.get(
             f"{registry.rstrip('/')}/{quote(package, safe='@')}",
             # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one

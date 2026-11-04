@@ -23,6 +23,7 @@ class IndexLookup:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Lookup:
     requirement: str
+    name: str
     pkg_type: PkgType
     pre_release: bool
     python_floor: Version | None

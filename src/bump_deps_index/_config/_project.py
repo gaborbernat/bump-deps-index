@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
-from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import Version
@@ -101,11 +100,13 @@ def _next_release(version: Version) -> Version:
     return _release((*release[:-1], release[-1] + 1))
 
 
-def named_indexes(package: str, pkg_type: PkgType, project: Project, settings: IndexSettings) -> IndexLookup:
+def named_indexes(
+    requirement: str, name: str, pkg_type: PkgType, project: Project, settings: IndexSettings
+) -> IndexLookup:
     if pkg_type is PkgType.JS:
-        return IndexLookup(url=settings.npm.registry(package, settings.npm_registry))
-    # `package_type` parsed the requirement; a package from git, a path or a URL gets the default index
-    python_lookup = _python_indexes(Requirement(package).name, project.uv, settings.index_url, settings.pip_extras)
+        return IndexLookup(url=settings.npm.registry(requirement, settings.npm_registry))
+    # a package from git, a path or a URL gets the default index
+    python_lookup = _python_indexes(name, project.uv, settings.index_url, settings.pip_extras)
     return python_lookup or IndexLookup(url=settings.index_url)
 
 
@@ -123,16 +124,13 @@ def entry_indexes(
     name: str, entry: Entry, project: Project, own_uv: UvIndexes | None, settings: IndexSettings
 ) -> IndexLookup | None:
     if entry.pkg_type is PkgType.JS:
-        return IndexLookup(url=settings.npm.registry(name, settings.npm_registry))
-    try:
-        requirement = Requirement(name)
-    except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
-        return None
+        # the whole spec picks the registry, as for a package named on the command line
+        return IndexLookup(url=settings.npm.registry(entry.spec.strip(), settings.npm_registry))
     # skip the project itself, though a script may depend on it
-    if entry.uv is None and canonicalize_name(requirement.name) == project.name:
+    if entry.uv is None and canonicalize_name(name) == project.name:
         return None
     return _python_indexes(
-        requirement.name,
+        name,
         own_uv if entry.uv is None else entry.uv,
         entry.index_url or settings.index_url,
         (*settings.pip_extras, *entry.extra_index_urls),
