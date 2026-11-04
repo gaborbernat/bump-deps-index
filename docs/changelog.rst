@@ -3,6 +3,36 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-18-0:
+
+1.18.0 (2026-11-04)
+-------------------
+
+.. _release-1-18-0-added:
+
+Added
+~~~~~
+
+- Added ``--exclude-newer`` (default ``UV_EXCLUDE_NEWER``) to take only releases uploaded before a cutoff, given as a
+  timestamp, a local date or a duration such as ``P7D`` or ``7 days``. A release without an upload time is skipped, as
+  uv does (:pr:`301`) by :user:`gaborbernat`.
+
+.. _release-1-18-0-changes:
+
+Changes
+~~~~~~~
+
+- Failure messages name what was skipped or not updated and what to pass instead, such as ``--file`` or an existing
+  path. Credentials stay redacted (:pr:`301`) by :user:`gaborbernat`.
+
+.. _release-1-18-0-fixed:
+
+Fixed
+~~~~~
+
+- Skip a ``replace`` substitution in ``tox.toml`` whose kind is a list or a table instead of a string, so it no longer
+  ends the run with a traceback; the other dependencies in the file still update (:pr:`301`) by :user:`gaborbernat`.
+
 .. _release-1-17-10:
 
 1.17.10 (2026-10-26)
