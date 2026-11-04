@@ -7,15 +7,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from bump_deps_index._ecosystems._base import Candidates
 
-def bump_js(spec: str, versions: Iterable[str], latest: str | None) -> str:
+
+def bump_js(spec: str, candidates: Candidates) -> str:
     package, wanted = split_npm_spec(spec)
     # the registry passes valid versions only, ranked newest first; the filter narrows the type
-    ranked = [(key, version) for version in versions if (key := _semver(version)) is not None]
+    ranked = [(key, version) for version in candidates.versions if (key := _semver(version)) is not None]
     # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
     if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
-        candidates = [version for key, version in ranked if pinned is None or key >= pinned]
+        in_range = [version for key, version in ranked if pinned is None or key >= pinned]
     else:
         operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
         # keep ranges this tool cannot compare, such as `<2` or a dist-tag
@@ -28,13 +30,12 @@ def bump_js(spec: str, versions: Iterable[str], latest: str | None) -> str:
                 depth = 2
             case _:  # `^1.2.3` keeps the major inside its range, `^0.2.3` the minor and `^0.0.3` the patch
                 depth = 1 if current.major else 2 if current.minor else 3
-        candidates = [
-            version for key, version in ranked if key >= current and key.prefix(depth) == current.prefix(depth)
-        ]
-    if not candidates:  # the registry has no release you accept, such as only pre-releases
+        in_range = [version for key, version in ranked if key >= current and key.prefix(depth) == current.prefix(depth)]
+    if not in_range:  # the registry has no release you accept, such as only pre-releases
         return spec
     # npm installs the `latest` dist-tag when it fits the range, and the highest version otherwise
-    return f"{package}@{operator}{latest if latest in candidates else candidates[0]}"
+    preferred = candidates.preferred
+    return f"{package}@{operator}{preferred if preferred in in_range else in_range[0]}"
 
 
 def split_npm_spec(spec: str) -> tuple[str, str]:

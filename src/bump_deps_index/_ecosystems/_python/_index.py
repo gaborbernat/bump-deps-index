@@ -11,32 +11,36 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from ._ecosystems._base import Candidate, accepted_versions
-from ._parsed import json_field, mappings, parse_timestamp
+from bump_deps_index._ecosystems._base import Candidate, Candidates, Registry, accepted_versions
+from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from datetime import datetime
 
-    from ._http._session import Session
-    from ._lookup import IndexLookup
+    from bump_deps_index._config._project import IndexSettings
+    from bump_deps_index._http._session import Session
+    from bump_deps_index._lookup import IndexLookup, Lookup
 
 
-class SimpleIndex:
-    def __init__(self, session: Session, exclude_newer: datetime | None) -> None:
+class SimpleIndex(Registry):
+    def __init__(self, session: Session, settings: IndexSettings) -> None:
         self._session = session
-        self.exclude_newer = exclude_newer
+        self._settings = settings
 
-    def versions(
-        self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
-    ) -> list[str]:
-        name = canonicalize_name(package)
+    def candidates(self, lookup: Lookup) -> Candidates:
+        # lazy, so a URL requirement, which the bump keeps as is, reads no index
+        return Candidates(versions=self._versions(lookup), preferred=None)
+
+    def _versions(self, lookup: Lookup) -> Iterator[str]:
+        name = canonicalize_name(lookup.name)
         candidates: list[tuple[Version, Candidate]] = []
-        for file in self._project_files(lookup, name):
+        for file in self._project_files(lookup.indexes, name):
             if (
-                python_version is not None
+                lookup.python_floor is not None
                 and file.requires_python is not None
                 and (specifier := _requires_python(file.requires_python)) is not None
-                and not specifier.contains(python_version)
+                and not specifier.contains(lookup.python_floor)
             ):
                 continue
             try:
@@ -50,13 +54,11 @@ class SimpleIndex:
                 ))
         # a stable sort keeps the spelling of the first file of a version ahead of later ones
         candidates.sort(key=itemgetter(0), reverse=True)
-        return list(
-            accepted_versions(
-                (candidate for _, candidate in candidates),
-                exclude_newer=self.exclude_newer,
-                pre_release=pre_release,
-                is_prerelease=lambda text: Version(text).is_prerelease,
-            )
+        yield from accepted_versions(
+            (candidate for _, candidate in candidates),
+            exclude_newer=self._settings.exclude_newer,
+            pre_release=lookup.pre_release,
+            is_prerelease=lambda text: Version(text).is_prerelease,
         )
 
     def _project_files(self, lookup: IndexLookup, name: str) -> list[_IndexFile]:

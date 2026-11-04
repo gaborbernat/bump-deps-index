@@ -7,19 +7,21 @@ from packaging.requirements import Requirement
 from packaging.version import InvalidVersion, Version
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     from packaging.specifiers import Specifier
 
+    from bump_deps_index._ecosystems._base import Candidates
 
-def bump_python(spec: str, requirement: Requirement, versions: Iterable[str]) -> str:
+
+def bump_python(spec: str, candidates: Candidates) -> str:
+    if (requirement := Requirement(spec)).url is not None:
+        return spec
     specifiers = list(requirement.specifier)
     exact = next((specifier for specifier in specifiers if specifier.operator in {"==", "==="}), None)
     current = exact or next(
         (specifier for operator in (">=", "~=") for specifier in specifiers if specifier.operator == operator), None
     )
     local = _local_label(exact)
-    for version in map(Version, versions):
+    for version in map(Version, candidates.versions):
         # the index already dropped the pre-releases you exclude
         if exact is None and not requirement.specifier.contains(version, prereleases=True):
             continue

@@ -1,38 +1,38 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from ._ecosystems._base import Candidate, accepted_versions
-from ._parsed import json_field, parse_timestamp, table
+from bump_deps_index._ecosystems._base import Candidate, Candidates, Registry, accepted_versions
+from bump_deps_index._parsed import json_field, parse_timestamp, table
+
 from ._semver import is_prerelease, rank_versions
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from bump_deps_index._config._project import IndexSettings
+    from bump_deps_index._http._session import Session
+    from bump_deps_index._lookup import Lookup
 
-    from ._config._npm import NpmSettings
-    from ._http._session import Session
 
-
-class NpmRegistry:
-    def __init__(self, session: Session, exclude_newer: datetime | None, settings: NpmSettings) -> None:
+class NpmRegistry(Registry):
+    def __init__(self, session: Session, settings: IndexSettings) -> None:
         self._session = session
-        self.exclude_newer = exclude_newer
         self._settings = settings
 
-    def release(self, registry: str, package: str, *, pre_release: bool) -> NpmRelease:
+    def candidates(self, lookup: Lookup) -> Candidates:
+        exclude_newer = self._settings.exclude_newer
+        registry = lookup.indexes.url
         response = self._session.get(
-            f"{registry.rstrip('/')}/{quote(package, safe='@')}",
+            f"{registry.rstrip('/')}/{quote(lookup.name, safe='@')}",
             # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
             accept=(
                 "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
-                if self.exclude_newer is None
+                if exclude_newer is None
                 else "application/json"
             ),
-            authorization=self._settings.authorization(registry),
+            authorization=self._settings.npm.authorization(registry),
         )
-        times = {} if self.exclude_newer is None else table(response.json(), "time")
+        times = {} if exclude_newer is None else table(response.json(), "time")
         latest = table(response.json(), "dist-tags").get("latest")
         versions = json_field(response, "versions", dict)
         candidates = (
@@ -43,20 +43,14 @@ class NpmRegistry:
             )
             for version in rank_versions(versions)
         )
-        return NpmRelease(
+        return Candidates(
             versions=tuple(
                 accepted_versions(
-                    candidates, exclude_newer=self.exclude_newer, pre_release=pre_release, is_prerelease=is_prerelease
+                    candidates, exclude_newer=exclude_newer, pre_release=lookup.pre_release, is_prerelease=is_prerelease
                 )
             ),
-            latest=latest if isinstance(latest, str) else None,
+            preferred=latest if isinstance(latest, str) else None,
         )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NpmRelease:
-    versions: tuple[str, ...]
-    latest: str | None
 
 
 __all__ = [

@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from threading import Event
 from typing import TYPE_CHECKING
 
 import pytest
 from conftest import PYPI_FOO, index_args
 
-from bump_deps_index import _run, main
+from bump_deps_index import main
+from bump_deps_index._ecosystems import ECOSYSTEMS
+from bump_deps_index._lookup import PkgType
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pytest_httpx import HTTPXMock
 
-    from bump_deps_index._lookup import Lookup
-    from bump_deps_index._npm_registry import NpmRegistry
-    from bump_deps_index._pypi import SimpleIndex
+    from bump_deps_index._ecosystems._base import Candidates
 
 
 def test_run_args(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> None:
@@ -189,17 +190,17 @@ def test_output_follows_file_order(
     httpx_mock.add_response(url="https://pypi.example/simple/a/", text="<a>a-2.tar.gz</a>")
     httpx_mock.add_response(url="https://pypi.example/simple/b/", text="<a>b-2.tar.gz</a>")
     b_updated = Event()
-    update = _run.update
+    python = ECOSYSTEMS[PkgType.PYTHON]
 
-    def update_b_first(pypi: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
-        if lookup.requirement == "a":
+    def bump_b_first(spec: str, candidates: Candidates) -> str:
+        if spec == "a":
             b_updated.wait(timeout=5)  # `a` finishes after `b`, so only the reporting keeps the file order
-        result = update(pypi, npm, lookup)
-        if lookup.requirement == "b":
+        result = python.bump(spec, candidates)
+        if spec == "b":
             b_updated.set()
         return result
 
-    monkeypatch.setattr(_run, "update", update_b_first)
+    monkeypatch.setitem(ECOSYSTEMS, PkgType.PYTHON, replace(python, bump=bump_b_first))
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("a\nb\n", encoding="utf-8")
 

@@ -14,21 +14,20 @@ from yaml import YAMLError
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
 from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes, python_floor
+from ._ecosystems import ECOSYSTEMS
+from ._ecosystems._npm._semver import split_npm_spec
 from ._http._hook_manifest import hook_languages
 from ._http._session import Session, new_client
 from ._loaders._registry import get_loaders
 from ._lookup import Lookup, PkgType, package_type
-from ._npm_registry import NpmRegistry
-from ._pypi import SimpleIndex
 from ._redact import redact_text, redact_url
-from ._semver import split_npm_spec
-from ._update import update
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from ._cli import Options
     from ._config._project import Project
+    from ._ecosystems._base import Registry
     from ._loaders._base import Loaded, Loader
 
 
@@ -106,15 +105,18 @@ def _resolve(
         ThreadPoolExecutor(max_workers=parallel) as executor,
     ):
         session = Session(client)
-        index = SimpleIndex(session, settings.exclude_newer)
-        npm = NpmRegistry(session, settings.exclude_newer, settings.npm)
-        futures = [(lookup, executor.submit(update, index, npm, lookup)) for lookup in lookups]
+        registries = {pkg_type: ecosystem.registry(session, settings) for pkg_type, ecosystem in ECOSYSTEMS.items()}
+        futures = [(lookup, executor.submit(_bump, registries, lookup)) for lookup in lookups]
         # yield in submission order to keep the report stable between runs
         for lookup, future in futures:
             try:
                 yield lookup, future.result()
             except (HTTPError, TypeError, ValueError) as exc:
                 yield lookup, exc
+
+
+def _bump(registries: Mapping[PkgType, Registry], lookup: Lookup) -> str:
+    return ECOSYSTEMS[lookup.pkg_type].bump(lookup.requirement, registries[lookup.pkg_type].candidates(lookup))
 
 
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
