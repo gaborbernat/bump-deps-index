@@ -15,10 +15,11 @@ from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
 from ._config._project import Declared, IndexSettings, Scope, get_project, python_floor
 from ._ecosystems import ECOSYSTEMS
+from ._ecosystems._base import Lookup
 from ._http._hook_manifest import hook_languages
 from ._http._session import Session, new_client
 from ._loaders._registry import get_loaders
-from ._lookup import Lookup, PkgType, package_type
+from ._lookup import PkgType, package_type
 from ._redact import redact_text, redact_url
 
 if TYPE_CHECKING:

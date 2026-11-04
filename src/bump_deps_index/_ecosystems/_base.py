@@ -10,9 +10,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
     from datetime import datetime
 
+    from packaging.version import Version
+
     from bump_deps_index._config._project import Declared, IndexSettings, Scope
     from bump_deps_index._http._session import Session
-    from bump_deps_index._lookup import IndexLookup, Lookup
+    from bump_deps_index._lookup import IndexLookup, PkgType
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -33,6 +35,16 @@ class Registry(ABC):
     @abstractmethod
     def candidates(self, lookup: Lookup) -> Candidates:
         raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Lookup:
+    requirement: str
+    name: str
+    pkg_type: PkgType
+    pre_release: bool
+    python_floor: Version | None
+    indexes: IndexLookup
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,6 +83,7 @@ __all__ = [
     "Candidate",
     "Candidates",
     "Ecosystem",
+    "Lookup",
     "Registry",
     "accepted_versions",
 ]
