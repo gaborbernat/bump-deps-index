@@ -50,7 +50,8 @@ class ScriptMetadata(Loader):
                     index_url=index_url,
                 )
                 for dependency in strings(metadata.get("dependencies"))
-            ]
+            ],
+            rewrite=self._update_text,
         )
 
     @staticmethod
@@ -81,8 +82,7 @@ class ScriptMetadata(Loader):
                 return start, at
         return None
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
         if (span := self._block(lines)) is None:
             return text

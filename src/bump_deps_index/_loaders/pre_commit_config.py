@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
+from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Final, TypeAlias
 
 from typing_extensions import override
@@ -63,9 +64,8 @@ class PreCommitConfig(SingleFileLoader):
                     Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
                     for pkg in strings(hook.get("additional_dependencies"))
                 )
-        return Loaded(entries=entries, kept=tuple(kept))
+        return Loaded(entries=entries, rewrite=partial(self._update_text, kept=tuple(kept)))
 
-    @override
     def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         # keyed by start: an alias yields its anchored node again, which must be edited once
         edits: dict[int, tuple[int, str]] = {}

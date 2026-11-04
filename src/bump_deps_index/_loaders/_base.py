@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping
 
     from bump_deps_index._config._uv import UvIndexes
     from bump_deps_index._lookup import PkgType
@@ -29,20 +29,16 @@ class Loader(ABC):
     def load(self, filename: Path) -> Loaded:
         raise NotImplementedError
 
-    def update_file(self, filename: Path, changes: Mapping[str, str], loaded: Loaded) -> None:
+    def update_file(self, filename: Path, loaded: Loaded, changes: Mapping[str, str]) -> None:
         with filename.open(encoding="utf-8", newline="") as file_handler:
             raw = file_handler.read()
         text = re.sub(r"\r\n?", "\n", raw)
-        if (updated := self._update_text(text, changes, loaded.kept)) == text:
+        if (updated := loaded.rewrite(text, changes)) == text:
             return
         lines = updated.split("\n")
         endings = self._restore_endings(raw, text.split("\n"), lines)
         with filename.open("w", encoding="utf-8", newline="") as file_handler:
             file_handler.write("".join(f"{line}{end}" for line, end in zip(lines, endings, strict=True)))
-
-    @abstractmethod
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
-        raise NotImplementedError
 
     @staticmethod
     def _restore_endings(raw: str, old_lines: list[str], new_lines: list[str]) -> list[str]:
@@ -85,9 +81,9 @@ class SingleFileLoader(Loader, ABC):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Loaded:
     entries: list[Entry]
-    # one verdict per pre-commit hook with `additional_dependencies`, in file order; the writer reuses them since a
-    # hook's language may come from a remote manifest
-    kept: tuple[bool, ...] = ()
+    # applies the changes to the file text the entries came from; a loader binds what it read while loading, such as the
+    # pre-commit verdicts, since a hook's language may come from a remote manifest
+    rewrite: Callable[[str, Mapping[str, str]], str]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

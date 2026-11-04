@@ -26,11 +26,12 @@ class SetupCfg(SingleFileLoader):
             *(cfg["options.extras_require"].values() if cfg.has_section("options.extras_require") else []),
         ]
         return Loaded(
-            entries=[Entry(spec=value, pkg_type=PkgType.PYTHON) for group in groups for value in ini_values(group)]
+            entries=[Entry(spec=value, pkg_type=PkgType.PYTHON) for group in groups for value in ini_values(group)],
+            rewrite=self._update_text,
         )
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    @staticmethod
+    def _update_text(text: str, changes: Mapping[str, str]) -> str:
         # configparser copies the `[DEFAULT]` keys into `[options.extras_require]`, which reads each key as an extra
         extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
         return update_ini(

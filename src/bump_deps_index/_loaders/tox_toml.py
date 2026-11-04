@@ -38,7 +38,8 @@ class ToxToml(SingleFileLoader):
         return Loaded(
             entries=[
                 Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in self._requirements(value)
-            ]
+            ],
+            rewrite=self._update_text,
         )
 
     @staticmethod
@@ -61,8 +62,7 @@ class ToxToml(SingleFileLoader):
                 for key in _SUBSTITUTIONS[kind]:
                     yield from ToxToml._requirements(value.get(key))
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         return replace_strings(text, changes, self._is_dependency)
 
     @staticmethod

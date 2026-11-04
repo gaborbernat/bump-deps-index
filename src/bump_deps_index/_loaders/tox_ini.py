@@ -33,10 +33,10 @@ class ToxIni(SingleFileLoader):
             entries.extend(
                 Entry(spec=value, pkg_type=PkgType.PYTHON) for value in values if value[:1] not in {"{", "-"}
             )
-        return Loaded(entries=entries)
+        return Loaded(entries=entries, rewrite=self._update_text)
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    @staticmethod
+    def _update_text(text: str, changes: Mapping[str, str]) -> str:
         return update_ini(
             text,
             changes,

@@ -34,11 +34,11 @@ class PyProjectToml(SingleFileLoader):
             *table(cfg, "dependency-groups").values(),
         )
         return Loaded(
-            entries=[Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in strings(value)]
+            entries=[Entry(spec=spec, pkg_type=PkgType.PYTHON) for value in values for spec in strings(value)],
+            rewrite=self._update_text,
         )
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         return replace_strings(text, changes, self._is_dependency)
 
     @staticmethod

@@ -38,11 +38,11 @@ class PackageJson(SingleFileLoader):
                 # skip aliases, paths, URLs and workspace links, since the registry has no version for them, and an
                 # empty range, which npm reads as `*`
                 if isinstance(spec, str) and spec.strip() and ":" not in spec and "/" not in spec
-            ]
+            ],
+            rewrite=self._update_text,
         )
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         tree, _ = self._json_node(text, 0)
         edits: list[tuple[int, int, str]] = []
         for section in _SECTIONS:

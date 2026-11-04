@@ -62,7 +62,8 @@ class Requirements(Loader):
                     extra_index_urls=extra_index_urls,
                 )
                 for group in self._requirement_lines(lines)
-            ]
+            ],
+            rewrite=self._update_text,
         )
 
     @staticmethod
@@ -140,8 +141,7 @@ class Requirements(Loader):
                 yield group
             group = []
 
-    @override
-    def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
+    def _update_text(self, text: str, changes: Mapping[str, str]) -> str:
         lines = text.split("\n")
         for group in self._requirement_lines(lines):
             logical = " ".join(segment for _, segment in group)

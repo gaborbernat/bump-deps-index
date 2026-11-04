@@ -139,7 +139,7 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
             for lookup in lookups
             if (new := results.get(lookup, lookup.requirement)) != lookup.requirement
         }
-        loader.update_file(filename, changes, loaded)
+        loader.update_file(filename, loaded, changes)
     return successful and resolved
 
 
