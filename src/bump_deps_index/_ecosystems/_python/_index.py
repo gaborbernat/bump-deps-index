@@ -7,6 +7,7 @@ from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from httpx import HTTPStatusError, codes
+from packaging.requirements import Requirement
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
@@ -148,6 +149,11 @@ class _IndexParser(HTMLParser):
             self.files.append(_IndexFile(filename=data.strip(), requires_python=requires_python, yanked=yanked))
 
 
+def python_name(spec: str) -> str:
+    return Requirement(spec).name
+
+
 __all__ = [
     "SimpleIndex",
+    "python_name",
 ]

@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from bump_deps_index._ecosystems._base import Candidate, Candidates, Registry, accepted_versions
+from bump_deps_index._lookup import IndexLookup
 from bump_deps_index._parsed import json_field, parse_timestamp, table
 
 from ._semver import is_prerelease, rank_versions
 
 if TYPE_CHECKING:
-    from bump_deps_index._config._project import IndexSettings
+    from bump_deps_index._config._project import IndexSettings, Scope
     from bump_deps_index._http._session import Session
     from bump_deps_index._lookup import Lookup
 
@@ -53,6 +54,12 @@ class NpmRegistry(Registry):
         )
 
 
+def npm_indexes(requirement: str, _name: str, scope: Scope) -> IndexLookup:
+    # the whole spec, not the name, picks the scope, which differs for a spec such as `@a@1`
+    return IndexLookup(url=scope.settings.npm.registry(requirement, scope.settings.npm_registry))
+
+
 __all__ = [
     "NpmRegistry",
+    "npm_indexes",
 ]

@@ -38,6 +38,10 @@ def bump_js(spec: str, candidates: Candidates) -> str:
     return f"{package}@{operator}{preferred if preferred in in_range else in_range[0]}"
 
 
+def npm_name(spec: str) -> str:
+    return split_npm_spec(spec)[0]
+
+
 def split_npm_spec(spec: str) -> tuple[str, str]:
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     return (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
@@ -95,6 +99,7 @@ def _pad_version(version: str) -> str:
 __all__ = [
     "bump_js",
     "is_prerelease",
+    "npm_name",
     "rank_versions",
     "split_npm_spec",
 ]

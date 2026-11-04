@@ -9,7 +9,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
-from bump_deps_index._lookup import IndexLookup, PkgType
+from bump_deps_index._lookup import IndexLookup
 from bump_deps_index._parsed import table
 
 from ._uv import UvIndexes, uv_project_indexes
@@ -100,14 +100,10 @@ def _next_release(version: Version) -> Version:
     return _release((*release[:-1], release[-1] + 1))
 
 
-def named_indexes(
-    requirement: str, name: str, pkg_type: PkgType, project: Project, settings: IndexSettings
-) -> IndexLookup:
-    if pkg_type is PkgType.JS:
-        return IndexLookup(url=settings.npm.registry(requirement, settings.npm_registry))
+def named_indexes(_requirement: str, name: str, scope: Scope) -> IndexLookup:
     # a package from git, a path or a URL gets the default index
-    python_lookup = _python_indexes(name, project.uv, settings.index_url, settings.pip_extras)
-    return python_lookup or IndexLookup(url=settings.index_url)
+    python_lookup = _python_indexes(name, scope.uv, scope.settings.index_url, scope.settings.pip_extras)
+    return python_lookup or IndexLookup(url=scope.settings.index_url)
 
 
 def _python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: tuple[str, ...]) -> IndexLookup | None:
@@ -120,21 +116,30 @@ def _python_indexes(name: str, uv: UvIndexes | None, default: str, pip_extras: t
     return None if (pinned := uv.sources[package]) is None else IndexLookup(url=pinned)
 
 
-def entry_indexes(
-    name: str, entry: Entry, project: Project, own_uv: UvIndexes | None, settings: IndexSettings
-) -> IndexLookup | None:
-    if entry.pkg_type is PkgType.JS:
-        # the whole spec picks the registry, as for a package named on the command line
-        return IndexLookup(url=settings.npm.registry(entry.spec.strip(), settings.npm_registry))
+def entry_indexes(_requirement: str, name: str, declared: Declared) -> IndexLookup | None:
+    entry = declared.entry
     # skip the project itself, though a script may depend on it
-    if entry.uv is None and canonicalize_name(name) == project.name:
+    if entry.uv is None and canonicalize_name(name) == declared.project.name:
         return None
     return _python_indexes(
         name,
-        own_uv if entry.uv is None else entry.uv,
-        entry.index_url or settings.index_url,
-        (*settings.pip_extras, *entry.extra_index_urls),
+        declared.uv if entry.uv is None else entry.uv,
+        entry.index_url or declared.settings.index_url,
+        (*declared.settings.pip_extras, *entry.extra_index_urls),
     )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Scope:
+    settings: IndexSettings
+    project: Project
+    # the project's uv indexes where uv resolves, None where pip installs
+    uv: UvIndexes | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Declared(Scope):
+    entry: Entry
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -147,8 +152,10 @@ class IndexSettings:
 
 
 __all__ = [
+    "Declared",
     "IndexSettings",
     "Project",
+    "Scope",
     "entry_indexes",
     "get_project",
     "named_indexes",

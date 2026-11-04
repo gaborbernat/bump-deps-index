@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from httpx import HTTPError, Limits
-from packaging.requirements import InvalidRequirement, Requirement
+from packaging.requirements import InvalidRequirement
 from yaml import YAMLError
 
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
-from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes, python_floor
+from ._config._project import Declared, IndexSettings, Scope, get_project, python_floor
 from ._ecosystems import ECOSYSTEMS
-from ._ecosystems._npm._semver import split_npm_spec
 from ._http._hook_manifest import hook_languages
 from ._http._session import Session, new_client
 from ._loaders._registry import get_loaders
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
 
     from ._cli import Options
-    from ._config._project import Project
     from ._ecosystems._base import Registry
     from ._loaders._base import Loaded, Loader
 
@@ -52,32 +50,29 @@ def run(options: Options) -> bool:
 def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_release: bool) -> bool:
     # a package you name gets the floor and the index pins of the project you run in
     project = get_project(Path.cwd())
-    lookups = [_named_lookup(package, project, settings, pre_release=pre_release) for package in packages]
+    scope = Scope(settings=settings, project=project, uv=project.uv)
+    lookups = [_named_lookup(package, scope, pre_release=pre_release) for package in packages]
     return _report(settings, list(dict.fromkeys(lookups)))[1]
 
 
-def _named_lookup(raw: str, project: Project, settings: IndexSettings, *, pre_release: bool) -> Lookup:
+def _named_lookup(raw: str, scope: Scope, *, pre_release: bool) -> Lookup:
     package = raw.strip()
-    pkg_type = package_type(package)
-    name = _package_name(package, pkg_type)
+    ecosystem = ECOSYSTEMS[pkg_type := package_type(package)]
+    name = ecosystem.name(package)
     return Lookup(
         requirement=package,
         name=name,
         pkg_type=pkg_type,
         pre_release=pre_release,
-        python_floor=project.python_floor,
-        indexes=named_indexes(package, name, pkg_type, project, settings),
+        python_floor=scope.project.python_floor,
+        indexes=ecosystem.route(package, name, scope),
     )
 
 
-def _package_name(spec: str, pkg_type: PkgType) -> str:
-    return Requirement(spec).name if pkg_type is PkgType.PYTHON else split_npm_spec(spec)[0]
-
-
 def _report(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
-    for pkg_type, registry in ((PkgType.PYTHON, settings.index_url), (PkgType.JS, settings.npm_registry)):
+    for pkg_type, ecosystem in ECOSYSTEMS.items():
         if any(lookup.pkg_type is pkg_type for lookup in lookups):
-            sys.stdout.write(f"Using {pkg_type} index: {redact_url(registry)}\n")
+            sys.stdout.write(f"Using {pkg_type} index: {redact_url(ecosystem.index_url(settings))}\n")
     changes: dict[Lookup, str] = {}
     successful = True
     for lookup, outcome in _resolve(settings, lookups):
@@ -165,11 +160,13 @@ def _load_lookups(
     for entry in loaded.entries:
         if not (requirement := entry.spec.strip()):
             continue
+        ecosystem = ECOSYSTEMS[entry.pkg_type]
         try:
-            name = _package_name(requirement, entry.pkg_type)
+            name = ecosystem.name(requirement)
         except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
             continue
-        if indexes := entry_indexes(name, entry, project, own_uv, settings):
+        declared = Declared(settings=settings, project=project, uv=own_uv, entry=entry)
+        if indexes := ecosystem.entry_route(requirement, name, declared):
             floor = project.python_floor if entry.requires_python is None else floors[entry.requires_python]
             lookups[
                 Lookup(

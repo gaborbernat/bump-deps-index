@@ -7,6 +7,7 @@ import pytest
 
 if TYPE_CHECKING:
     from conftest import Bump
+    from pytest_httpx import HTTPXMock
 
 pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
@@ -110,3 +111,9 @@ def test_update_python(spec: str, pre_release: bool, versions: list[str], result
         )
         == result
     )
+
+
+def test_update_python_url_requirement_reads_no_index(bump: Bump, httpx_mock: HTTPXMock) -> None:
+    bump("A @ https://example.com/a.whl", {}, pre_release=False, requires_python=None, exclude_newer=None)
+
+    assert httpx_mock.get_requests() == []
