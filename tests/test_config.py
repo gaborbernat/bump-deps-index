@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from textwrap import dedent
 from typing import TYPE_CHECKING, Final
 
@@ -8,24 +9,22 @@ import httpx
 import pytest
 
 from bump_deps_index import main
+from bump_deps_index._cli import parse_cli
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from conftest import FakeIndex
     from pytest_httpx import HTTPXMock
 
-_PYPI: Final[str] = "https://pypi.org/simple"
-_NPM: Final[str] = "https://registry.npmjs.org"
 
-pytestmark = pytest.mark.usefixtures("isolated_index_settings")
+pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_index_settings")
 
 
 @pytest.mark.parametrize(
     ("workspace", "expected"),
     [
-        pytest.param(({}, {}), (_PYPI, _NPM), id="defaults"),
+        pytest.param(({}, {}), ("https://pypi.org/simple", "https://registry.npmjs.org"), id="defaults"),
         pytest.param(
             (
                 {"PIP_INDEX_URL": "https://env.example/simple", "NPM_CONFIG_REGISTRY": "https://env.example/npm"},
@@ -36,7 +35,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
         ),
         pytest.param(
             ({"UV_DEFAULT_INDEX": "https://uv-env.example/simple"}, {}),
-            ("https://uv-env.example/simple", _NPM),
+            ("https://uv-env.example/simple", "https://registry.npmjs.org"),
             id="uv-environment",
         ),
         pytest.param(
@@ -49,12 +48,12 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://uv.example/simple", _NPM),
+            ("https://uv.example/simple", "https://registry.npmjs.org"),
             id="uv-default-index-in-parent-folder",
         ),
         pytest.param(
             ({}, {"project/pyproject.toml": '[tool.uv]\nindex-url = "https://uv.example/simple"'}),
-            ("https://uv.example/simple", _NPM),
+            ("https://uv.example/simple", "https://registry.npmjs.org"),
             id="uv-in-pyproject",
         ),
         pytest.param(
@@ -66,7 +65,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "[install]\nindex-url = https://install.example/simple",
                 },
             ),
-            ("https://install.example/simple", _NPM),
+            ("https://install.example/simple", "https://registry.npmjs.org"),
             id="pip-install-section-after-invalid-uv",
         ),
         pytest.param(
@@ -77,7 +76,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://install.example/simple", _NPM),
+            ("https://install.example/simple", "https://registry.npmjs.org"),
             id="pip-install-section-across-files",
         ),
         pytest.param(
@@ -88,7 +87,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.config/pip/pip.conf": "[install]\nindex-url = https://pip.example/simple",
                 },
             ),
-            ("https://custom.example/simple", _NPM),
+            ("https://custom.example/simple", "https://registry.npmjs.org"),
             id="pip-config-file",
         ),
         pytest.param(
@@ -99,7 +98,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "~/.pip/pip.conf": "[global]\nindex-url = https://legacy.example/simple",
                 },
             ),
-            ("https://legacy.example/simple", _NPM),
+            ("https://legacy.example/simple", "https://registry.npmjs.org"),
             id="pip-legacy-after-invalid-config",
         ),
         pytest.param(
@@ -111,12 +110,12 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "index_url = https://underscore.example/simple",
                 },
             ),
-            ("https://underscore.example/simple", _NPM),
+            ("https://underscore.example/simple", "https://registry.npmjs.org"),
             id="pip-underscore-key",
         ),
         pytest.param(
             ({}, {"~/.config/uv/uv.toml": 'index-url = "https://uv-user.example/simple"'}),
-            ("https://uv-user.example/simple", _NPM),
+            ("https://uv-user.example/simple", "https://registry.npmjs.org"),
             id="uv-user-config",
         ),
         pytest.param(
@@ -124,7 +123,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"APPDATA": "{tmp}/appdata"},
                 {"appdata/uv/uv.toml": 'index-url = "https://uv-windows.example/simple"'},
             ),
-            ("https://uv-windows.example/simple", _NPM),
+            ("https://uv-windows.example/simple", "https://registry.npmjs.org"),
             id="uv-windows-user-config",
         ),
         pytest.param(
@@ -138,7 +137,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                     "project/sub/.npmrc": b"registry=https://\xff.example",
                 },
             ),
-            (_PYPI, _NPM),
+            ("https://pypi.org/simple", "https://registry.npmjs.org"),
             id="malformed-files-ignored",
         ),
         pytest.param(
@@ -146,7 +145,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"HOST": "npm.example"},
                 {"project/sub/.npmrc": "# registry=https://comment.example\nregistry = https://${HOST}/npm/"},
             ),
-            (_PYPI, "https://npm.example/npm/"),
+            ("https://pypi.org/simple", "https://npm.example/npm/"),
             id="npmrc-in-project",
         ),
         pytest.param(
@@ -154,7 +153,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {},
                 {"project/sub/.npmrc": "save-exact=true", "~/.npmrc": 'registry=https://a\nregistry="https://b"'},
             ),
-            (_PYPI, "https://b"),
+            ("https://pypi.org/simple", "https://b"),
             id="npmrc-in-home-last-wins",
         ),
         pytest.param(
@@ -162,7 +161,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"PIP_CONFIG_FILE": "{devnull}", "npm_config_registry": "https://lower.example"},
                 {"~/.config/pip/pip.conf": "[global]\nindex-url = https://pip.example/simple"},
             ),
-            (_PYPI, "https://lower.example"),
+            ("https://pypi.org/simple", "https://lower.example"),
             id="pip-config-disabled-and-lowercase-npm-variable",
         ),
         pytest.param(
@@ -170,7 +169,7 @@ pytestmark = pytest.mark.usefixtures("isolated_index_settings")
                 {"NPM_CONFIG_USERCONFIG": "{tmp}/npmrc"},
                 {"npmrc": "registry=https://user.example", "~/.npmrc": "registry=https://home.example"},
             ),
-            (_PYPI, "https://user.example"),
+            ("https://pypi.org/simple", "https://user.example"),
             id="npmrc-user-config-variable",
         ),
     ],
@@ -186,6 +185,145 @@ def test_main_reads_index_settings(capsys: pytest.CaptureFixture[str], expected:
         "a -> a>=1",
         "b@1 -> b@1.0.0",
     ]
+
+
+_ENV_PIP: Final[str] = "2026-10-01T00:00:00Z"
+_ENV_UV: Final[str] = "2026-10-02T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("workspace", "expected"),
+    [
+        pytest.param(({}, {}), None, id="defaults"),
+        pytest.param(
+            ({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}), datetime(2026, 10, 1, tzinfo=UTC), id="pip-environment"
+        ),
+        pytest.param(({"UV_EXCLUDE_NEWER": _ENV_UV}, {}), datetime(2026, 10, 2, tzinfo=UTC), id="uv-environment"),
+        pytest.param(
+            (
+                {"PIP_UPLOADED_PRIOR_TO": _ENV_PIP, "UV_EXCLUDE_NEWER": _ENV_UV},
+                {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'},
+            ),
+            datetime(2026, 10, 1, tzinfo=UTC),
+            id="pip-environment-wins",
+        ),
+        pytest.param(
+            ({"UV_EXCLUDE_NEWER": _ENV_UV}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}),
+            datetime(2026, 10, 2, tzinfo=UTC),
+            id="uv-environment-over-project",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"',
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                },
+            ),
+            datetime(2026, 10, 3, tzinfo=UTC),
+            id="project-uv-over-pip",
+        ),
+        pytest.param(
+            ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
+            datetime(2026, 10, 4, tzinfo=UTC),
+            id="uv-in-pyproject",
+        ),
+        pytest.param(
+            ({}, {"uv.toml": 'exclude-newer = "2026-10-05T00:00:00Z"'}),
+            datetime(2026, 10, 5, tzinfo=UTC),
+            id="uv-in-parent-folder",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": "exclude-newer = false",
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"',
+                },
+            ),
+            None,
+            id="disabled-project-uv-stops-lookup",
+        ),
+        pytest.param(
+            (
+                {"UV_EXCLUDE_NEWER": _ENV_UV},
+                {"project/uv.toml": "exclude-newer = false"},
+            ),
+            datetime(2026, 10, 2, tzinfo=UTC),
+            id="uv-environment-over-disabled-project",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": "exclude-newer = false",
+                },
+            ),
+            datetime(2026, 10, 6, tzinfo=UTC),
+            id="pip-over-disabled-user-uv",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z",
+                    "~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"',
+                },
+            ),
+            datetime(2026, 10, 6, tzinfo=UTC),
+            id="pip-over-user-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}),
+            datetime(2026, 10, 7, tzinfo=UTC),
+            id="user-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-08T12:00:00"}),
+            datetime(2026, 10, 8, 12).astimezone(),
+            id="pip-naive-datetime-is-local",
+        ),
+    ],
+    indirect=["workspace"],
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_reads_exclude_newer_settings(expected: datetime | None) -> None:
+    assert parse_cli(["a"]).exclude_newer == expected
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        pytest.param(["--no-exclude-newer"], None, id="no-exclude-newer"),
+        pytest.param(
+            ["--exclude-newer", "2026-10-09T00:00:00Z"], datetime(2026, 10, 9, tzinfo=UTC), id="exclude-newer"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "workspace",
+    [
+        pytest.param(({"PIP_UPLOADED_PRIOR_TO": _ENV_PIP}, {}), id="pip-environment"),
+        pytest.param(({"UV_EXCLUDE_NEWER": _ENV_UV}, {}), id="uv-environment"),
+        pytest.param(({}, {"project/uv.toml": 'exclude-newer = "2026-10-03T00:00:00Z"'}), id="project-uv"),
+        pytest.param(
+            ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer = "2026-10-04T00:00:00Z"'}),
+            id="pyproject-uv",
+        ),
+        pytest.param(
+            ({}, {"~/.config/pip/pip.conf": "[global]\nuploaded-prior-to = 2026-10-06T00:00:00Z"}), id="pip-config"
+        ),
+        pytest.param(({}, {"~/.config/uv/uv.toml": 'exclude-newer = "2026-10-07T00:00:00Z"'}), id="user-uv"),
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_flag_overrides_every_source(args: list[str], expected: datetime | None) -> None:
+    assert parse_cli([*args, "a"]).exclude_newer == expected
 
 
 @pytest.fixture
@@ -249,7 +387,6 @@ def test_main_sends_npm_credentials_and_routes_scopes(
 def test_main_looks_up_uv_sources_on_their_index(
     capsys: pytest.CaptureFixture[str],
     httpx_mock: HTTPXMock,
-    index: FakeIndex,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -280,7 +417,9 @@ def test_main_looks_up_uv_sources_on_their_index(
         ).lstrip(),
         encoding="utf-8",
     )
-    index.pypi.update(internal=["1"], pinned=["1"], public=["1"])
+    httpx_mock.add_response(url="https://user:p%40ss@corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://plain.example/simple/pinned/", text="<a>pinned-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://user:p%40ss@corp.example/simple/public/", text="<a>public-1.tar.gz</a>")
 
     main(["-f", "pyproject.toml"])
 
@@ -303,7 +442,7 @@ def test_main_looks_up_uv_sources_on_their_index(
 
 
 def test_main_reads_uv_sources_from_the_workspace_root(
-    index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(
         dedent(
@@ -333,7 +472,8 @@ def test_main_reads_uv_sources_from_the_workspace_root(
         encoding="utf-8",
     )
     monkeypatch.chdir(member)
-    index.pypi.update(internal=["1"], public=["1"])
+    httpx_mock.add_response(url="https://corp.example/simple/internal/", text="<a>internal-1.tar.gz</a>")
+    httpx_mock.add_response(url="https://corp.example/simple/public/", text="<a>public-1.tar.gz</a>")
 
     main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml"])
 
@@ -349,7 +489,7 @@ def test_main_reads_uv_sources_from_the_workspace_root(
 
 
 def test_main_applies_uv_sources_where_uv_reads_them(
-    httpx_mock: HTTPXMock, index: FakeIndex, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
@@ -380,7 +520,10 @@ def test_main_applies_uv_sources_where_uv_reads_them(
         ).lstrip(),
         encoding="utf-8",
     )
-    index.pypi.update(torch=["2"], myproj=["2"])
+    httpx_mock.add_response(url="https://script.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://script.example/simple/myproj/", text="<a>myproj-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://corp.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
+    httpx_mock.add_response(url="https://pypi.example/simple/torch/", text="<a>torch-2.tar.gz</a>")
 
     main(["-i", "https://pypi.example/simple", "-f", "requirements.txt", "script.py"])
     main(["-i", "https://pypi.example/simple", "torch"])
@@ -391,15 +534,6 @@ def test_main_applies_uv_sources_where_uv_reads_them(
         "https://script.example/simple/myproj/",
         "https://script.example/simple/torch/",
     ]
-
-
-def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
-    # serve one HTML page of file names per project URL, and not found for the rest
-    def serve(request: httpx.Request) -> httpx.Response:
-        url = request.url.copy_with(username=None, password=None)
-        return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)
-
-    return serve
 
 
 def test_main_merges_pip_extra_indexes(
@@ -425,6 +559,14 @@ def test_main_merges_pip_extra_indexes(
     main(["-i", "https://pypi.example/simple", "-f", "requirements.txt"])
 
     assert requirements.read_text(encoding="utf-8").splitlines()[1:] == ["shared>=5", "conf>=3", "file>=4"]
+
+
+def _project_pages(pages: dict[str, str]) -> Callable[[httpx.Request], httpx.Response]:
+    def serve(request: httpx.Request) -> httpx.Response:
+        url = request.url.copy_with(username=None, password=None)
+        return httpx.Response(200, text=page) if (page := pages.get(str(url))) else httpx.Response(404)
+
+    return serve
 
 
 def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
@@ -476,7 +618,10 @@ def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
     main(["-i", "https://pypi.example/simple", "-f", "pyproject.toml", "requirements.txt", "script.py"])
 
     assert (
-        [(tmp_path / name).read_text(encoding="utf-8").splitlines()[line] for name, line in _UPDATED_LINES],
+        [
+            (tmp_path / name).read_text(encoding="utf-8").splitlines()[line]
+            for name, line in [("pyproject.toml", 2), ("requirements.txt", 0), ("script.py", 1)]
+        ],
         {
             request.headers.get("Authorization")
             for request in httpx_mock.get_requests()
@@ -490,9 +635,6 @@ def test_main_takes_a_package_from_the_first_uv_index_that_has_it(
         ],
         {"Basic OnRvaw=="},
     )
-
-
-_UPDATED_LINES: Final[list[tuple[str, int]]] = [("pyproject.toml", 2), ("requirements.txt", 0), ("script.py", 1)]
 
 
 def test_main_expands_npmrc_variables_and_sends_basic_credentials(

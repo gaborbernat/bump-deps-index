@@ -1,0 +1,3 @@
+Added ``--exclude-newer`` (default ``UV_EXCLUDE_NEWER``) to take only releases uploaded before a cutoff, given as a
+timestamp, a local date or a duration such as ``P7D`` or ``7 days``. A release without an upload time is skipped, as uv
+does.
