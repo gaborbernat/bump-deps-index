@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from ._cache import FetchCache
 from ._cutoff import accepts_upload
 from ._parsed import json_field, parse_timestamp, table
 from ._semver import split_npm_spec
@@ -12,38 +11,28 @@ from ._semver import split_npm_spec
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from httpx import Client
-
     from ._config._npm import NpmSettings
+    from ._http._session import Session
 
 
 class NpmRegistry:
-    def __init__(self, client: Client, exclude_newer: datetime | None, settings: NpmSettings) -> None:
-        self.client = client
+    def __init__(self, session: Session, exclude_newer: datetime | None, settings: NpmSettings) -> None:
+        self._session = session
         self.exclude_newer = exclude_newer
         self._settings = settings
-        self._documents: FetchCache[NpmRelease] = FetchCache()
 
     def release(self, registry: str, spec: str) -> NpmRelease:
         package, _ = split_npm_spec(spec)
-        url = f"{registry.rstrip('/')}/{quote(package, safe='@')}"
-        return self._documents.get(url, lambda url: self._fetch(url, self._settings.authorization(registry)))
-
-    def _fetch(self, url: str, authorization: str | None) -> NpmRelease:
-        response = self.client.get(
-            url,
-            headers={
-                # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
-                "Accept": (
-                    "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
-                    if self.exclude_newer is None
-                    else "application/json"
-                ),
-                **({} if authorization is None else {"Authorization": authorization}),
-            },
-            follow_redirects=True,
+        response = self._session.get(
+            f"{registry.rstrip('/')}/{quote(package, safe='@')}",
+            # the abbreviated document omits the `time` map of upload times, so a cutoff needs the full one
+            accept=(
+                "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8"
+                if self.exclude_newer is None
+                else "application/json"
+            ),
+            authorization=self._settings.authorization(registry),
         )
-        response.raise_for_status()
         times = {} if self.exclude_newer is None else table(response.json(), "time")
         latest = table(response.json(), "dist-tags").get("latest")
         return NpmRelease(

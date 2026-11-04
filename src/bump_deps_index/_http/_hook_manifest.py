@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-import ssl
 from urllib.parse import quote, urlsplit
 
-from httpx import Client, HTTPError
-from truststore import SSLContext
+from httpx import HTTPError
 from yaml import YAMLError
 from yaml import safe_load as load_yaml
+
+from ._session import new_client
 
 
 def hook_languages(repo: str, rev: str | None) -> dict[str, str]:
     if rev is None or (url := _manifest_url(repo, rev)) is None:
         return {}
     try:
-        with Client(verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT), timeout=10) as client:
+        with new_client(timeout=10) as client:
             manifest = load_yaml(client.get(url, follow_redirects=True).raise_for_status().text)
     except (HTTPError, YAMLError):  # guess from the dependency shape when the manifest is out of reach
         return {}

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ssl
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from configparser import Error as ConfigParserError
@@ -8,13 +7,14 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from httpx import Client, HTTPError, Limits
-from truststore import SSLContext
+from httpx import HTTPError, Limits
 from yaml import YAMLError
 
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
 from ._config._project import IndexSettings, entry_indexes, get_project, named_indexes, python_floor
+from ._http._hook_manifest import hook_languages
+from ._http._session import Session, new_client
 from ._loaders._registry import get_loaders
 from ._lookup import Lookup, PkgType, package_type
 from ._npm_registry import NpmRegistry
@@ -43,7 +43,7 @@ def run(options: Options) -> bool:
             options.pkgs, settings, pre_release=False if options.pre_release is None else options.pre_release
         )
     if (filenames := options.filenames) is None:  # discover only now, so passing packages never reads local scripts
-        found = set(chain.from_iterable(loader.files for loader in get_loaders()))
+        found = set(chain.from_iterable(loader.files for loader in get_loaders(hook_languages)))
         filenames = sorted(file.relative_to(Path.cwd()) for file in found)
     return _run_files(filenames, settings, pre_release=options.pre_release)
 
@@ -95,14 +95,12 @@ def _resolve(
         return
     parallel = min(len(lookups), 10)
     with (
-        Client(
-            verify=SSLContext(ssl.PROTOCOL_TLS_CLIENT),
-            limits=Limits(max_keepalive_connections=parallel, max_connections=parallel),
-        ) as client,
+        new_client(limits=Limits(max_keepalive_connections=parallel, max_connections=parallel)) as client,
         ThreadPoolExecutor(max_workers=parallel) as executor,
     ):
-        index = SimpleIndex(client, settings.exclude_newer)
-        npm = NpmRegistry(client, settings.exclude_newer, settings.npm)
+        session = Session(client)
+        index = SimpleIndex(session, settings.exclude_newer)
+        npm = NpmRegistry(session, settings.exclude_newer, settings.npm)
         futures = [(lookup, executor.submit(update, index, npm, lookup)) for lookup in lookups]
         # yield in submission order to keep the report stable between runs
         for lookup, future in futures:
@@ -121,7 +119,7 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
         if not filename.is_file():
             sys.stderr.write(f"{filename} does not exist; pass a file that exists to --file\n")
             successful = False
-        elif (loader := next((i for i in get_loaders() if i.supports(filename)), None)) is None:
+        elif (loader := next((i for i in get_loaders(hook_languages) if i.supports(filename)), None)) is None:
             sys.stderr.write(f"{filename} is not a supported dependency file, so it was skipped\n")
             successful = False
         elif (plan := _load_lookups(loader, filename, settings, pre_release=pre_release)) is None:

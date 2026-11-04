@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import cache
 from typing import TYPE_CHECKING
 
 from .package_json import PackageJson
@@ -14,12 +13,12 @@ from .tox_toml import ToxToml
 
 if TYPE_CHECKING:
     from ._base import Loader
+    from .pre_commit_config import HookLanguages
 
 
-@cache
-def get_loaders() -> list[Loader]:
+def get_loaders(hook_languages: HookLanguages) -> list[Loader]:
     return [
-        PreCommitConfig(),
+        PreCommitConfig(hook_languages),
         PackageJson(),
         PyProjectToml(),
         ToxToml(),

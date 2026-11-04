@@ -10,23 +10,20 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from ._cache import FetchCache
 from ._cutoff import accepts_upload
 from ._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from httpx import Client
-
+    from ._http._session import Session
     from ._lookup import IndexLookup
 
 
 class SimpleIndex:
-    def __init__(self, client: Client, exclude_newer: datetime | None) -> None:
-        self.client = client
+    def __init__(self, session: Session, exclude_newer: datetime | None) -> None:
+        self._session = session
         self.exclude_newer = exclude_newer
-        self._pages: FetchCache[list[_IndexFile]] = FetchCache()
 
     def versions(
         self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
@@ -58,7 +55,7 @@ class SimpleIndex:
             missing: list[HTTPStatusError] = []
             for url in urls:
                 try:
-                    pages.append(self._pages.get(f"{url.rstrip('/')}/{name}/", self._fetch))
+                    pages.append(self._fetch(f"{url.rstrip('/')}/{name}/"))
                 except HTTPStatusError as exc:
                     if exc.response.status_code != codes.NOT_FOUND:
                         raise
@@ -70,8 +67,7 @@ class SimpleIndex:
     def _fetch(self, url: str) -> list[_IndexFile]:
         json_type = "application/vnd.pypi.simple.v1+json"
         accept = f"{json_type}, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
-        response = self.client.get(url, headers={"Accept": accept}, follow_redirects=True)
-        response.raise_for_status()
+        response = self._session.get(url, accept=accept)
         if response.headers.get("content-type", "").startswith(json_type):
             # skip malformed entries the way the HTML parser skips malformed links
             return [

@@ -1,31 +1,35 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, ClassVar, Final
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, ClassVar, Final, TypeAlias
 
 from typing_extensions import override
 from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
-from bump_deps_index._hook_manifest import hook_languages
 from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
 
 from ._base import Entry, Loaded, SingleFileLoader, splice
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterator
     from pathlib import Path
 
     from bump_deps_index._parsed import Parsed
 
 _MERGE: Final[str] = "tag:yaml.org,2002:merge"
+HookLanguages: TypeAlias = Callable[[str, str | None], Mapping[str, str]]
 
 
 class PreCommitConfig(SingleFileLoader):
     filename: ClassVar[str] = ".pre-commit-config.yaml"
     default_pre_release: ClassVar[bool] = True
+
+    def __init__(self, hook_languages: HookLanguages) -> None:
+        self._hook_languages = hook_languages
 
     @override
     def load(self, filename: Path) -> Loaded:
@@ -41,7 +45,7 @@ class PreCommitConfig(SingleFileLoader):
         for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
             hooks = mappings(repo.get("hooks"))
             languages = (
-                hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
+                self._hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
                 if any("language" not in hook and hook.get("additional_dependencies") for hook in hooks)
                 else {}
             )
@@ -126,5 +130,6 @@ class PreCommitConfig(SingleFileLoader):
 
 
 __all__ = [
+    "HookLanguages",
     "PreCommitConfig",
 ]
