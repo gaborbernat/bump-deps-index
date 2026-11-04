@@ -14,11 +14,11 @@ from yaml import YAMLError
 from ._config._npm import npm_settings
 from ._config._pip import pip_extra_indexes
 from ._config._project import Declared, IndexSettings, Scope, get_project, python_floor
-from ._ecosystems import ECOSYSTEMS
-from ._ecosystems._base import Lookup
+from ._ecosystems._common._candidates import Lookup
+from ._ecosystems._common._registry import get_loaders
+from ._ecosystems._table import ECOSYSTEMS
 from ._http._hook_manifest import hook_languages
 from ._http._session import Session, new_client
-from ._loaders._registry import get_loaders
 from ._lookup import PkgType, package_type
 from ._redact import redact_text, redact_url
 
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
 
     from ._cli import Options
-    from ._ecosystems._base import Registry
-    from ._loaders._base import Loaded, Loader
+    from ._ecosystems._common._candidates import Registry
+    from ._ecosystems._common._loader import Loaded, Loader
 
 
 def run(options: Options) -> bool:

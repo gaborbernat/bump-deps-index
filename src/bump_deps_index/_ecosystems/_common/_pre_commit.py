@@ -13,7 +13,7 @@ from yaml import safe_load as load_yaml
 from bump_deps_index._lookup import PkgType, package_type
 from bump_deps_index._parsed import mappings, strings
 
-from ._base import Entry, Loaded, SingleFileLoader, splice
+from ._loader import Entry, Loaded, SingleFileLoader, splice
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

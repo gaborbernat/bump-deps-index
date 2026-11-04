@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from bump_deps_index._ecosystems._base import Candidate, Candidates, Lookup, Registry, accepted_versions
+from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
 from bump_deps_index._lookup import IndexLookup
 from bump_deps_index._parsed import json_field, parse_timestamp, table
 

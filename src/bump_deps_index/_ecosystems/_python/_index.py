@@ -12,7 +12,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from bump_deps_index._ecosystems._base import Candidate, Candidates, Lookup, Registry, accepted_versions
+from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:

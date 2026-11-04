@@ -1,1 +1,1 @@
-"""JavaScript packages from npm registries."""
+"""npm registry and semver bumps."""

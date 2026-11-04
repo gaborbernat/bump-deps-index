@@ -1,1 +1,1 @@
-"""Settings read from the environment and config files."""
+"""Settings read from config files and the environment."""

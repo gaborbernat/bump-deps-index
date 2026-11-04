@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
-    from bump_deps_index._loaders._base import Entry
+    from bump_deps_index._ecosystems._common._loader import Entry
 
     from ._npm import NpmSettings
 

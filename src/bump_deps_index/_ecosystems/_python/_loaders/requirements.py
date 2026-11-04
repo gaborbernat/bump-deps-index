@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
+from bump_deps_index._ecosystems._common._loader import Entry, Loaded, Loader
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, Loaded, Loader
 from ._lines import replace_requirement_line, split_comment
 
 if TYPE_CHECKING:

@@ -9,7 +9,7 @@ from packaging.version import InvalidVersion, Version
 if TYPE_CHECKING:
     from packaging.specifiers import Specifier
 
-    from bump_deps_index._ecosystems._base import Candidates
+    from bump_deps_index._ecosystems._common._candidates import Candidates
 
 
 def bump_python(spec: str, candidates: Candidates) -> str:

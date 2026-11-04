@@ -1,1 +1,1 @@
-"""HTTP access shared by the registries."""
+"""HTTP session, response cache and pre-commit hook manifests."""

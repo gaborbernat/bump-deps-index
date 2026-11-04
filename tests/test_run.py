@@ -9,7 +9,7 @@ import pytest
 from conftest import PYPI_FOO, index_args
 
 from bump_deps_index import main
-from bump_deps_index._ecosystems import ECOSYSTEMS
+from bump_deps_index._ecosystems._table import ECOSYSTEMS
 from bump_deps_index._lookup import PkgType
 
 if TYPE_CHECKING:
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from pytest_httpx import HTTPXMock
 
-    from bump_deps_index._ecosystems._base import Candidates
+    from bump_deps_index._ecosystems._common._candidates import Candidates
 
 
 def test_run_args(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> None:

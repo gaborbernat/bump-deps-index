@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from bump_deps_index._ecosystems._base import Candidates
+    from bump_deps_index._ecosystems._common._candidates import Candidates
 
 
 def bump_js(spec: str, candidates: Candidates) -> str:

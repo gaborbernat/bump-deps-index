@@ -12,23 +12,7 @@ if TYPE_CHECKING:
 
     from packaging.version import Version
 
-    from bump_deps_index._config._project import Declared, IndexSettings, Scope
-    from bump_deps_index._http._session import Session
     from bump_deps_index._lookup import IndexLookup, PkgType
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Ecosystem:
-    registry: Callable[[Session, IndexSettings], Registry]
-    bump: Callable[[str, Candidates], str]
-    # raises InvalidRequirement for a Python spec that is not a requirement
-    name: Callable[[str], str]
-    # for a package named on the command line
-    route: Callable[[str, str, Scope], IndexLookup]
-    # for a requirement declared in a file; None skips it
-    entry_route: Callable[[str, str, Declared], IndexLookup | None]
-    # the default index shown in "Using ... index"
-    index_url: Callable[[IndexSettings], str]
 
 
 class Registry(ABC):
@@ -82,7 +66,6 @@ def accepted_versions(
 __all__ = [
     "Candidate",
     "Candidates",
-    "Ecosystem",
     "Lookup",
     "Registry",
     "accepted_versions",

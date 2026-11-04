@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
+from bump_deps_index._ecosystems._common._loader import Entry, Loaded, SingleFileLoader
 from bump_deps_index._lookup import PkgType
 
-from ._base import Entry, Loaded, SingleFileLoader
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
