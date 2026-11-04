@@ -149,6 +149,8 @@ class IndexSettings:
     npm_registry: str
     npm: NpmSettings
     exclude_newer: datetime | None
+    # per package, keyed by the name as written; None exempts the package from the global cutoff
+    exclude_newer_package: dict[str, datetime | None]
 
 
 __all__ = [

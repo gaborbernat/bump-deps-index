@@ -326,6 +326,148 @@ def test_parse_cli_flag_overrides_every_source(args: list[str], expected: dateti
     assert parse_cli([*args, "a"]).exclude_newer == expected
 
 
+@pytest.mark.parametrize(
+    ("workspace", "expected"),
+    [
+        pytest.param(({}, {}), {}, id="defaults"),
+        pytest.param(
+            ({}, {"project/uv.toml": 'exclude-newer-package = { a = "2026-10-03T00:00:00Z", b = false }'}),
+            {"a": datetime(2026, 10, 3, tzinfo=UTC), "b": None},
+            id="project-uv",
+        ),
+        pytest.param(
+            ({}, {"project/pyproject.toml": '[tool.uv]\nexclude-newer-package = { a = "2026-10-04T00:00:00Z" }'}),
+            {"a": datetime(2026, 10, 4, tzinfo=UTC)},
+            id="uv-in-pyproject",
+        ),
+        pytest.param(
+            ({}, {"uv.toml": 'exclude-newer-package = { a = "2026-10-05T00:00:00Z" }'}),
+            {"a": datetime(2026, 10, 5, tzinfo=UTC)},
+            id="uv-in-parent-folder",
+        ),
+        pytest.param(
+            ({}, {"~/.config/uv/uv.toml": 'exclude-newer-package = { a = "2026-10-06T00:00:00Z" }'}),
+            {"a": datetime(2026, 10, 6, tzinfo=UTC)},
+            id="user-uv",
+        ),
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": 'exclude-newer-package = { a = "2026-10-03T00:00:00Z" }',
+                    "~/.config/uv/uv.toml": (
+                        'exclude-newer-package = { a = "2026-10-07T00:00:00Z", c = "2026-10-08T00:00:00Z" }'
+                    ),
+                },
+            ),
+            {"a": datetime(2026, 10, 3, tzinfo=UTC), "c": datetime(2026, 10, 8, tzinfo=UTC)},
+            id="project-over-user-per-package",
+        ),
+        pytest.param(
+            ({}, {"project/uv.toml": 'exclude-newer-package = { a = 5, b = "2026-10-09T00:00:00Z" }'}),
+            {"b": datetime(2026, 10, 9, tzinfo=UTC)},
+            id="non-string-ignored",
+        ),
+    ],
+    indirect=["workspace"],
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_reads_exclude_newer_package_settings(expected: dict[str, datetime | None]) -> None:
+    assert parse_cli(["a"]).exclude_newer_package == expected
+
+
+@pytest.mark.parametrize(
+    "workspace",
+    [
+        pytest.param(({}, {"project/uv.toml": 'exclude-newer-package = { a = "soon" }'}), id="project-uv"),
+        pytest.param(({}, {"~/.config/uv/uv.toml": 'exclude-newer-package = { a = "soon" }'}), id="user-uv"),
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_rejects_invalid_package_cutoff_in_settings(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as error:
+        parse_cli(["a"])
+
+    assert (error.value.code, capsys.readouterr().err.splitlines()[-1]) == (
+        2,
+        (
+            "bump-deps-index: error: invalid exclude-newer-package in uv settings: 'soon' is not a cutoff: "
+            "use a timestamp such as 2026-10-27T15:46:26Z, a date or P7D"
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        pytest.param(
+            ["--exclude-newer-package", "a=false"],
+            {"a": None, "b": datetime(2026, 10, 4, tzinfo=UTC)},
+            id="same-name",
+        ),
+        pytest.param(
+            ["--exclude-newer-package", "c=2026-10-09T00:00:00Z"],
+            {
+                "a": datetime(2026, 10, 3, tzinfo=UTC),
+                "b": datetime(2026, 10, 4, tzinfo=UTC),
+                "c": datetime(2026, 10, 9, tzinfo=UTC),
+            },
+            id="new-name",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "workspace",
+    [
+        pytest.param(
+            (
+                {},
+                {
+                    "project/uv.toml": (
+                        'exclude-newer-package = { a = "2026-10-03T00:00:00Z", b = "2026-10-04T00:00:00Z" }'
+                    ),
+                },
+            ),
+            id="project-uv",
+        ),
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_package_flag_overrides_settings_per_package(
+    args: list[str], expected: dict[str, datetime | None]
+) -> None:
+    assert parse_cli(args).exclude_newer_package == expected
+
+
+@pytest.mark.parametrize(
+    "workspace",
+    [
+        pytest.param(
+            (
+                {"PIP_UPLOADED_PRIOR_TO": _ENV_PIP},
+                {
+                    "project/uv.toml": 'exclude-newer-package = { a = "2026-10-03T00:00:00Z" }',
+                    "~/.config/uv/uv.toml": 'exclude-newer-package = { b = "2026-10-04T00:00:00Z" }',
+                },
+            ),
+            id="all-settings",
+        ),
+    ],
+    indirect=True,
+)
+@pytest.mark.usefixtures("workspace")
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
+def test_parse_cli_no_exclude_newer_drops_every_cutoff() -> None:
+    options = parse_cli(["--no-exclude-newer"])
+
+    assert (options.exclude_newer, options.exclude_newer_package) == (None, {})
+
+
 @pytest.fixture
 def workspace(
     request: pytest.FixtureRequest,

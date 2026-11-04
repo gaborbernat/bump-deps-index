@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
+from bump_deps_index._ecosystems._common._candidates import (
+    Candidate,
+    Candidates,
+    Lookup,
+    Registry,
+    accepted_versions,
+    package_exclude_newer,
+)
 from bump_deps_index._lookup import IndexLookup
 from bump_deps_index._parsed import json_field, parse_timestamp, table
 
@@ -20,7 +27,8 @@ class NpmRegistry(Registry):
         self._settings = settings
 
     def candidates(self, lookup: Lookup) -> Candidates:
-        exclude_newer = self._settings.exclude_newer
+        # npm does not normalize names, so only the exact spelling matches a table entry
+        exclude_newer = package_exclude_newer(self._settings, lookup.name, canonical=lambda name: name)
         registry = lookup.indexes.url
         response = self._session.get(
             f"{registry.rstrip('/')}/{quote(lookup.name, safe='@')}",

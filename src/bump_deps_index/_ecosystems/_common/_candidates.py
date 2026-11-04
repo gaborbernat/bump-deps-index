@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from packaging.version import Version
 
+    from bump_deps_index._config._project import IndexSettings
     from bump_deps_index._lookup import IndexLookup, PkgType
 
 
@@ -47,6 +48,13 @@ class Candidate:
     withdrawn: bool
 
 
+def package_exclude_newer(settings: IndexSettings, name: str, *, canonical: Callable[[str], str]) -> datetime | None:
+    # membership decides, not the value: a None in the table exempts the package from the global cutoff
+    cutoffs = {canonical(package): cutoff for package, cutoff in settings.exclude_newer_package.items()}
+    key = canonical(name)
+    return cutoffs.get(key, settings.exclude_newer)
+
+
 def accepted_versions(
     candidates: Iterable[Candidate],
     *,
@@ -69,4 +77,5 @@ __all__ = [
     "Lookup",
     "Registry",
     "accepted_versions",
+    "package_exclude_newer",
 ]

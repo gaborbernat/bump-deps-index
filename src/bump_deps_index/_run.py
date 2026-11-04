@@ -37,6 +37,7 @@ def run(options: Options) -> bool:
         npm_registry=options.npm_registry,
         npm=npm_settings(),
         exclude_newer=options.exclude_newer,
+        exclude_newer_package=options.exclude_newer_package,
     )
     if options.pkgs:
         return _run_packages(

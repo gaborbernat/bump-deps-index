@@ -12,7 +12,14 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
+from bump_deps_index._ecosystems._common._candidates import (
+    Candidate,
+    Candidates,
+    Lookup,
+    Registry,
+    accepted_versions,
+    package_exclude_newer,
+)
 from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
@@ -57,7 +64,7 @@ class SimpleIndex(Registry):
         candidates.sort(key=itemgetter(0), reverse=True)
         yield from accepted_versions(
             (candidate for _, candidate in candidates),
-            exclude_newer=self._settings.exclude_newer,
+            exclude_newer=package_exclude_newer(self._settings, name, canonical=canonicalize_name),
             pre_release=lookup.pre_release,
             is_prerelease=lambda text: Version(text).is_prerelease,
         )

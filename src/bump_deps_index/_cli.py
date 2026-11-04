@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
+from argparse import ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ._config._npm import npm_registry
-from ._config._python import python_exclude_newer, python_index_url
+from ._config._python import python_exclude_newer, python_exclude_newer_package, python_index_url
 from ._cutoff import parse_exclude_newer
 from ._redact import redact_url
 from .version import version
@@ -17,8 +17,29 @@ if TYPE_CHECKING:
 
 def parse_cli(args: Sequence[str] | None) -> Options:
     options = Options()
-    _build_parser().parse_args(args, namespace=options)
+    parser = _build_parser()
+    parser.parse_args(args, namespace=options)
+    if options.no_exclude_newer:
+        if options.exclude_newer_package_flags:
+            parser.error("argument --exclude-newer-package: not allowed with argument --no-exclude-newer")
+        options.exclude_newer = None
+        options.exclude_newer_package = {}
+    else:
+        options.exclude_newer_package = {
+            **_configured_cutoffs(parser),
+            **dict(options.exclude_newer_package_flags),
+        }
     return options
+
+
+def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
+    try:
+        return {
+            name: None if value is False else _cutoff_argument(value)
+            for name, value in python_exclude_newer_package().items()
+        }
+    except ArgumentTypeError as exc:
+        parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
 
 
 class Options(Namespace):
@@ -45,6 +66,12 @@ class Options(Namespace):
     """Accept pre-releases: yes, no or decide per file type"""
     exclude_newer: datetime | None
     """Only candidates uploaded before this instant; None accepts every release"""
+    no_exclude_newer: bool
+    """Whether ``--no-exclude-newer`` was given, which drops every cutoff, the per-package ones included"""
+    exclude_newer_package_flags: list[tuple[str, datetime | None]]
+    """Per-package cutoffs from the command line, in order; a repeated name takes its last value"""
+    exclude_newer_package: dict[str, datetime | None]
+    """Per-package cutoffs by the name as written, the command line over the config; None exempts the package"""
 
 
 def _build_parser() -> ArgumentParser:
@@ -81,14 +108,23 @@ def _build_parser() -> ArgumentParser:
         type=_cutoff_argument,
         help=cutoff_help,
     )
-    # SUPPRESS keeps the flag out of the defaults, so the mutual exclusion check sees it when it is given
     cutoff_flags.add_argument(
         "--no-exclude-newer",
-        dest="exclude_newer",
-        action="store_const",
-        const=None,
-        default=SUPPRESS,
+        dest="no_exclude_newer",
+        action="store_true",
         help="ignore every cutoff, including the one from the environment and config files; overrides --exclude-newer",
+    )
+    package_cutoff_help = (
+        "cutoff for one package, NAME=CUTOFF in any form --exclude-newer takes or NAME=false for none; repeatable"
+    )
+    parser.add_argument(
+        "--exclude-newer-package",
+        dest="exclude_newer_package_flags",
+        metavar="name=cutoff",
+        action="append",
+        default=[],
+        type=_package_cutoff_argument,
+        help=package_cutoff_help,
     )
     source = parser.add_mutually_exclusive_group()
     source.add_argument("pkgs", nargs="*", help="packages to inspect", default=[], metavar="pkg")
@@ -124,6 +160,14 @@ def _cutoff_argument(value: str) -> datetime:
         return parse_exclude_newer(value, datetime.now(UTC))
     except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
         raise ArgumentTypeError(str(exc)) from exc
+
+
+def _package_cutoff_argument(value: str) -> tuple[str, datetime | None]:
+    name, separator, cutoff = value.partition("=")
+    if not (separator and name):
+        msg = f"{value!r} is not NAME=CUTOFF: use a package name, then a cutoff such as P7D or false"
+        raise ArgumentTypeError(msg)
+    return name, None if cutoff == "false" else _cutoff_argument(cutoff)
 
 
 __all__ = [
