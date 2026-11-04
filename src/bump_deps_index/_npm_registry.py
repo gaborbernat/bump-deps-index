@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from ._cutoff import accepts_upload
+from ._ecosystems._base import Candidate, accepted_versions
 from ._parsed import json_field, parse_timestamp, table
-from ._semver import split_npm_spec
+from ._semver import is_prerelease, rank_versions, split_npm_spec
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -21,7 +21,7 @@ class NpmRegistry:
         self.exclude_newer = exclude_newer
         self._settings = settings
 
-    def release(self, registry: str, spec: str) -> NpmRelease:
+    def release(self, registry: str, spec: str, *, pre_release: bool) -> NpmRelease:
         package, _ = split_npm_spec(spec)
         response = self._session.get(
             f"{registry.rstrip('/')}/{quote(package, safe='@')}",
@@ -35,12 +35,20 @@ class NpmRegistry:
         )
         times = {} if self.exclude_newer is None else table(response.json(), "time")
         latest = table(response.json(), "dist-tags").get("latest")
+        versions = json_field(response, "versions", dict)
+        candidates = (
+            Candidate(
+                version=version,
+                uploaded=parse_timestamp(times.get(version)),
+                withdrawn=isinstance(meta := versions[version], dict) and bool(meta.get("deprecated")),
+            )
+            for version in rank_versions(versions)
+        )
         return NpmRelease(
             versions=tuple(
-                version
-                for version, meta in json_field(response, "versions", dict).items()
-                if not (isinstance(meta, dict) and meta.get("deprecated"))
-                and accepts_upload(self.exclude_newer, parse_timestamp(times.get(version)))
+                accepted_versions(
+                    candidates, exclude_newer=self.exclude_newer, pre_release=pre_release, is_prerelease=is_prerelease
+                )
             ),
             latest=latest if isinstance(latest, str) else None,
         )

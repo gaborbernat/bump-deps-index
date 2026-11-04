@@ -12,15 +12,16 @@ if TYPE_CHECKING:
     from packaging.specifiers import Specifier
 
 
-def bump_python(spec: str, requirement: Requirement, versions: Iterable[Version], *, pre_release: bool) -> str:
+def bump_python(spec: str, requirement: Requirement, versions: Iterable[str]) -> str:
     specifiers = list(requirement.specifier)
     exact = next((specifier for specifier in specifiers if specifier.operator in {"==", "==="}), None)
     current = exact or next(
         (specifier for operator in (">=", "~=") for specifier in specifiers if specifier.operator == operator), None
     )
     local = _local_label(exact)
-    for version in versions:
-        if exact is None and not requirement.specifier.contains(version, prereleases=pre_release):
+    for version in map(Version, versions):
+        # the index already dropped the pre-releases you exclude
+        if exact is None and not requirement.specifier.contains(version, prereleases=True):
             continue
         if exact is not None and _is_downgrade(exact.version, version):
             break

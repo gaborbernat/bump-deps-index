@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
     match lookup.pkg_type:
         case PkgType.JS:
-            release = npm.release(lookup.indexes.url, lookup.requirement)
-            return bump_js(lookup.requirement, release.versions, release.latest, pre_release=lookup.pre_release)
+            release = npm.release(lookup.indexes.url, lookup.requirement, pre_release=lookup.pre_release)
+            return bump_js(lookup.requirement, release.versions, release.latest)
         case _:  # PkgType has two members, the other being Python
             if (requirement := Requirement(lookup.requirement)).url is not None:
                 return lookup.requirement
@@ -28,7 +28,7 @@ def update(index: SimpleIndex, npm: NpmRegistry, lookup: Lookup) -> str:
                 python_version=lookup.python_floor,
                 pre_release=lookup.pre_release,
             )
-            return bump_python(lookup.requirement, requirement, versions, pre_release=lookup.pre_release)
+            return bump_python(lookup.requirement, requirement, versions)
 
 
 __all__ = [

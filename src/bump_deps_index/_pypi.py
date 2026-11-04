@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import cache
 from html.parser import HTMLParser
+from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from httpx import HTTPStatusError, codes
@@ -10,7 +11,7 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from ._cutoff import accepts_upload
+from ._ecosystems._base import Candidate, accepted_versions
 from ._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
@@ -27,12 +28,10 @@ class SimpleIndex:
 
     def versions(
         self, lookup: IndexLookup, package: str, *, python_version: Version | None, pre_release: bool
-    ) -> list[Version]:
+    ) -> list[str]:
         name = canonicalize_name(package)
-        versions: set[Version] = set()
+        candidates: list[tuple[Version, Candidate]] = []
         for file in self._project_files(lookup, name):
-            if not accepts_upload(self.exclude_newer, file.uploaded):
-                continue
             if (
                 python_version is not None
                 and file.requires_python is not None
@@ -45,8 +44,20 @@ class SimpleIndex:
             except ValueError:
                 continue
             if project == name:  # an index page may list files of other projects, as pip and uv skip them
-                versions.add(version)
-        return sorted((version for version in versions if pre_release or not version.is_prerelease), reverse=True)
+                candidates.append((
+                    version,
+                    Candidate(version=str(version), uploaded=file.uploaded, withdrawn=file.yanked),
+                ))
+        # a stable sort keeps the spelling of the first file of a version ahead of later ones
+        candidates.sort(key=itemgetter(0), reverse=True)
+        return list(
+            accepted_versions(
+                (candidate for _, candidate in candidates),
+                exclude_newer=self.exclude_newer,
+                pre_release=pre_release,
+                is_prerelease=lambda text: Version(text).is_prerelease,
+            )
+        )
 
     def _project_files(self, lookup: IndexLookup, name: str) -> list[_IndexFile]:
         # uv takes a package from the first of its indexes that has it; pip merges its index with the extra indexes
@@ -75,9 +86,10 @@ class SimpleIndex:
                     filename=filename,
                     requires_python=requires if isinstance(requires := file.get("requires-python"), str) else None,
                     uploaded=parse_timestamp(file.get("upload-time")),
+                    yanked=bool(file.get("yanked")),
                 )
                 for file in mappings(json_field(response, "files", list))
-                if isinstance(filename := file.get("filename"), str) and not file.get("yanked")
+                if isinstance(filename := file.get("filename"), str)
             ]
         parser = _IndexParser()
         parser.feed(response.text)
@@ -106,6 +118,7 @@ def _parse_filename(filename: str) -> tuple[str, Version]:
 class _IndexFile:
     filename: str
     requires_python: str | None
+    yanked: bool
     # PEP 700 upload time; the HTML simple API has none
     uploaded: datetime | None = None
 
@@ -127,14 +140,10 @@ class _IndexParser(HTMLParser):
         self._attrs = []
 
     def handle_data(self, data: str) -> None:
-        if (
-            self._tags
-            and self._tags[-1] == "a"
-            and data.strip()
-            and all(key != "data-yanked" for key, _ in self._attrs)
-        ):
+        if self._tags and self._tags[-1] == "a" and data.strip():
             requires_python = next((value for key, value in self._attrs if key == "data-requires-python"), None)
-            self.files.append(_IndexFile(filename=data.strip(), requires_python=requires_python))
+            yanked = any(key == "data-yanked" for key, _ in self._attrs)
+            self.files.append(_IndexFile(filename=data.strip(), requires_python=requires_python, yanked=yanked))
 
 
 __all__ = [

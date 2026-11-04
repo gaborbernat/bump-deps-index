@@ -8,16 +8,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
-def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_release: bool) -> str:
+def bump_js(spec: str, versions: Iterable[str], latest: str | None) -> str:
     package, wanted = split_npm_spec(spec)
-    ranked = sorted(
-        (
-            (key, version)
-            for version in versions
-            if (key := _semver(version)) is not None and (pre_release or key.release)
-        ),
-        reverse=True,
-    )
+    # the registry passes valid versions only, ranked newest first; the filter narrows the type
+    ranked = [(key, version) for version in versions if (key := _semver(version)) is not None]
     # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
     if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
         operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
@@ -46,6 +40,15 @@ def bump_js(spec: str, versions: Iterable[str], latest: str | None, *, pre_relea
 def split_npm_spec(spec: str) -> tuple[str, str]:
     at = spec.find("@", 1)  # skip the `@` that opens a scoped package name
     return (spec, "") if at == -1 else (spec[:at], spec[at + 1 :])
+
+
+def rank_versions(versions: Iterable[str]) -> list[str]:
+    ranked = sorted(((key, version) for version in versions if (key := _semver(version)) is not None), reverse=True)
+    return [version for _, version in ranked]
+
+
+def is_prerelease(version: str) -> bool:
+    return (key := _semver(version)) is not None and not key.release
 
 
 def _semver(version: str) -> _Semver | None:
@@ -90,5 +93,7 @@ def _pad_version(version: str) -> str:
 
 __all__ = [
     "bump_js",
+    "is_prerelease",
+    "rank_versions",
     "split_npm_spec",
 ]
