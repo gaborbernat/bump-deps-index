@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
@@ -20,7 +21,10 @@ def bump_python(spec: str, candidates: Candidates) -> str:
     current = exact or next(
         (specifier for operator in (">=", "~=") for specifier in specifiers if specifier.operator == operator), None
     )
-    local = _local_label(exact)
+    local = None
+    if exact is not None and not exact.version.endswith(".*"):
+        with suppress(InvalidVersion):
+            local = Version(exact.version).local
     for version in map(Version, candidates.versions):
         # the index already dropped the pre-releases you exclude
         if exact is None and not requirement.specifier.contains(version, prereleases=True):
@@ -39,15 +43,6 @@ def bump_python(spec: str, candidates: Candidates) -> str:
         if Requirement(new).specifier.contains(version, prereleases=True):
             return new
     return spec
-
-
-def _local_label(exact: Specifier | None) -> str | None:
-    if exact is None or exact.version.endswith(".*"):
-        return None
-    try:
-        return Version(exact.version).local
-    except InvalidVersion:
-        return None
 
 
 def _is_downgrade(pinned: str, version: Version) -> bool:

@@ -9,10 +9,22 @@ from ._config._npm import npm_registry
 from ._config._python import python_exclude_newer, python_exclude_newer_package, python_index_url
 from ._cutoff import parse_exclude_newer
 from ._redact import redact_url
+from ._run import run
 from .version import version
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+def main(args: Sequence[str] | None = None) -> None:
+    """
+    Run the command-line interface.
+
+    :param args: command-line arguments, or ``sys.argv[1:]`` when None.
+    :raises SystemExit: with status 1 when a lookup fails or a file cannot be updated.
+    """
+    if not run(parse_cli(args)):
+        raise SystemExit(1)
 
 
 def parse_cli(args: Sequence[str] | None) -> Options:
@@ -30,25 +42,21 @@ def parse_cli(args: Sequence[str] | None) -> Options:
         options.exclude_newer_package = {}
         options.exclude_newer_group = {}
     else:
-        options.exclude_newer_package = {
-            **_configured_cutoffs(parser),
-            **dict(options.exclude_newer_package_flags),
-        }
+        try:
+            configured = {
+                name: None if value is False else _cutoff_argument(value)
+                for name, value in python_exclude_newer_package().items()
+            }
+        except ArgumentTypeError as exc:
+            parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
+        options.exclude_newer_package = {**configured, **dict(options.exclude_newer_package_flags)}
         options.exclude_newer_group = dict(options.exclude_newer_group_flags)
     return options
 
 
-def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
-    try:
-        return {
-            name: None if value is False else _cutoff_argument(value)
-            for name, value in python_exclude_newer_package().items()
-        }
-    except ArgumentTypeError as exc:
-        parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
-
-
 class Options(Namespace):
+    """Options of one run, as the command line sets them; ``run`` reads them."""
+
     index_url: str
     """The PyPI Index URL to query for Python versions."""
     npm_registry: str
@@ -105,11 +113,11 @@ def _build_parser() -> ArgumentParser:
         default="file-default",
         help=pre_release_help,
     )
+    cutoff_flags = parser.add_mutually_exclusive_group()
     cutoff_help = (
         "only use releases uploaded before this cutoff, a timestamp or a duration such as P7D "
         "(default: from pip and uv settings)"
     )
-    cutoff_flags = parser.add_mutually_exclusive_group()
     cutoff_flags.add_argument(
         "--exclude-newer",
         dest="exclude_newer",
@@ -178,13 +186,6 @@ def _pre_release_argument(value: str) -> bool | None:
     return choices[value]
 
 
-def _cutoff_argument(value: str) -> datetime:
-    try:
-        return parse_exclude_newer(value, datetime.now(UTC))
-    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
-        raise ArgumentTypeError(str(exc)) from exc
-
-
 def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
     name, separator, cutoff = value.partition("=")
     if not (separator and name):
@@ -193,7 +194,15 @@ def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
     return name, None if cutoff == "false" else _cutoff_argument(cutoff)
 
 
+def _cutoff_argument(value: str) -> datetime:
+    try:
+        return parse_exclude_newer(value, datetime.now(UTC))
+    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
+        raise ArgumentTypeError(str(exc)) from exc
+
+
 __all__ = [
     "Options",
+    "main",
     "parse_cli",
 ]

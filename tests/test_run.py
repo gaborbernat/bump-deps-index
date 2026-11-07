@@ -5,7 +5,7 @@ import tomllib
 from dataclasses import replace
 from pathlib import Path
 from threading import Event
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import httpx
 import pytest
@@ -303,21 +303,6 @@ def test_output_redacts_direct_reference_credentials(tmp_path: Path, capsys: pyt
     )
 
 
-_PYPROJECT_GROUPS: str = """\
-[build-system]
-requires = ["builder>=1"]
-
-[project]
-name = "demo"
-dependencies = ["lib>=1"]
-optional-dependencies.extra = ["extra>=1"]
-
-[dependency-groups]
-test = ["tester>=1"]
-lint = ["linter>=1"]
-"""
-
-
 def _two_releases(request: httpx.Request) -> httpx.Response:
     name = request.url.path.rstrip("/").rpartition("/")[2]
     files = [
@@ -325,17 +310,6 @@ def _two_releases(request: httpx.Request) -> httpx.Response:
         {"filename": f"{name}-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
     ]
     return httpx.Response(200, json={"files": files}, headers={"content-type": "application/vnd.pypi.simple.v1+json"})
-
-
-def _specs(text: str) -> tuple[list[str], ...]:
-    cfg = tomllib.loads(text)
-    return (
-        cfg["build-system"]["requires"],
-        cfg["project"]["dependencies"],
-        cfg["project"]["optional-dependencies"]["extra"],
-        cfg["dependency-groups"]["test"],
-        cfg["dependency-groups"]["lint"],
-    )
 
 
 @pytest.mark.usefixtures("isolated_index_settings", "work_dir")
@@ -369,15 +343,37 @@ def _specs(text: str) -> tuple[list[str], ...]:
 def test_run_applies_cutoff_per_dependency_group(
     extra: list[str], expected: tuple[list[str], ...], httpx_mock: HTTPXMock
 ) -> None:
-    Path("pyproject.toml").write_text(_PYPROJECT_GROUPS, encoding="utf-8")
+    Path("pyproject.toml").write_text(
+        """\
+[build-system]
+requires = ["builder>=1"]
+
+[project]
+name = "demo"
+dependencies = ["lib>=1"]
+optional-dependencies.extra = ["extra>=1"]
+
+[dependency-groups]
+test = ["tester>=1"]
+lint = ["linter>=1"]
+""",
+        encoding="utf-8",
+    )
     httpx_mock.add_callback(_two_releases, is_reusable=True)
 
     main(["-i", "https://I.com", "-p", "no", "--exclude-newer", "2026-11-01T00:00:00Z", *extra, "-f", "pyproject.toml"])
 
-    assert _specs(Path("pyproject.toml").read_text(encoding="utf-8")) == expected
+    cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    assert (
+        cfg["build-system"]["requires"],
+        cfg["project"]["dependencies"],
+        cfg["project"]["optional-dependencies"]["extra"],
+        cfg["dependency-groups"]["test"],
+        cfg["dependency-groups"]["lint"],
+    ) == expected
 
 
-_SAME_TEXT_GROUPS: str = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
+_SAME_TEXT_GROUPS: Final[str] = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
 
 
 @pytest.mark.usefixtures("isolated_index_settings", "work_dir")

@@ -21,8 +21,8 @@ def _inheritance_aliases() -> dict[str, str]:
     aliases: dict[str, str] = {}
     for entry in bump_deps_index.__all__:
         to_module = getattr(getattr(bump_deps_index, entry), "__module__", "")
-        of = f"{to_module}{'.' if to_module else ''}{entry}"
-        aliases.setdefault(of, f"{bump_deps_index.__name__}.{entry}")  # first instance wins
+        # first instance wins
+        aliases.setdefault(f"{to_module}{'.' if to_module else ''}{entry}", f"{bump_deps_index.__name__}.{entry}")
     return aliases
 
 
@@ -76,7 +76,7 @@ nitpick_ignore: Final[list[str]] = []
 
 
 def setup(app: Sphinx) -> None:
-    """Sphinx resolves pathlib.Path to an undocumented private alias without this hook."""
+    # Sphinx resolves pathlib.Path to an undocumented private alias without this hook.
     app.connect("missing-reference", _resolve_private_path)
     app.connect("source-read", _include_unreleased)
 

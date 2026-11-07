@@ -46,14 +46,6 @@ def get_project(directory: Path) -> Project:
         return Project(pyproject=pyproject)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Project:
-    pyproject: Path | None = None
-    name: str | None = None
-    python_floor: Version | None = None
-    uv: UvIndexes | None = None
-
-
 def python_floor(requires_python: str | None) -> Version | None:
     specifiers = SpecifierSet(requires_python or "")
     bounds = [
@@ -98,6 +90,14 @@ def _release(parts: Iterable[int]) -> Version:
 def _next_release(version: Version) -> Version:
     release = (*version.release, *(0 for _ in range(3 - len(version.release))))
     return _release((*release[:-1], release[-1] + 1))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Project:
+    pyproject: Path | None = None
+    name: str | None = None
+    python_floor: Version | None = None
+    uv: UvIndexes | None = None
 
 
 def named_indexes(_requirement: str, name: str, scope: Scope) -> IndexLookup:

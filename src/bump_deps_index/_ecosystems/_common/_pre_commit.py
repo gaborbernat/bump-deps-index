@@ -36,35 +36,39 @@ class PreCommitConfig(SingleFileLoader):
     def load(self, filename: Path) -> Loaded:
         with filename.open("rt", encoding="utf-8") as file_handler:
             cfg: Parsed = load_yaml(file_handler)
+        entries: list[Entry] = []
+        kept: list[bool] = []
+        for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
+            hooks = mappings(repo.get("hooks"))
+            languages = self._repo_languages(repo, hooks)
+            for hook in hooks:
+                hook_entries = self._hook_entries(hook, languages)
+                if "additional_dependencies" in hook:
+                    kept.append(hook_entries is not None)
+                entries.extend(hook_entries or [])
+        return Loaded(entries=entries, rewrite=partial(self._update_text, kept=tuple(kept)))
+
+    def _repo_languages(self, repo: dict[str, Parsed], hooks: list[dict[str, Parsed]]) -> Mapping[str, str]:
+        # a hook without its own language takes the one of its repo, looked up by the hook id
+        if not any("language" not in hook and hook.get("additional_dependencies") for hook in hooks):
+            return {}
+        return self._hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
+
+    @staticmethod
+    def _hook_entries(hook: dict[str, Parsed], languages: Mapping[str, str]) -> list[Entry] | None:
         language_types: Final[dict[str, PkgType]] = {
             "python": PkgType.PYTHON,
             "python_venv": PkgType.PYTHON,
             "node": PkgType.JS,
         }
-        entries: list[Entry] = []
-        kept: list[bool] = []
-        for repo in mappings(cfg.get("repos") if isinstance(cfg, dict) else None):
-            hooks = mappings(repo.get("hooks"))
-            languages = (
-                self._hook_languages(str(repo.get("repo")), rev if isinstance(rev := repo.get("rev"), str) else None)
-                if any("language" not in hook and hook.get("additional_dependencies") for hook in hooks)
-                else {}
-            )
-            for hook in hooks:
-                language = (
-                    value if isinstance(value := hook.get("language"), str) else languages.get(str(hook.get("id")))
-                )
-                # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
-                skip = language is not None and language not in language_types
-                if "additional_dependencies" in hook:
-                    kept.append(not skip)
-                if skip:
-                    continue
-                entries.extend(
-                    Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
-                    for pkg in strings(hook.get("additional_dependencies"))
-                )
-        return Loaded(entries=entries, rewrite=partial(self._update_text, kept=tuple(kept)))
+        language = value if isinstance(value := hook.get("language"), str) else languages.get(str(hook.get("id")))
+        # skip golang, rust and other hooks; their dependencies are not on PyPI or npm
+        if language is not None and language not in language_types:
+            return None
+        return [
+            Entry(spec=pkg, pkg_type=package_type(pkg) if language is None else language_types[language])
+            for pkg in strings(hook.get("additional_dependencies"))
+        ]
 
     def _update_text(self, text: str, changes: Mapping[str, str], kept: tuple[bool, ...]) -> str:
         # keyed by start: an alias yields its anchored node again, which must be edited once
