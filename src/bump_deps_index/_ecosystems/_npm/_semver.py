@@ -14,23 +14,9 @@ def bump_js(spec: str, candidates: Candidates) -> str:
     package, wanted = _split_npm_spec(spec)
     # the registry passes valid versions only, ranked newest first; the filter narrows the type
     ranked = [(key, version) for version in candidates.versions if (key := _semver(version)) is not None]
-    # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
-    if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
-        operator, pinned = "", _semver(_pad_version(wanted)) if wanted else None
-        in_range = [version for key, version in ranked if pinned is None or key >= pinned]
-    else:
-        operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
-        # keep ranges this tool cannot compare, such as `<2` or a dist-tag
-        if operator not in {"^", "~", ">="} or (current := _semver(wanted[len(operator) :])) is None:
-            return spec
-        match operator:
-            case ">=":
-                depth = 0
-            case "~":
-                depth = 2
-            case _:  # `^1.2.3` keeps the major inside its range, `^0.2.3` the minor and `^0.0.3` the patch
-                depth = 1 if current.major else 2 if current.minor else 3
-        in_range = [version for key, version in ranked if key >= current and key.prefix(depth) == current.prefix(depth)]
+    if (bounds := _in_range(wanted, ranked)) is None:
+        return spec
+    operator, in_range = bounds
     if not in_range:  # the registry has no release you accept, such as only pre-releases
         return spec
     # npm installs the `latest` dist-tag when it fits the range, and the highest version otherwise
@@ -75,6 +61,26 @@ class _Semver:
 
     def prefix(self, depth: int) -> tuple[int, ...]:
         return (self.major, self.minor, self.patch)[:depth]
+
+
+def _in_range(wanted: str, ranked: list[tuple[_Semver, str]]) -> tuple[str, list[str]] | None:
+    # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
+    if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
+        pinned = _semver(_pad_version(wanted)) if wanted else None
+        return "", [version for key, version in ranked if pinned is None or key >= pinned]
+    operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
+    # keep ranges this tool cannot compare, such as `<2` or a dist-tag
+    if operator not in {"^", "~", ">="} or (current := _semver(wanted[len(operator) :])) is None:
+        return None
+    match operator:
+        case ">=":
+            depth = 0
+        case "~":
+            depth = 2
+        case _:  # `^1.2.3` keeps the major inside its range, `^0.2.3` the minor and `^0.0.3` the patch
+            depth = 1 if current.major else 2 if current.minor else 3
+    in_range = [version for key, version in ranked if key >= current and key.prefix(depth) == current.prefix(depth)]
+    return operator, in_range
 
 
 def _pad_version(version: str) -> str:
