@@ -51,7 +51,10 @@ def parse_cli(args: Sequence[str] | None) -> Options:
 
 
 class Options(Namespace):
+    """Options of one run, as the command line sets them; ``run`` reads them."""
+
     index_url: str
+
     """The PyPI Index URL to query for Python versions."""
     npm_registry: str
     """The NPM registry to query for JS versions."""

@@ -33,6 +33,12 @@ if TYPE_CHECKING:
 
 
 def run(options: Options) -> bool:
+    """
+    Bump the requirements of the files, or the packages, the options name.
+
+    :param options: the parsed command-line options.
+    :returns: False when a lookup fails or a file cannot be updated.
+    """
     settings = IndexSettings(
         index_url=options.index_url,
         pip_extras=pip_extra_indexes(),
