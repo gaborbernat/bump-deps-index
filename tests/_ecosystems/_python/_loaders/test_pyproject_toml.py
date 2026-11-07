@@ -65,27 +65,26 @@ def test_run_pyproject_toml(capsys: pytest.CaptureFixture[str], httpx_mock: HTTP
 
 
 @pytest.mark.parametrize(
-    ("requires_python", "expected"),
+    ("requires_python_line", "expected"),
     [
-        pytest.param(None, "A>=2", id="missing"),
-        pytest.param(">=3.9", "A>=0.9", id="inclusive-floor"),
-        pytest.param(">3.9", "A>=1", id="exclusive-floor"),
-        pytest.param(">=3.9,!=3.9.*", "A>=2", id="excluded-minor"),
-        pytest.param(">=3.9,!=3.9", "A>=1", id="excluded-release"),
-        pytest.param(">3.9.1rc1", "A>=1", id="exclusive-prerelease"),
-        pytest.param(">=3.9,<3", "A>=2", id="empty-range"),
+        pytest.param("", "A>=2", id="missing"),
+        pytest.param('requires-python = ">=3.9"', "A>=0.9", id="inclusive-floor"),
+        pytest.param('requires-python = ">3.9"', "A>=1", id="exclusive-floor"),
+        pytest.param('requires-python = ">=3.9,!=3.9.*"', "A>=2", id="excluded-minor"),
+        pytest.param('requires-python = ">=3.9,!=3.9"', "A>=1", id="excluded-release"),
+        pytest.param('requires-python = ">3.9.1rc1"', "A>=1", id="exclusive-prerelease"),
+        pytest.param('requires-python = ">=3.9,<3"', "A>=2", id="empty-range"),
     ],
 )
 def test_run_pyproject_toml_respects_requires_python(
     httpx_mock: HTTPXMock,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    requires_python: str | None,
+    requires_python_line: str,
     expected: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     dest = tmp_path / "pyproject.toml"
-    requires_python_line = f'requires-python = "{requires_python}"' if requires_python is not None else ""
     toml = f"""
     [project]
     name = "demo"
