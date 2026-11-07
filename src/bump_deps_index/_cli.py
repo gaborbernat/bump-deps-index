@@ -58,7 +58,6 @@ class Options(Namespace):
     """Options of one run, as the command line sets them; ``run`` reads them."""
 
     index_url: str
-
     """The PyPI Index URL to query for Python versions."""
     npm_registry: str
     """The NPM registry to query for JS versions."""
@@ -187,19 +186,19 @@ def _pre_release_argument(value: str) -> bool | None:
     return choices[value]
 
 
-def _cutoff_argument(value: str) -> datetime:
-    try:
-        return parse_exclude_newer(value, datetime.now(UTC))
-    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
-        raise ArgumentTypeError(str(exc)) from exc
-
-
 def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
     name, separator, cutoff = value.partition("=")
     if not (separator and name):
         msg = f"{value!r} is not NAME=CUTOFF: use a name, then a cutoff such as P7D or false"
         raise ArgumentTypeError(msg)
     return name, None if cutoff == "false" else _cutoff_argument(cutoff)
+
+
+def _cutoff_argument(value: str) -> datetime:
+    try:
+        return parse_exclude_newer(value, datetime.now(UTC))
+    except (OverflowError, ValueError) as exc:  # a duration too long for a datetime is as invalid as a malformed one
+        raise ArgumentTypeError(str(exc)) from exc
 
 
 __all__ = [
