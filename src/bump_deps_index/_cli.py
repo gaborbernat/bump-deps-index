@@ -9,10 +9,22 @@ from ._config._npm import npm_registry
 from ._config._python import python_exclude_newer, python_exclude_newer_package, python_index_url
 from ._cutoff import parse_exclude_newer
 from ._redact import redact_url
+from ._run import run
 from .version import version
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+def main(args: Sequence[str] | None = None) -> None:
+    """
+    Run the command-line interface.
+
+    :param args: command-line arguments, or ``sys.argv[1:]`` when None.
+    :raises SystemExit: with status 1 when a lookup fails or a file cannot be updated.
+    """
+    if not run(parse_cli(args)):
+        raise SystemExit(1)
 
 
 def parse_cli(args: Sequence[str] | None) -> Options:
@@ -195,5 +207,7 @@ def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
 
 __all__ = [
     "Options",
+    "main",
     "parse_cli",
 ]
+
