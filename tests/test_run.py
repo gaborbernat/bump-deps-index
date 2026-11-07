@@ -343,7 +343,8 @@ def _two_releases(request: httpx.Request) -> httpx.Response:
 def test_run_applies_cutoff_per_dependency_group(
     extra: list[str], expected: tuple[list[str], ...], httpx_mock: HTTPXMock
 ) -> None:
-    pyproject_groups: str = """\
+    Path("pyproject.toml").write_text(
+        """\
 [build-system]
 requires = ["builder>=1"]
 
@@ -355,8 +356,9 @@ optional-dependencies.extra = ["extra>=1"]
 [dependency-groups]
 test = ["tester>=1"]
 lint = ["linter>=1"]
-"""
-    Path("pyproject.toml").write_text(pyproject_groups, encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
     httpx_mock.add_callback(_two_releases, is_reusable=True)
 
     main(["-i", "https://I.com", "-p", "no", "--exclude-newer", "2026-11-01T00:00:00Z", *extra, "-f", "pyproject.toml"])

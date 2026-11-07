@@ -21,9 +21,8 @@ def _inheritance_aliases() -> dict[str, str]:
     aliases: dict[str, str] = {}
     for entry in bump_deps_index.__all__:
         to_module = getattr(getattr(bump_deps_index, entry), "__module__", "")
-        aliases.setdefault(
-            f"{to_module}{'.' if to_module else ''}{entry}", f"{bump_deps_index.__name__}.{entry}"
-        )  # first instance wins
+        # first instance wins
+        aliases.setdefault(f"{to_module}{'.' if to_module else ''}{entry}", f"{bump_deps_index.__name__}.{entry}")
     return aliases
 
 
