@@ -63,5 +63,4 @@ ECOSYSTEMS: Final[dict[PkgType, Ecosystem]] = {
 
 __all__ = [
     "ECOSYSTEMS",
-    "Ecosystem",
 ]

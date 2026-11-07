@@ -144,28 +144,6 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
     return successful and resolved
 
 
-def _file_changes(filename: Path, lookups: Sequence[Lookup], results: Mapping[Lookup, str]) -> dict[str, str]:
-    # a rewrite edits every line that reads a requirement, so a requirement listed in several groups takes one value
-    by_requirement: dict[str, list[Lookup]] = defaultdict(list)
-    for lookup in lookups:
-        by_requirement[lookup.requirement].append(lookup)
-    changes: dict[str, str] = {}
-    for requirement, listed in by_requirement.items():
-        # the earliest cutoff is the strictest, and an uncooled lookup is the most lenient
-        strictest = min(listed, key=lambda lookup: lookup.exclude_newer or datetime.max.replace(tzinfo=UTC))
-        if len({lookup.exclude_newer for lookup in listed}) > 1:
-            groups = ", ".join(sorted({lookup.group or "no group" for lookup in listed}))
-            sys.stderr.write(
-                redact_text(
-                    f"{requirement} is listed under {groups} in {filename} with different cutoffs, "
-                    f"so it uses the stricter one, {strictest.exclude_newer}\n"
-                )
-            )
-        if (new := results.get(strictest, requirement)) != requirement:
-            changes[requirement] = new
-    return changes
-
-
 def _load_lookups(
     loader: Loader, filename: Path, settings: IndexSettings, *, pre_release: bool | None
 ) -> tuple[Loaded, list[Lookup]] | None:
@@ -205,6 +183,28 @@ def _load_lookups(
                 )
             ] = None
     return loaded, list(lookups)
+
+
+def _file_changes(filename: Path, lookups: Sequence[Lookup], results: Mapping[Lookup, str]) -> dict[str, str]:
+    # a rewrite edits every line that reads a requirement, so a requirement listed in several groups takes one value
+    by_requirement: dict[str, list[Lookup]] = defaultdict(list)
+    for lookup in lookups:
+        by_requirement[lookup.requirement].append(lookup)
+    changes: dict[str, str] = {}
+    for requirement, listed in by_requirement.items():
+        # the earliest cutoff is the strictest, and an uncooled lookup is the most lenient
+        strictest = min(listed, key=lambda lookup: lookup.exclude_newer or datetime.max.replace(tzinfo=UTC))
+        if len({lookup.exclude_newer for lookup in listed}) > 1:
+            groups = ", ".join(sorted({lookup.group or "no group" for lookup in listed}))
+            sys.stderr.write(
+                redact_text(
+                    f"{requirement} is listed under {groups} in {filename} with different cutoffs, "
+                    f"so it uses the stricter one, {strictest.exclude_newer}\n"
+                )
+            )
+        if (new := results.get(strictest, requirement)) != requirement:
+            changes[requirement] = new
+    return changes
 
 
 __all__ = [

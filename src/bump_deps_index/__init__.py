@@ -21,8 +21,7 @@ def main(args: Sequence[str] | None = None) -> None:
     :param args: command-line arguments, or ``sys.argv[1:]`` when None.
     :raises SystemExit: with status 1 when a lookup fails or a file cannot be updated.
     """
-    options = parse_cli(args)
-    if not run(options):
+    if not run(parse_cli(args)):
         raise SystemExit(1)
 
 

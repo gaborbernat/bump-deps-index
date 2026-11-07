@@ -103,8 +103,7 @@ class _TomlScanner:
 
     def _value(self, path: tuple[str, ...]) -> Iterator[_String]:
         self._skip(newlines=False)
-        character = self._text[self._at : self._at + 1]
-        if character in {'"', "'"}:
+        if (character := self._text[self._at : self._at + 1]) in {'"', "'"}:
             yield self._string(path)
         elif character == "[":
             self._at += 1

@@ -38,16 +38,6 @@ def parse_cli(args: Sequence[str] | None) -> Options:
     return options
 
 
-def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
-    try:
-        return {
-            name: None if value is False else _cutoff_argument(value)
-            for name, value in python_exclude_newer_package().items()
-        }
-    except ArgumentTypeError as exc:
-        parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
-
-
 class Options(Namespace):
     index_url: str
     """The PyPI Index URL to query for Python versions."""
@@ -105,11 +95,11 @@ def _build_parser() -> ArgumentParser:
         default="file-default",
         help=pre_release_help,
     )
+    cutoff_flags = parser.add_mutually_exclusive_group()
     cutoff_help = (
         "only use releases uploaded before this cutoff, a timestamp or a duration such as P7D "
         "(default: from pip and uv settings)"
     )
-    cutoff_flags = parser.add_mutually_exclusive_group()
     cutoff_flags.add_argument(
         "--exclude-newer",
         dest="exclude_newer",
@@ -191,6 +181,16 @@ def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
         msg = f"{value!r} is not NAME=CUTOFF: use a name, then a cutoff such as P7D or false"
         raise ArgumentTypeError(msg)
     return name, None if cutoff == "false" else _cutoff_argument(cutoff)
+
+
+def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
+    try:
+        return {
+            name: None if value is False else _cutoff_argument(value)
+            for name, value in python_exclude_newer_package().items()
+        }
+    except ArgumentTypeError as exc:
+        parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
 
 
 __all__ = [
