@@ -20,19 +20,20 @@ if TYPE_CHECKING:
 
 def uv_project_indexes(folder: Path, pyproject: dict[str, Parsed]) -> UvIndexes:
     # a workspace member inherits the sources and indexes of the workspace root, and overrides them
-    folders = [*_workspace_root(folder), (folder, table(pyproject, "tool", "uv"))]
+    root = next(
+        (
+            (parent, uv)
+            for parent in folder.parents
+            if "workspace" in (uv := table(read_toml(parent / "pyproject.toml"), "tool", "uv"))
+        ),
+        None,
+    )
+    folders = [*([root] if root else []), (folder, table(pyproject, "tool", "uv"))]
     layers = [(uv, read_toml(path / "uv.toml")) for path, uv in folders]
     # uv reads `uv.toml` over the `[tool.uv]` table next to it
     return UvIndexes(
         sources=_sources(layers), first=_first_indexes([uv for layer in reversed(layers) for uv in reversed(layer)])
     )
-
-
-def _workspace_root(folder: Path) -> list[tuple[Path, dict[str, Parsed]]]:
-    for parent in folder.parents:
-        if "workspace" in (uv := table(read_toml(parent / "pyproject.toml"), "tool", "uv")):
-            return [(parent, uv)]
-    return []
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

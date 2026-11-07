@@ -361,18 +361,14 @@ lint = ["linter>=1"]
 
     main(["-i", "https://I.com", "-p", "no", "--exclude-newer", "2026-11-01T00:00:00Z", *extra, "-f", "pyproject.toml"])
 
-    assert _specs(Path("pyproject.toml").read_text(encoding="utf-8")) == expected
-
-
-def _specs(text: str) -> tuple[list[str], ...]:
-    cfg = tomllib.loads(text)
-    return (
+    cfg = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    assert (
         cfg["build-system"]["requires"],
         cfg["project"]["dependencies"],
         cfg["project"]["optional-dependencies"]["extra"],
         cfg["dependency-groups"]["test"],
         cfg["dependency-groups"]["lint"],
-    )
+    ) == expected
 
 
 _SAME_TEXT_GROUPS: Final[str] = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'

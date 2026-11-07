@@ -42,10 +42,14 @@ def parse_cli(args: Sequence[str] | None) -> Options:
         options.exclude_newer_package = {}
         options.exclude_newer_group = {}
     else:
-        options.exclude_newer_package = {
-            **_configured_cutoffs(parser),
-            **dict(options.exclude_newer_package_flags),
-        }
+        try:
+            configured = {
+                name: None if value is False else _cutoff_argument(value)
+                for name, value in python_exclude_newer_package().items()
+            }
+        except ArgumentTypeError as exc:
+            parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
+        options.exclude_newer_package = {**configured, **dict(options.exclude_newer_package_flags)}
         options.exclude_newer_group = dict(options.exclude_newer_group_flags)
     return options
 
@@ -198,19 +202,8 @@ def _named_cutoff_argument(value: str) -> tuple[str, datetime | None]:
     return name, None if cutoff == "false" else _cutoff_argument(cutoff)
 
 
-def _configured_cutoffs(parser: ArgumentParser) -> dict[str, datetime | None]:
-    try:
-        return {
-            name: None if value is False else _cutoff_argument(value)
-            for name, value in python_exclude_newer_package().items()
-        }
-    except ArgumentTypeError as exc:
-        parser.error(f"invalid exclude-newer-package in uv settings: {exc}")
-
-
 __all__ = [
     "Options",
     "main",
     "parse_cli",
 ]
-
