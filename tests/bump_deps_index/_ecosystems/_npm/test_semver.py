@@ -38,7 +38,7 @@ pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_inde
         pytest.param("a@1.x", ["1.0.0", "2.0.0"], False, "a@1.x", id="x-range"),
     ],
 )
-def test_update_js(spec: str, versions: list[str], pre_release: bool, result: str, bump: Bump) -> None:
+def test_update_js(spec: str, versions: list[str], *, pre_release: bool, result: str, bump: Bump) -> None:
 
     assert (
         bump(

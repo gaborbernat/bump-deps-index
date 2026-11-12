@@ -7,7 +7,7 @@ from tomllib import load as load_toml
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 
 def user_uv_settings() -> dict[str, Parsed]:

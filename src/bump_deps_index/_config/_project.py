@@ -9,8 +9,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
-from bump_deps_index._lookup import IndexLookup
-from bump_deps_index._parsed import table
+from bump_deps_index.model import IndexLookup, table
 
 from ._uv import UvIndexes, uv_project_indexes
 
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
-    from bump_deps_index._ecosystems._common._loader import Entry
+    from bump_deps_index.model import Entry
 
     from ._npm import NpmSettings
 

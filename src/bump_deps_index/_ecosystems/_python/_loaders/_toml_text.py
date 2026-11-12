@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 _ARRAY: Final[str] = "[]"
 
 
+_ENCODED_PATTERN: Final[re.Pattern[str]] = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
 def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tuple[str, ...]], bool]) -> str:
     pieces: list[str] = []
     last = 0
@@ -25,7 +28,7 @@ def replace_strings(text: str, changes: Mapping[str, str], wanted: Callable[[tup
             encoded = json.dumps(encoded, ensure_ascii=False)[1:-1]
         elif string.quote == '"""':  # a multi-line basic string takes raw newlines and tabs, and escapes the rest
             escaped = encoded.replace("\\", "\\\\").replace('"', '\\"')
-            encoded = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", lambda match: f"\\u{ord(match[0]):04x}", escaped)
+            encoded = _ENCODED_PATTERN.sub(lambda match: f"\\u{ord(match[0]):04x}", escaped)
         # TOML drops the newline that opens a multi-line string, so keep it as written
         lead = "\n" if len(string.quote) > 1 and text.startswith("\n", string.start) else ""
         pieces += [text[last : string.start], lead, encoded]

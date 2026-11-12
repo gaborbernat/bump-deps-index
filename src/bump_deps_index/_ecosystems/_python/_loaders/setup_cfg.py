@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
-from bump_deps_index._ecosystems._common._loader import Entry, Loaded, SingleFileLoader
-from bump_deps_index._lookup import PkgType
+from bump_deps_index.model import PkgType
 
+from ...model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Entry,
+    Loaded,
+    SingleFileLoader,
+)
 from ._ini import ini_values, read_ini, update_ini
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
+
+
+_UPDATE_TEXT_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\[options\.extras_require\]", re.MULTILINE)
 
 
 class SetupCfg(SingleFileLoader):
@@ -37,7 +44,7 @@ class SetupCfg(SingleFileLoader):
     @staticmethod
     def _update_text(text: str, changes: Mapping[str, str]) -> str:
         # configparser copies the `[DEFAULT]` keys into `[options.extras_require]`, which reads each key as an extra
-        extras = re.search(r"^\[options\.extras_require\]", text, re.MULTILINE) is not None
+        extras = _UPDATE_TEXT_PATTERN.search(text) is not None
         return update_ini(
             text,
             changes,

@@ -9,9 +9,13 @@ from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
-from bump_deps_index._ecosystems._common._loader import Entry, Loaded, Loader
-from bump_deps_index._lookup import PkgType
+from bump_deps_index.model import PkgType
 
+from ...model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Entry,
+    Loaded,
+    Loader,
+)
 from ._lines import replace_requirement_line, split_comment
 
 if TYPE_CHECKING:
@@ -19,6 +23,9 @@ if TYPE_CHECKING:
 
 # pip's comment pattern: a `#` at the start of a line or after whitespace starts a comment
 _COMMENT: Final[re.Pattern[str]] = re.compile(r"(^|\s+)#.*$")
+
+
+_EXPAND_ENV_PATTERN: Final[re.Pattern[str]] = re.compile(r"\$\{(?P<name>[A-Z0-9_]+)\}")
 
 
 class Requirements(Loader):
@@ -123,7 +130,7 @@ class Requirements(Loader):
     @staticmethod
     def _expand_env(text: str) -> str:
         # pip substitutes `${NAME}` with a non-empty variable, and keeps it as written otherwise
-        return re.sub(r"\$\{(?P<name>[A-Z0-9_]+)\}", lambda match: os.environ.get(match["name"]) or match[0], text)
+        return _EXPAND_ENV_PATTERN.sub(lambda match: os.environ.get(match["name"]) or match[0], text)
 
     @staticmethod
     def _requirement_lines(lines: list[str]) -> Iterator[list[tuple[int, str]]]:

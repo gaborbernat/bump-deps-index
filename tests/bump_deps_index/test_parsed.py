@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from bump_deps_index._parsed import parse_timestamp
+from bump_deps_index._parsed import parse_timestamp  # ruff: ignore[import-private-name] Tests exercise timestamp parsing directly.
 
 if TYPE_CHECKING:
     from bump_deps_index._parsed import Parsed

@@ -3,19 +3,23 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 from urllib.parse import quote, urlsplit
 
 from packaging.utils import canonicalize_name
 
-from bump_deps_index._parsed import mappings, strings, table
+from bump_deps_index.model import (
+    mappings,
+    strings,
+    table,
+)
 
 from ._files import read_toml, user_uv_settings
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 
 def uv_project_indexes(folder: Path, pyproject: dict[str, Parsed]) -> UvIndexes:
@@ -72,7 +76,7 @@ def _index_url(index: dict[str, Parsed]) -> str | None:
 
 def _with_credentials(name: str, url: str) -> str:
     # uv reads the credentials of a named index from `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD`
-    prefix = f"UV_INDEX_{re.sub(r'[^A-Za-z0-9]', '_', name).upper()}"
+    prefix = f"UV_INDEX_{_WITH_CREDENTIALS_PATTERN.sub('_', name).upper()}"
     username, password = (os.environ.get(f"{prefix}_{part}", "") for part in ("USERNAME", "PASSWORD"))
     if not (username or password):
         return url
@@ -107,6 +111,9 @@ def _extra_indexes(uv: dict[str, Parsed]) -> list[str]:
         ),
         *strings(uv.get("extra-index-url")),
     ]
+
+
+_WITH_CREDENTIALS_PATTERN: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9]")
 
 
 def script_uv_indexes(metadata: dict[str, Parsed]) -> tuple[UvIndexes, str | None]:

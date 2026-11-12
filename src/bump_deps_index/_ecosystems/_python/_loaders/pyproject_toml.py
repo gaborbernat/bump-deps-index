@@ -5,17 +5,20 @@ from typing import TYPE_CHECKING, ClassVar
 
 from typing_extensions import override
 
-from bump_deps_index._ecosystems._common._loader import Entry, Loaded, SingleFileLoader
-from bump_deps_index._lookup import PkgType
-from bump_deps_index._parsed import strings, table
+from bump_deps_index.model import PkgType, strings, table
 
+from ...model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Entry,
+    Loaded,
+    SingleFileLoader,
+)
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 
 class PyProjectToml(SingleFileLoader):

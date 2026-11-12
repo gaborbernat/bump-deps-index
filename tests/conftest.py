@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Protocol
 
+import httpx
 import pytest
 
 from bump_deps_index import main
@@ -11,7 +13,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
-    import httpx
     from pytest_httpx import HTTPXMock
 
 
@@ -103,6 +104,32 @@ def bump(
         return capsys.readouterr().out.splitlines()[-1].rpartition(" -> ")[2]
 
     return run_main
+
+
+@pytest.fixture
+def workspace(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    httpx_mock: HTTPXMock,
+    isolated_index_settings: Path,
+) -> None:
+    env, files = request.param
+    for name, value in env.items():
+        monkeypatch.setenv(name, value.format(tmp=tmp_path, devnull=os.devnull))
+    for name, content in files.items():
+        path = isolated_index_settings / name[2:] if name.startswith("~/") else tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content if isinstance(content, bytes) else content.encode())
+    (cwd := tmp_path / "project" / "sub").mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(cwd)
+    httpx_mock.add_callback(_serve, is_reusable=True)
+
+
+def _serve(request: httpx.Request) -> httpx.Response:
+    if request.url.path.endswith("/a/"):
+        return httpx.Response(200, text="<a>a-1.tar.gz</a>")
+    return httpx.Response(200, json={"versions": {"1.0.0": {}}})
 
 
 __all__ = [

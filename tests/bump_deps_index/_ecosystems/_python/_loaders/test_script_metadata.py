@@ -207,7 +207,7 @@ def test_script_metadata_only_replaces_in_block(
     import httpx
     from rich import print
 
-    # This should NOT be changed: httpx>=0.27.0
+    # Outside script metadata: httpx>=0.27.0
     x = "httpx>=0.27.0"
     y = "rich>=13.0.0"
 
@@ -240,7 +240,7 @@ def test_script_metadata_only_replaces_in_block(
     import httpx
     from rich import print
 
-    # This should NOT be changed: httpx>=0.27.0
+    # Outside script metadata: httpx>=0.27.0
     x = "httpx>=0.27.0"
     y = "rich>=13.0.0"
 

@@ -15,7 +15,7 @@ def hook_languages(repo: str, rev: str | None) -> dict[str, str]:
     try:
         with new_client(timeout=10) as client:
             manifest = load_yaml(client.get(url, follow_redirects=True).raise_for_status().text)
-    except (HTTPError, YAMLError):  # guess from the dependency shape when the manifest is out of reach
+    except (HTTPError, YAMLError):  # Without a manifest, the loader infers package types from dependency strings.
         return {}
     return {
         hook["id"]: hook["language"]

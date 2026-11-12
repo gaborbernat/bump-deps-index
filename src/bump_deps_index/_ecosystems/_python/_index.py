@@ -12,21 +12,25 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.utils import canonicalize_name, parse_sdist_filename, parse_wheel_filename
 from packaging.version import Version
 
-from bump_deps_index._ecosystems._common._candidates import (
+from bump_deps_index.model import (
+    json_field,
+    mappings,
+    parse_timestamp,
+)
+
+from ..model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
     Candidate,
     Candidates,
     Lookup,
     Registry,
     accepted_versions,
 )
-from bump_deps_index._parsed import json_field, mappings, parse_timestamp
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
-    from bump_deps_index._http._session import Session
-    from bump_deps_index._lookup import IndexLookup
+    from bump_deps_index.model import IndexLookup, Session
 
 
 class SimpleIndex(Registry):

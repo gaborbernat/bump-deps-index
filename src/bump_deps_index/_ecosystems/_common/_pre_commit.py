@@ -10,8 +10,12 @@ from yaml import MappingNode, Node, SafeLoader, ScalarNode, SequenceNode
 from yaml import compose as compose_yaml
 from yaml import safe_load as load_yaml
 
-from bump_deps_index._lookup import PkgType, package_type
-from bump_deps_index._parsed import mappings, strings
+from bump_deps_index.model import (
+    PkgType,
+    mappings,
+    package_type,
+    strings,
+)
 
 from ._loader import Entry, Loaded, SingleFileLoader, splice
 
@@ -19,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 _MERGE: Final[str] = "tag:yaml.org,2002:merge"
 HookLanguages: TypeAlias = Callable[[str, str | None], Mapping[str, str]]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from configparser import RawConfigParser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from typing_extensions import override
 
@@ -31,6 +31,11 @@ def ini_values(value: str) -> list[str]:
     return [line for raw in value.split("\n") if (line := split_comment(raw)[0].strip())]
 
 
+_UPDATE_INI_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\[(?P<header>.+)\]")
+
+_UPDATE_INI_PATTERN_2: Final[re.Pattern[str]] = re.compile(r"[=:]")
+
+
 def update_ini(text: str, changes: Mapping[str, str], wanted: Callable[[str, str], bool]) -> str:
     # follow configparser: an indented line continues the open key, blank and comment lines keep it open
     result: list[str] = []
@@ -43,19 +48,22 @@ def update_ini(text: str, changes: Mapping[str, str], wanted: Callable[[str, str
             result.append(line)
         elif key and indent > key_indent:
             result.append(replace_requirement_line(line, changes) if wanted(section, key) else line)
-        elif header := re.match(r"^\[(?P<header>.+)\]", stripped):
+        elif header := _UPDATE_INI_PATTERN.match(stripped):
             section, key = header["header"], ""
             result.append(line)
         else:
-            key, key_indent = re.split(r"[=:]", stripped, maxsplit=1)[0].strip(), indent
+            key, key_indent = _UPDATE_INI_PATTERN_2.split(stripped, maxsplit=1)[0].strip(), indent
             result.append(_replace_key_line(line, changes) if wanted(section, key) else line)
     return "\n".join(result)
 
 
 def _replace_key_line(line: str, changes: Mapping[str, str]) -> str:
     # configparser splits a key line at its first `=` or `:`
-    value = re.sub(r"^[^=:]*[=:]", "", line, count=1)
+    value = _VALUE_PATTERN.sub("", line, count=1)
     return f"{line[: len(line) - len(value)]}{replace_requirement_line(value, changes)}"
+
+
+_VALUE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[^=:]*[=:]")
 
 
 __all__ = [

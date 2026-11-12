@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from bump_deps_index._parsed import table
+from bump_deps_index.model import table
 
 from ._files import user_uv_settings
 from ._pip import pip_setting
@@ -13,7 +13,7 @@ from ._uv import default_index, uv_settings
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 
 def python_index_url() -> str:

@@ -5,7 +5,7 @@ import re
 from base64 import b64decode, b64encode
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
@@ -45,13 +45,24 @@ def _npmrc_value(raw: str) -> str:
     if len(value) > 1 and value[0] in {"'", '"'} and value.endswith(value[0]):
         value = value[1:-1]
     else:
-        value = re.split(r"[;#]", value, maxsplit=1)[0].rstrip()
+        value = _NPMRC_COMMENT_PATTERN.split(value, maxsplit=1)[0].rstrip()
     # npm reads `${NAME}` from the environment and keeps it as written when unset, and reads `${NAME?}` as empty then
-    return re.sub(
-        r"\$\{(?P<name>[^${}?]+)(?P<optional>\?)?\}",
-        lambda match: os.environ.get(match["name"], "" if match["optional"] else match[0]),
-        value,
+    return _NPMRC_VARIABLE_PATTERN.sub(
+        lambda match: os.environ.get(match["name"], "" if match["optional"] else match[0]), value
     )
+
+
+_NPMRC_COMMENT_PATTERN: Final[re.Pattern[str]] = re.compile(r"[;#]")
+
+_NPMRC_VARIABLE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"""
+        \$\{                    # opening marker
+        (?P<name>[^${}?]+)       # environment variable name
+        (?P<optional>\?)?       # optional empty-value marker
+        \}                      # closing marker
+        """,
+    flags=re.VERBOSE,
+)
 
 
 def npm_settings() -> NpmSettings:
@@ -105,7 +116,7 @@ def _npm_authorizations(npmrc: dict[str, str]) -> dict[str, str]:
 def _basic(username: str, encoded_password: str | None) -> str | None:
     try:
         password = b64decode(encoded_password or "").decode()
-    except ValueError:  # skip a password that is not base64, as you could not log in with it
+    except ValueError:  # Invalid base64 cannot authenticate.
         return None
     return b64encode(f"{username}:{password}".encode()).decode() if password else None
 

@@ -5,7 +5,7 @@ from typing import Final
 
 import pytest
 
-from bump_deps_index._cutoff import parse_exclude_newer
+from bump_deps_index._cutoff import parse_exclude_newer  # ruff: ignore[import-private-name] Tests exercise cutoff parsing directly.
 
 _NOW: Final[datetime] = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 

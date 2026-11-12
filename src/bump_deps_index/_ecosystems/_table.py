@@ -1,26 +1,48 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
 from packaging.utils import canonicalize_name
 
-from bump_deps_index._config._project import entry_indexes, named_indexes
-from bump_deps_index._lookup import PkgType
+from bump_deps_index.model import PkgType
 
-from ._npm._registry import NpmRegistry, npm_indexes
-from ._npm._semver import bump_js, npm_name
-from ._python._index import SimpleIndex, python_name
-from ._python._pep440 import bump_python
+from ._npm import NpmRegistry, bump_js, npm_indexes, npm_name
+from ._python import SimpleIndex, bump_python, python_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bump_deps_index._config._project import Declared, IndexSettings, Scope
-    from bump_deps_index._http._session import Session
-    from bump_deps_index._lookup import IndexLookup
+    from bump_deps_index.model import Declared, IndexLookup, IndexSettings, Scope, Session
 
-    from ._common._candidates import Candidates, Registry
+    from .model import Candidates, Registry
+
+
+def ecosystem_table(
+    named_indexes: Callable[[str, str, Scope], IndexLookup],
+    entry_indexes: Callable[[str, str, Declared], IndexLookup | None],
+) -> dict[PkgType, Ecosystem]:
+    return {
+        PkgType.PYTHON: Ecosystem(
+            registry=lambda session, _settings: SimpleIndex(session),
+            bump=bump_python,
+            name=python_name,
+            canonical=canonicalize_name,
+            route=named_indexes,
+            entry_route=entry_indexes,
+            index_url=lambda settings: settings.index_url,
+        ),
+        PkgType.JS: Ecosystem(
+            registry=NpmRegistry,
+            bump=bump_js,
+            name=npm_name,
+            # npm does not normalize names, so only the exact spelling matches a settings entry
+            canonical=lambda name: name,
+            route=npm_indexes,
+            entry_route=npm_indexes,
+            index_url=lambda settings: settings.npm_registry,
+        ),
+    }
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -39,28 +61,7 @@ class Ecosystem:
     index_url: Callable[[IndexSettings], str]
 
 
-ECOSYSTEMS: Final[dict[PkgType, Ecosystem]] = {
-    PkgType.PYTHON: Ecosystem(
-        registry=lambda session, _settings: SimpleIndex(session),
-        bump=bump_python,
-        name=python_name,
-        canonical=canonicalize_name,
-        route=named_indexes,
-        entry_route=entry_indexes,
-        index_url=lambda settings: settings.index_url,
-    ),
-    PkgType.JS: Ecosystem(
-        registry=NpmRegistry,
-        bump=bump_js,
-        name=npm_name,
-        # npm does not normalize names, so only the exact spelling matches a settings entry
-        canonical=lambda name: name,
-        route=npm_indexes,
-        entry_route=npm_indexes,
-        index_url=lambda settings: settings.npm_registry,
-    ),
-}
-
 __all__ = [
-    "ECOSYSTEMS",
+    "Ecosystem",
+    "ecosystem_table",
 ]
