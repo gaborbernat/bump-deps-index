@@ -7,22 +7,28 @@ from typing import TYPE_CHECKING, Final
 
 from typing_extensions import override
 
-from bump_deps_index._config._uv import script_uv_indexes
-from bump_deps_index._ecosystems._common._loader import Entry, Loaded, Loader
-from bump_deps_index._lookup import PkgType
-from bump_deps_index._parsed import strings
+from bump_deps_index.model import PkgType, strings
 
+from ...model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Entry,
+    Loaded,
+    Loader,
+)
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Callable, Iterator, Mapping
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed, UvIndexes
+
 
 _START: Final[str] = "# /// script"
 
 
 class ScriptMetadata(Loader):
+    def __init__(self, uv_indexes: Callable[[dict[str, Parsed]], tuple[UvIndexes, str | None]]) -> None:
+        self._uv_indexes = uv_indexes
+
     @property
     @override
     def files(self) -> Iterator[Path]:
@@ -38,7 +44,7 @@ class ScriptMetadata(Loader):
     @override
     def load(self, filename: Path) -> Loaded:
         metadata = self._metadata(filename.read_text(encoding="utf-8"))
-        uv, index_url = script_uv_indexes(metadata)
+        uv, index_url = self._uv_indexes(metadata)
         requires_python = requires if isinstance(requires := metadata.get("requires-python"), str) else None
         return Loaded(
             entries=[

@@ -5,16 +5,20 @@ from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
 
-from bump_deps_index._ecosystems._common._loader import Entry, Loaded, SingleFileLoader
-from bump_deps_index._lookup import PkgType
+from bump_deps_index.model import PkgType
 
+from ...model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Entry,
+    Loaded,
+    SingleFileLoader,
+)
 from ._toml_text import replace_strings
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
     from pathlib import Path
 
-    from bump_deps_index._parsed import Parsed
+    from bump_deps_index.model import Parsed
 
 
 _NESTED: Final[frozenset[str]] = frozenset({"env", "env_base"})

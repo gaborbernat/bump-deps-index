@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
+from typing import Final
 
-
-def parse_exclude_newer(value: str, now: datetime) -> datetime:
-    text = value.strip()
-    # no calendar units, which have no fixed length; uv rejects them as well
-    iso = re.fullmatch(
-        r"""
+_ISO_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"""
         P                             # the duration designator
         (?:(?P<weeks>\d+)W)?          # weeks
         (?:(?P<days>\d+)D)?           # days
@@ -18,22 +15,29 @@ def parse_exclude_newer(value: str, now: datetime) -> datetime:
             (?:(?P<seconds>\d+)S)?    # seconds
         )?
         """,
-        text,
-        re.VERBOSE,
-    )
-    if iso and any(iso.groupdict().values()):
-        return now - timedelta(**{name: int(count) for name, count in iso.groupdict().items() if count})
-    if friendly := re.fullmatch(
-        r"""
+    re.VERBOSE,
+)
+
+_PARSE_EXCLUDE_NEWER_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"""
         (?P<count>\d+)                                   # the amount
         \s*                                              # an optional space before the unit
         (?P<unit>seconds?|minutes?|hours?|days?|weeks?)  # the unit, singular or plural
         """,
-        text,
-        re.VERBOSE | re.IGNORECASE,
-    ):
+    re.VERBOSE | re.IGNORECASE,
+)
+
+_PARSE_EXCLUDE_NEWER_PATTERN_2: Final[re.Pattern[str]] = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def parse_exclude_newer(value: str, now: datetime) -> datetime:
+    text = value.strip()
+    # no calendar units, which have no fixed length; uv rejects them as well
+    if (iso := _ISO_PATTERN.fullmatch(text)) and any(iso.groupdict().values()):
+        return now - timedelta(**{name: int(count) for name, count in iso.groupdict().items() if count})
+    if friendly := _PARSE_EXCLUDE_NEWER_PATTERN.fullmatch(text):
         return now - timedelta(**{f"{friendly['unit'].lower().rstrip('s')}s": int(friendly["count"])})
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+    if _PARSE_EXCLUDE_NEWER_PATTERN_2.fullmatch(text):
         return datetime.fromisoformat(text).astimezone()
     try:
         parsed = datetime.fromisoformat(text)

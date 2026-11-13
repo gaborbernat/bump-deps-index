@@ -4,13 +4,17 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
+
+from bump_deps_index.model import Entry
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Mapping
 
-    from bump_deps_index._config._uv import UvIndexes
-    from bump_deps_index._lookup import PkgType
+
+_TEXT_PATTERN: Final[re.Pattern[str]] = re.compile(r"\r\n?")
+
+_RESTORE_ENDINGS_PATTERN: Final[re.Pattern[str]] = re.compile(r"\r\n?|\n")
 
 
 class Loader(ABC):
@@ -32,7 +36,7 @@ class Loader(ABC):
     def update_file(self, filename: Path, loaded: Loaded, changes: Mapping[str, str]) -> None:
         with filename.open(encoding="utf-8", newline="") as file_handler:
             raw = file_handler.read()
-        text = re.sub(r"\r\n?", "\n", raw)
+        text = _TEXT_PATTERN.sub("\n", raw)
         if (updated := loaded.rewrite(text, changes)) == text:
             return
         lines = updated.split("\n")
@@ -52,7 +56,7 @@ class Loader(ABC):
             (at for at, (left, right) in enumerate(pairs) if left != right),
             min(len(old_lines), len(new_lines)) - head,
         )
-        endings = [*re.findall(r"\r\n?|\n", raw), ""]
+        endings = [*_RESTORE_ENDINGS_PATTERN.findall(raw), ""]
         return [
             *endings[:head],
             *Loader._fit(endings[head : len(old_lines) - tail], len(new_lines) - head - tail),
@@ -84,21 +88,6 @@ class Loaded:
     # applies the changes to the file text the entries came from; a loader binds what it read while loading, such as the
     # pre-commit verdicts, since a hook's language may come from a remote manifest
     rewrite: Callable[[str, Mapping[str, str]], str]
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Entry:
-    spec: str
-    pkg_type: PkgType
-    requires_python: str | None = None
-    # a PEP 723 script brings its own uv sources and indexes, since `uv run --script` resolves it outside the project
-    uv: UvIndexes | None = None
-    # an index the file sets for its own requirements, such as `--index-url` in a requirements file
-    index_url: str | None = None
-    # the extra indexes a requirements file sets with `--extra-index-url`
-    extra_index_urls: tuple[str, ...] = ()
-    # the PEP 735 group of the entry, `project` for the project's dependencies and extras; None where a format has none
-    group: str | None = None
 
 
 def splice(text: str, edits: Iterable[tuple[int, int, str]]) -> str:

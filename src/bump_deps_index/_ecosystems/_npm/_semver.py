@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from bump_deps_index._ecosystems._common._candidates import Candidates
+    from ..model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+        Candidates,
+    )
 
 
 def bump_js(spec: str, candidates: Candidates) -> str:
@@ -65,7 +67,7 @@ class _Semver:
 
 def _in_range(wanted: str, ranked: list[tuple[_Semver, str]]) -> tuple[str, list[str]] | None:
     # a full or partial version, such as `1`, `1.2` or `v1.2.3-beta.1`, which moves to the newest release
-    if not wanted or re.fullmatch(r"v?\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?", wanted):
+    if not wanted or _IN_RANGE_PATTERN.fullmatch(wanted):
         pinned = _semver(_pad_version(wanted)) if wanted else None
         return "", [version for key, version in ranked if pinned is None or key >= pinned]
     operator = wanted[: len(wanted) - len(wanted.lstrip("^~>="))]
@@ -87,6 +89,17 @@ def _pad_version(version: str) -> str:
     release, dash, pre = version.partition("-")
     parts = release.split(".")
     return f"{'.'.join([*parts, *['0'] * (3 - len(parts))])}{dash}{pre}"
+
+
+_IN_RANGE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"""
+        v?                      # optional version prefix
+        \d+                     # major version
+        (?:\.\d+){0,2}          # optional minor and patch versions
+        (?:-[0-9A-Za-z.-]+)?    # optional prerelease
+        """,
+    flags=re.VERBOSE,
+)
 
 
 def npm_name(spec: str) -> str:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from packaging.utils import canonicalize_name
 
-from bump_deps_index._cutoff import accepts_upload
+from bump_deps_index.model import accepts_upload
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -14,8 +14,11 @@ if TYPE_CHECKING:
 
     from packaging.version import Version
 
-    from bump_deps_index._config._project import IndexSettings
-    from bump_deps_index._lookup import IndexLookup, PkgType
+    from bump_deps_index.model import (
+        IndexLookup,
+        IndexSettings,
+        PkgType,
+    )
 
 
 class Registry(ABC):

@@ -5,8 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ._config._npm import npm_registry
-from ._config._python import python_exclude_newer, python_exclude_newer_package, python_index_url
+from ._config import npm_registry, python_exclude_newer, python_exclude_newer_package, python_index_url
 from ._cutoff import parse_exclude_newer
 from ._redact import redact_url
 from ._run import run
@@ -22,7 +21,7 @@ def main(args: Sequence[str] | None = None) -> None:
 
     :param args: command-line arguments, or ``sys.argv[1:]`` when None.
     :raises SystemExit: with status 1 when a lookup fails or a file cannot be updated.
-    """
+    """  # simplint: ignore[function-docstring] Sphinx documents the CLI entry point.
     if not run(parse_cli(args)):
         raise SystemExit(1)
 
@@ -55,7 +54,8 @@ def parse_cli(args: Sequence[str] | None) -> Options:
 
 
 class Options(Namespace):
-    """Options of one run, as the command line sets them; ``run`` reads them."""
+    # Sphinx documents this CLI option object.
+    """Options of one run, as the command line sets them; ``run`` reads them."""  # simplint: ignore[function-docstring]
 
     index_url: str
     """The PyPI Index URL to query for Python versions."""

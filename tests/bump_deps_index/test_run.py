@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING, Final
@@ -12,13 +11,9 @@ import pytest
 from conftest import PYPI_FOO, index_args
 
 from bump_deps_index import main
-from bump_deps_index._ecosystems._table import ECOSYSTEMS
-from bump_deps_index._lookup import PkgType
 
 if TYPE_CHECKING:
     from pytest_httpx import HTTPXMock
-
-    from bump_deps_index._ecosystems._common._candidates import Candidates
 
 
 def test_run_args(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock) -> None:
@@ -185,23 +180,19 @@ def test_package_shared_across_files_is_fetched_once(tmp_path: Path, httpx_mock:
     assert len(httpx_mock.get_requests()) == 1
 
 
-def test_output_follows_file_order(
-    capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    httpx_mock.add_response(url="https://pypi.example/simple/a/", text="<a>a-2.tar.gz</a>")
-    httpx_mock.add_response(url="https://pypi.example/simple/b/", text="<a>b-2.tar.gz</a>")
-    b_updated = Event()
-    python = ECOSYSTEMS[PkgType.PYTHON]
+def test_output_follows_file_order(capsys: pytest.CaptureFixture[str], httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+    b_requested = Event()
 
-    def bump_b_first(spec: str, candidates: Candidates) -> str:
-        if spec == "a":
-            b_updated.wait(timeout=5)  # `a` finishes after `b`, so only the reporting keeps the file order
-        result = python.bump(spec, candidates)
-        if spec == "b":
-            b_updated.set()
-        return result
+    def serve_a(_request: httpx.Request) -> httpx.Response:
+        assert b_requested.wait(timeout=5)
+        return httpx.Response(200, text="<a>a-2.tar.gz</a>")
 
-    monkeypatch.setitem(ECOSYSTEMS, PkgType.PYTHON, replace(python, bump=bump_b_first))
+    def serve_b(_request: httpx.Request) -> httpx.Response:
+        b_requested.set()
+        return httpx.Response(200, text="<a>b-2.tar.gz</a>")
+
+    httpx_mock.add_callback(serve_a, url="https://pypi.example/simple/a/")
+    httpx_mock.add_callback(serve_b, url="https://pypi.example/simple/b/")
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("a\nb\n", encoding="utf-8")
 

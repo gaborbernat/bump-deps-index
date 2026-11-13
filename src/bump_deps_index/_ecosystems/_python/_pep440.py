@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from packaging.requirements import Requirement
 from packaging.version import InvalidVersion, Version
@@ -10,7 +10,9 @@ from packaging.version import InvalidVersion, Version
 if TYPE_CHECKING:
     from packaging.specifiers import Specifier
 
-    from bump_deps_index._ecosystems._common._candidates import Candidates
+    from ..model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+        Candidates,
+    )
 
 
 def bump_python(spec: str, candidates: Candidates) -> str:
@@ -53,7 +55,8 @@ def _is_downgrade(pinned: str, version: Version) -> bool:
 
 
 def _add_lower_bound(spec: str, version: str) -> str:
-    head = spec[: len(spec) - len(re.sub(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\s*\[[^\]]*\])?", "", spec, count=1))]
+    match = _MATCH_PATTERN.match(spec)
+    head = match[0] if match else ""
     specifier = spec[len(head) :].partition(";")[0].rstrip()
     rest = spec[len(head) + len(specifier) :]
     if not specifier:
@@ -100,6 +103,17 @@ def _replace_specifier(spec: str, current: Specifier, new_version: str) -> str:
         rf"(?<![=!<>~]){re.escape(current.operator)}(?!=)(?P<space>\s*){re.escape(current.version)}(?![\w.*+!-])"
     )
     return pattern.sub(lambda match: f"{current.operator}{match['space']}{new_version}", spec, count=1)
+
+
+_MATCH_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"""
+        ^\s*                    # leading space
+        [A-Za-z0-9]            # first package-name character
+        [A-Za-z0-9._-]*        # remaining package-name characters
+        (?:\s*\[[^\]]*\])?      # optional extras
+        """,
+    flags=re.VERBOSE,
+)
 
 
 __all__ = [

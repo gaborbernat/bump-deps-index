@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from subprocess import check_call
+from subprocess import check_call  # ruff: ignore[suspicious-subprocess-import] The test invokes only local entry points.
 from typing import TYPE_CHECKING
 
 import pytest
@@ -20,7 +20,7 @@ def test_main(capfd: pytest.CaptureFixture[str]) -> None:
 
 
 def test_script(capfd: pytest.CaptureFixture[str]) -> None:
-    check_call([Path(sys.executable).parent / "bump-deps-index", "-h"])
+    check_call([Path(sys.executable).parent / "bump-deps-index", "-h"])  # ruff: ignore[subprocess-without-shell-equals-true] The command path is fixed.
     out, _err = capfd.readouterr()
     assert out.startswith("usage: bump-deps-index ")
 

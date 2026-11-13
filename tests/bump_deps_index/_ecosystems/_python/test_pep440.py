@@ -98,7 +98,7 @@ pytestmark: Final[pytest.MarkDecorator] = pytest.mark.usefixtures("isolated_inde
         pytest.param("A==1.0+cpu", False, ["2.0+cu118", "2.0+cpu"], "A==2+cpu", id="eq-local-newer"),
     ],
 )
-def test_update_python(spec: str, pre_release: bool, versions: list[str], result: str, bump: Bump) -> None:
+def test_update_python(spec: str, *, pre_release: bool, versions: list[str], result: str, bump: Bump) -> None:
     page = "".join(f"<a>A-{version}.tar.gz</a>" for version in versions)
 
     assert (

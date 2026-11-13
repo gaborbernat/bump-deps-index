@@ -8,7 +8,14 @@ if TYPE_CHECKING:
 
 # match the factor shape to skip the colons inside URL requirements
 _FACTOR: Final[re.Pattern[str]] = re.compile(
-    r"^(?P<prefix>[\w!{}.-]+(?:\s*,\s*[\w!{}.-]+)*\s*:\s*)(?P<requirement>\S.*)$"
+    r"""
+    ^(?P<prefix>             # factor expression before the requirement
+      [\w!{}.-]+             # first factor
+      (?:\s*,\s*[\w!{}.-]+)*  # optional comma-separated factors
+      \s*:\s*                # separator
+    )(?P<requirement>\S.*)$  # requirement after the factor
+    """,
+    re.VERBOSE,
 )
 
 

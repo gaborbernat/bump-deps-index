@@ -3,15 +3,28 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from bump_deps_index._ecosystems._common._candidates import Candidate, Candidates, Lookup, Registry, accepted_versions
-from bump_deps_index._lookup import IndexLookup
-from bump_deps_index._parsed import json_field, parse_timestamp, table
+from bump_deps_index.model import (
+    IndexLookup,
+    json_field,
+    parse_timestamp,
+    table,
+)
 
+from ..model import (  # ruff: ignore[relative-imports]  # shared contracts belong to the ecosystem owner
+    Candidate,
+    Candidates,
+    Lookup,
+    Registry,
+    accepted_versions,
+)
 from ._semver import is_prerelease, rank_versions
 
 if TYPE_CHECKING:
-    from bump_deps_index._config._project import IndexSettings, Scope
-    from bump_deps_index._http._session import Session
+    from bump_deps_index.model import (
+        IndexSettings,
+        Scope,
+        Session,
+    )
 
 
 class NpmRegistry(Registry):

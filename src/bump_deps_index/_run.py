@@ -7,20 +7,26 @@ from configparser import Error as ConfigParserError
 from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from httpx import HTTPError, Limits
 from packaging.requirements import InvalidRequirement
 from yaml import YAMLError
 
-from ._config._npm import npm_settings
-from ._config._pip import pip_extra_indexes
-from ._config._project import Declared, IndexSettings, Scope, get_project, python_floor
-from ._ecosystems._common._candidates import Lookup, exclude_newer_for
-from ._ecosystems._common._registry import get_loaders
-from ._ecosystems._table import ECOSYSTEMS
-from ._http._hook_manifest import hook_languages
-from ._http._session import Session, new_client
+from ._config import (
+    Declared,
+    IndexSettings,
+    Scope,
+    entry_indexes,
+    get_project,
+    named_indexes,
+    npm_settings,
+    pip_extra_indexes,
+    python_floor,
+    script_uv_indexes,
+)
+from ._ecosystems import Ecosystem, Lookup, ecosystem_table, exclude_newer_for, get_loaders
+from ._http import Session, hook_languages, new_client
 from ._lookup import PkgType, package_type
 from ._redact import redact_text, redact_url
 
@@ -28,8 +34,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
 
     from ._cli import Options
-    from ._ecosystems._common._candidates import Registry
-    from ._ecosystems._common._loader import Loaded, Loader
+    from ._ecosystems import Loaded, Loader, Registry
+
+
+_ECOSYSTEMS: Final[dict[PkgType, Ecosystem]] = ecosystem_table(named_indexes, entry_indexes)
 
 
 def run(options: Options) -> bool:
@@ -38,7 +46,7 @@ def run(options: Options) -> bool:
 
     :param options: the parsed command-line options.
     :returns: False when a lookup fails or a file cannot be updated.
-    """
+    """  # simplint: ignore[function-docstring] Sphinx documents the CLI helper.
     settings = IndexSettings(
         index_url=options.index_url,
         pip_extras=pip_extra_indexes(),
@@ -53,7 +61,7 @@ def run(options: Options) -> bool:
             options.pkgs, settings, pre_release=False if options.pre_release is None else options.pre_release
         )
     if (filenames := options.filenames) is None:  # discover only now, so passing packages never reads local scripts
-        found = set(chain.from_iterable(loader.files for loader in get_loaders(hook_languages)))
+        found = set(chain.from_iterable(loader.files for loader in get_loaders(hook_languages, script_uv_indexes)))
         filenames = sorted(file.relative_to(Path.cwd()) for file in found)
     return _run_files(filenames, settings, pre_release=options.pre_release)
 
@@ -68,7 +76,7 @@ def _run_packages(packages: Sequence[str], settings: IndexSettings, *, pre_relea
 
 def _named_lookup(raw: str, scope: Scope, *, pre_release: bool) -> Lookup:
     package = raw.strip()
-    ecosystem = ECOSYSTEMS[pkg_type := package_type(package)]
+    ecosystem = _ECOSYSTEMS[pkg_type := package_type(package)]
     name = ecosystem.name(package)
     return Lookup(
         requirement=package,
@@ -83,7 +91,7 @@ def _named_lookup(raw: str, scope: Scope, *, pre_release: bool) -> Lookup:
 
 
 def _report(settings: IndexSettings, lookups: Sequence[Lookup]) -> tuple[dict[Lookup, str], bool]:
-    for pkg_type, ecosystem in ECOSYSTEMS.items():
+    for pkg_type, ecosystem in _ECOSYSTEMS.items():
         if any(lookup.pkg_type is pkg_type for lookup in lookups):
             sys.stdout.write(f"Using {pkg_type} index: {redact_url(ecosystem.index_url(settings))}\n")
     changes: dict[Lookup, str] = {}
@@ -113,7 +121,7 @@ def _resolve(
         ThreadPoolExecutor(max_workers=parallel) as executor,
     ):
         session = Session(client)
-        registries = {pkg_type: ecosystem.registry(session, settings) for pkg_type, ecosystem in ECOSYSTEMS.items()}
+        registries = {pkg_type: ecosystem.registry(session, settings) for pkg_type, ecosystem in _ECOSYSTEMS.items()}
         futures = [(lookup, executor.submit(_bump, registries, lookup)) for lookup in lookups]
         # yield in submission order to keep the report stable between runs
         for lookup, future in futures:
@@ -124,7 +132,7 @@ def _resolve(
 
 
 def _bump(registries: Mapping[PkgType, Registry], lookup: Lookup) -> str:
-    return ECOSYSTEMS[lookup.pkg_type].bump(lookup.requirement, registries[lookup.pkg_type].candidates(lookup))
+    return _ECOSYSTEMS[lookup.pkg_type].bump(lookup.requirement, registries[lookup.pkg_type].candidates(lookup))
 
 
 def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_release: bool | None) -> bool:
@@ -136,7 +144,9 @@ def _run_files(filenames: Sequence[Path], settings: IndexSettings, *, pre_releas
         if not filename.is_file():
             sys.stderr.write(f"{filename} does not exist; pass a file that exists to --file\n")
             successful = False
-        elif (loader := next((i for i in get_loaders(hook_languages) if i.supports(filename)), None)) is None:
+        elif (
+            loader := next((i for i in get_loaders(hook_languages, script_uv_indexes) if i.supports(filename)), None)
+        ) is None:
             sys.stderr.write(f"{filename} is not a supported dependency file, so it was skipped\n")
             successful = False
         elif (plan := _load_lookups(loader, filename, settings, pre_release=pre_release)) is None:
@@ -168,7 +178,7 @@ def _load_lookups(
     for entry in loaded.entries:
         if not (requirement := entry.spec.strip()):
             continue
-        ecosystem = ECOSYSTEMS[entry.pkg_type]
+        ecosystem = _ECOSYSTEMS[entry.pkg_type]
         try:
             name = ecosystem.name(requirement)
         except InvalidRequirement:  # skip entries without a project name, such as local paths and URLs
