@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tomllib import load as load_toml
+from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Final
 
 from typing_extensions import override
@@ -23,12 +24,12 @@ if TYPE_CHECKING:
 
 _NESTED: Final[frozenset[str]] = frozenset({"env", "env_base"})
 # tox substitutions can hold requirements in their branches, so the walk and the path check follow these keys
-_SUBSTITUTIONS: Final[dict[Parsed, tuple[str, ...]]] = {
+_SUBSTITUTIONS: Final[MappingProxyType[Parsed, tuple[str, ...]]] = MappingProxyType({
     "if": ("then", "else"),
     "posargs": ("default",),
     "env": ("default",),
     "glob": ("default",),
-}
+})
 
 
 class ToxToml(SingleFileLoader):
