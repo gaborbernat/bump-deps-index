@@ -294,15 +294,6 @@ def test_output_redacts_direct_reference_credentials(tmp_path: Path, capsys: pyt
     )
 
 
-def _two_releases(request: httpx.Request) -> httpx.Response:
-    name = request.url.path.rstrip("/").rpartition("/")[2]
-    files = [
-        {"filename": f"{name}-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
-        {"filename": f"{name}-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
-    ]
-    return httpx.Response(200, json={"files": files}, headers={"content-type": "application/vnd.pypi.simple.v1+json"})
-
-
 @pytest.mark.usefixtures("isolated_index_settings", "work_dir")
 @pytest.mark.parametrize(
     ("extra", "expected"),
@@ -362,6 +353,15 @@ lint = ["linter>=1"]
         cfg["dependency-groups"]["test"],
         cfg["dependency-groups"]["lint"],
     ) == expected
+
+
+def _two_releases(request: httpx.Request) -> httpx.Response:
+    name = request.url.path.rstrip("/").rpartition("/")[2]
+    files = [
+        {"filename": f"{name}-1.0.tar.gz", "upload-time": "2026-10-20T10:00:00Z"},
+        {"filename": f"{name}-2.0.tar.gz", "upload-time": "2026-11-02T09:00:00Z"},
+    ]
+    return httpx.Response(200, json={"files": files}, headers={"content-type": "application/vnd.pypi.simple.v1+json"})
 
 
 _SAME_TEXT_GROUPS: Final[str] = '[dependency-groups]\ntest = ["lib>=1"]\nlint = ["lib>=1"]\n'
