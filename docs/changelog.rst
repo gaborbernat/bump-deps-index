@@ -3,6 +3,20 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-1-19-2:
+
+1.19.2 (2026-11-18)
+-------------------
+
+.. _release-1-19-2-packaging:
+
+Packaging
+~~~~~~~~~
+
+- Every wheel now carries a `PEP 770 <https://peps.python.org/pep-0770/>`_ CycloneDX SBOM in its ``.dist-info/sboms``
+  directory, written at build time by `python-sbom <https://github.com/tox-dev/python-sbom>`_ (:pr:`314`) by
+  :user:`gaborbernat`.
+
 .. _release-1-19-1:
 
 1.19.1 (2026-11-04)
