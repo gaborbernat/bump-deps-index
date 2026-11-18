@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["bump_deps_index.model", "functools", "json", "yaml"]
+
 import json
 from collections.abc import Callable, Mapping
 from functools import partial

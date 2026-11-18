@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "packaging.specifiers",
+    "packaging.utils",
+    "packaging.version",
+    "tomllib",
+    f"{__spec__.parent}._uv",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 import sys
 from dataclasses import dataclass
 from tomllib import load as load_toml

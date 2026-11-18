@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["pathlib", f"{__spec__.parent}._files"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+
 import os
 from configparser import ConfigParser
 from configparser import Error as ConfigParserError

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["bump_deps_index.model", "tomllib", f"{__spec__.parent}._toml_text"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+
 from tomllib import load as load_toml
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Final

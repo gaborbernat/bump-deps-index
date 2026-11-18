@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__lazy_modules__ = [f"{__spec__.parent}._common"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+
 from ._common import (
     Candidate,
     Candidates,

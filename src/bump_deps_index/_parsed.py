@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["datetime"]
+
 from datetime import datetime
 from typing import TYPE_CHECKING, TypeAlias, TypeVar
 

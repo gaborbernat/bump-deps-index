@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["contextlib", "packaging.requirements", "packaging.version"]
+
 import re
 from contextlib import suppress
 from typing import TYPE_CHECKING, Final

@@ -1,5 +1,20 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "collections",
+    "concurrent.futures",
+    "configparser",
+    "datetime",
+    "httpx",
+    "itertools",
+    "packaging.requirements",
+    "pathlib",
+    "yaml",
+    f"{__spec__.parent}._http",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._lookup",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._redact",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor

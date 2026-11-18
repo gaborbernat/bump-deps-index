@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+__lazy_modules__ = [
+    f"{__spec__.parent}._npm",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._pip",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._project",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._python",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._uv",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from ._npm import npm_registry, npm_settings
 from ._pip import pip_extra_indexes
 from ._project import Declared, IndexSettings, Scope, entry_indexes, get_project, named_indexes, python_floor

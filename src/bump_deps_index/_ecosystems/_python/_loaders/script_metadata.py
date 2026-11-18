@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "pathlib",
+    "tomllib",
+    f"{__spec__.parent}._toml_text",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from pathlib import Path
 from tomllib import TOMLDecodeError
 from tomllib import loads as load_toml

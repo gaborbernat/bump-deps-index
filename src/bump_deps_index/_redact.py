@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["typing", "urllib.parse"]
+
 import re
 from typing import Final
 from urllib.parse import urlsplit, urlunsplit

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["bump_deps_index.model", "pathlib"]
+
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "itertools",
+    "pathlib",
+    "shlex",
+    f"{__spec__.parent}._lines",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 import os
 import re
 import shlex
