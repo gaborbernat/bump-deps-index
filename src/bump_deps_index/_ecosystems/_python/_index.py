@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "httpx",
+    "operator",
+    "packaging.requirements",
+    "packaging.specifiers",
+    "packaging.utils",
+    "packaging.version",
+]
+
 from dataclasses import dataclass
 from functools import cache
 from html.parser import HTMLParser

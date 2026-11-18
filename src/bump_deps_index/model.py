@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+__lazy_modules__ = [
+    f"{__spec__.parent}._cutoff",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._lookup",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._parsed",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
 

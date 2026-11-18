@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "base64",
+    "pathlib",
+    "urllib.parse",
+]
+
 import os
 import re
 from base64 import b64decode, b64encode

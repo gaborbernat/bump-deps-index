@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "pathlib",
+    "tomllib",
+]
+
 import os
 from pathlib import Path
 from tomllib import TOMLDecodeError

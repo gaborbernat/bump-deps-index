@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = ["threading"]
+
 from collections.abc import Hashable
 from threading import Lock
 from typing import TYPE_CHECKING, Generic, TypeVar

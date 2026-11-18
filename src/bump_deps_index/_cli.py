@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "datetime",
+    "pathlib",
+    f"{__spec__.parent}._config",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._cutoff",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._redact",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._run",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}.version",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from argparse import ArgumentParser, ArgumentTypeError, Namespace, RawDescriptionHelpFormatter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +32,8 @@ def main(args: Sequence[str] | None = None) -> None:
     :param args: command-line arguments, or ``sys.argv[1:]`` when None.
     :raises SystemExit: with status 1 when a lookup fails or a file cannot be updated.
     """  # simplint: ignore[function-docstring] Sphinx documents the CLI entry point.
-    if not run(parse_cli(args)):
+    options = parse_cli(args)  # simplint: ignore[single-use-variable] argparse may exit before `run` is resolved
+    if not run(options):
         raise SystemExit(1)
 
 

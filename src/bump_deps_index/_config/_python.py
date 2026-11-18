@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "pathlib",
+    f"{__spec__.parent}._files",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._pip",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._uv",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal

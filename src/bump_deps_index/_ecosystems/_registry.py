@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    f"{__spec__.parent}._common",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._npm",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._python",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from typing import TYPE_CHECKING
 
 from ._common import get_loaders as common_get_loaders

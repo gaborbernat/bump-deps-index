@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+__lazy_modules__ = [f"{__spec__.parent}._pre_commit"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+
 from typing import TYPE_CHECKING
 
 from ._pre_commit import PreCommitConfig

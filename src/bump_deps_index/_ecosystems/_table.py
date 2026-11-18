@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "packaging.utils",
+    f"{__spec__.parent}._npm",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+    f"{__spec__.parent}._python",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
