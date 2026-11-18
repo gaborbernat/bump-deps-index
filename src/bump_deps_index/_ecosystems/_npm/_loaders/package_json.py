@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["bump_deps_index.model", "json"]
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    "json",
+]
 
 import json
 from typing import TYPE_CHECKING, ClassVar, Final

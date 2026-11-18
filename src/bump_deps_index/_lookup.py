@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["packaging.requirements", "urllib.parse"]
+__lazy_modules__ = [
+    "packaging.requirements",
+    "urllib.parse",
+]
 
 from dataclasses import dataclass
 from enum import StrEnum

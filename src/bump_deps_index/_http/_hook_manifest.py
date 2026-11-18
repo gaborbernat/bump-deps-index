@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["httpx", "urllib.parse", "yaml", f"{__spec__.parent}._session"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+__lazy_modules__ = [
+    "httpx",
+    "urllib.parse",
+    "yaml",
+    f"{__spec__.parent}._session",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
 
 from urllib.parse import quote, urlsplit
 

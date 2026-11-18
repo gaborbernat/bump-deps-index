@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["typing", "urllib.parse"]
+__lazy_modules__ = [
+    "typing",
+    "urllib.parse",
+]
 
 import re
 from typing import Final

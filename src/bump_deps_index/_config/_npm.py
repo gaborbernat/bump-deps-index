@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["base64", "pathlib", "urllib.parse"]
+__lazy_modules__ = [
+    "base64",
+    "pathlib",
+    "urllib.parse",
+]
 
 import os
 import re

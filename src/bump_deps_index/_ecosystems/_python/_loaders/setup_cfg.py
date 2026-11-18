@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["bump_deps_index.model", f"{__spec__.parent}._ini"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+__lazy_modules__ = [
+    "bump_deps_index.model",
+    f"{__spec__.parent}._ini",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
 
 import re
 from typing import TYPE_CHECKING, ClassVar, Final

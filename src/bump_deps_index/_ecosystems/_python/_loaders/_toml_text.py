@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["json", "tomllib"]
+__lazy_modules__ = [
+    "json",
+    "tomllib",
+]
 
 import json
 import re

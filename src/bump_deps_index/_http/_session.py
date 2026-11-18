@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["ssl", "truststore", f"{__spec__.parent}._cache"]  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+__lazy_modules__ = [
+    "ssl",
+    "truststore",
+    f"{__spec__.parent}._cache",  # ty: ignore[missing-union-attribute]  # imported modules have a spec
+]
 
 import ssl
 from typing import TYPE_CHECKING, Final
