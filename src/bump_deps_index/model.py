@@ -16,17 +16,17 @@ from ._lookup import IndexLookup, PkgType, package_type
 from ._parsed import Parsed, json_field, mappings, parse_timestamp, strings, table
 
 if TYPE_CHECKING:
-    from ._config import Declared as _Declared
-    from ._config import IndexSettings as _IndexSettings
-    from ._config import Scope as _Scope
-    from ._config import UvIndexes as _UvIndexes
-    from ._http import Session as _Session
+    from ._config import Declared as ConfigDeclared
+    from ._config import IndexSettings as ConfigIndexSettings
+    from ._config import Scope as ConfigScope
+    from ._config import UvIndexes as ConfigUvIndexes
+    from ._http import Session as HttpSession
 
-    Declared: TypeAlias = _Declared
-    IndexSettings: TypeAlias = _IndexSettings
-    Scope: TypeAlias = _Scope
-    UvIndexes: TypeAlias = _UvIndexes
-    Session: TypeAlias = _Session
+    Declared: TypeAlias = ConfigDeclared
+    IndexSettings: TypeAlias = ConfigIndexSettings
+    Scope: TypeAlias = ConfigScope
+    UvIndexes: TypeAlias = ConfigUvIndexes
+    Session: TypeAlias = HttpSession
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
